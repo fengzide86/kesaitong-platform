@@ -1,0 +1,223 @@
+{
+  "package": "V2-platform-technical-evidence-r8",
+  "date": "2026-10-04",
+  "scope": "Local technical evidence; not automation scripts or production release",
+  "fileCount": 42,
+  "exclusions": [
+    "fba-converted-2026-10-04.jpg",
+    "prime-after-submit-2026-10-04.jpg",
+    "product-template-restored-2026-10-04.jpg"
+  ],
+  "files": [
+    {
+      "path": "activity-api-evidence-2026-10-04.md",
+      "bytes": 11266,
+      "sha256": "a1df103b1d5e27bbc9970f9574f85ca25f66176e42233dc55e653049af424dec"
+    },
+    {
+      "path": "ad-api-evidence-2026-10-04.md",
+      "bytes": 9833,
+      "sha256": "b9271377aea3f651f8a58ec69cc58eff6e44ca984817d6fb5950ef16ce7071cb"
+    },
+    {
+      "path": "collection-plan.md",
+      "bytes": 1956,
+      "sha256": "225ddfa627b57989a2fba711cf6abacde675121b98813ed173e41e403431d727"
+    },
+    {
+      "path": "coupon-api-evidence-2026-10-04.md",
+      "bytes": 11657,
+      "sha256": "cacd7e0419810542cfc64810b2b999e077108adb4d726f2987dc5123769912d6"
+    },
+    {
+      "path": "coverage-matrix-2026-10-03.md",
+      "bytes": 12363,
+      "sha256": "1beb3c6a542fecd0a8be93db7bca4eb0693fc72859eec261e511bf3f174b9586"
+    },
+    {
+      "path": "DELIVERY-2026-10-03.md",
+      "bytes": 13056,
+      "sha256": "15fa59d416159a5550dcc067fc68df7589a0d43b7d84b4e1f4ce2304ac9b7050"
+    },
+    {
+      "path": "DELIVERY-2026-10-04.md",
+      "bytes": 9917,
+      "sha256": "21c523aa8189233367f94ff6868aa0fdaefad5d544dccaac091a015e94cda72c"
+    },
+    {
+      "path": "evidence-images/coupon-cancelled-2026-10-04.jpg",
+      "bytes": 56092,
+      "sha256": "b3da5503fcc4af2d089e7ee9000c903747d0144b6ea0443c3ee5cb9ef2f38676"
+    },
+    {
+      "path": "evidence-images/lightning-cancelled-2026-10-04.jpg",
+      "bytes": 37467,
+      "sha256": "f09d1d47f74436c738b38fcbf18f5d5271165644e7f15453f034b2a0d64f5e07"
+    },
+    {
+      "path": "evidence-images/order-shipped-count-2026-10-04.jpg",
+      "bytes": 17563,
+      "sha256": "fef92af5f7a36c182be97a7fc23d816c6eba84e58e25494d4578fdf5517d95ef"
+    },
+    {
+      "path": "evidence-images/price-band-cleaned-2026-10-04.jpg",
+      "bytes": 56668,
+      "sha256": "b5b650a23c519c8cf4c253bf73200a8a5ebae4bda0f439fe67126fcc334b1279"
+    },
+    {
+      "path": "evidence-images/price-band-readback-2026-10-04.jpg",
+      "bytes": 72072,
+      "sha256": "39843e82d3d060386f2c38f09c098b406ae674f27a353efd821acb05b0c2563f"
+    },
+    {
+      "path": "evidence-images/promotion-deleted-2026-10-04.jpg",
+      "bytes": 32587,
+      "sha256": "c15d57fb63eaddfeb2b4a15cc140e2c9f7c2d14a6abc50d1bec7181d892932fb"
+    },
+    {
+      "path": "evidence-images/template-restored-2026-10-04.jpg",
+      "bytes": 28976,
+      "sha256": "d94897064bf519dec0ac0cdbf2eef3538498d489f514d6d0be88cb300b098521"
+    },
+    {
+      "path": "external-bjysoft-public.md",
+      "bytes": 4306,
+      "sha256": "83155e0362d466d2a93b9be9feb9120fcb3b172ba6711a116b0ff6590baad10e"
+    },
+    {
+      "path": "fba-api-evidence-2026-10-04.md",
+      "bytes": 8935,
+      "sha256": "de124c2da21eaee80cb83024e5e47aff3a17c4faab45f0ae4fcbc05728b58811"
+    },
+    {
+      "path": "FINAL-STATUS-2026-10-03.md",
+      "bytes": 12862,
+      "sha256": "7de083b42eebfd7dc17bc1775bec8743330b7d5c98775e8cd7769a4365e87f43"
+    },
+    {
+      "path": "legacy-folder-inventory-2026-10-03.md",
+      "bytes": 8235,
+      "sha256": "cf5ef9b3ac0291ccdc3f139fcd0a6edff9210576b0a52305801e598b74b436e1"
+    },
+    {
+      "path": "legacy-script-reference-2026-10-03.md",
+      "bytes": 8828,
+      "sha256": "65c86bc5180bceb5ea998a46ad8e8d5072fca450dbadae0fa606429113bb9ca7"
+    },
+    {
+      "path": "legacy-shipping-review-2026-10-04.md",
+      "bytes": 17175,
+      "sha256": "d875fd7f09c3f59998b61c2a2ed04d3b41200fa0b66757bedabf43e0585aa84e"
+    },
+    {
+      "path": "live-api-evidence-2026-10-04.md",
+      "bytes": 8711,
+      "sha256": "b1e6dd3f5f90254b505bb3da1b55fa930c25ec1858cebc3533cd14b6e89c542a"
+    },
+    {
+      "path": "live-observations-2026-10-03.md",
+      "bytes": 64976,
+      "sha256": "5822738462b2c2e989dfb359d0bcc6357e863f84c9816c70a06aa92eab8547bc"
+    },
+    {
+      "path": "network-observations-2026-10-03.md",
+      "bytes": 30510,
+      "sha256": "f1e4db417b37c298de8d914776d946daf91a6a702892fa98af2e97ef41627a72"
+    },
+    {
+      "path": "old-script-step-map-2026-10-03.md",
+      "bytes": 13587,
+      "sha256": "4a6934d09d49c908f6fd4c123b2eae926ca1423a755812e1866e5409472dd427"
+    },
+    {
+      "path": "PACKAGE-R8.md",
+      "bytes": 2478,
+      "sha256": "fe97877f02f4adceceaf1838ba99e7c3af3b58384bdada1eabc5ce69fbfc0f97"
+    },
+    {
+      "path": "parallel-execution-matrix-2026-10-03.md",
+      "bytes": 7475,
+      "sha256": "832e4272e178639ee0391ef6352896e245d08d765410c26ebaf6866bf44ed924"
+    },
+    {
+      "path": "prime-api-evidence-2026-10-04.md",
+      "bytes": 13287,
+      "sha256": "a119f2f4d8ec657b35bac3eafd89e95e8644170a54932ef473c0f5deecf966d4"
+    },
+    {
+      "path": "product-template-binding-2026-10-04.md",
+      "bytes": 9934,
+      "sha256": "da1c10e60ad539112a8f1f5f41acf1caa2ec3aac89f86259cae39af7186c6f51"
+    },
+    {
+      "path": "promotion-api-evidence-2026-10-04.md",
+      "bytes": 12547,
+      "sha256": "e107010c0c46518ceca5f5460d719f08db12dbbeadc02d12cd0b547f1722cde2"
+    },
+    {
+      "path": "README.md",
+      "bytes": 12878,
+      "sha256": "069b6c71ed0297dd20c8969177d3d053c744c492e87b57bef2acd2b8f5dc2508"
+    },
+    {
+      "path": "repository-and-business-context.md",
+      "bytes": 3304,
+      "sha256": "f399603713b00973ff27db90f96353ec82c2d0177a87804256dbd77f04e7c10a"
+    },
+    {
+      "path": "scope-exclusions-2026-10-03.md",
+      "bytes": 3187,
+      "sha256": "4f692c9abbbd51d44c732a04d80f18440367e4de3472a37ac089da328a8657e4"
+    },
+    {
+      "path": "script-sync-complete-2026-10-03.md",
+      "bytes": 14256,
+      "sha256": "4d34fe6991ac294801224c08ba47a0d1eb902666beb992311c1d532276bd01a8"
+    },
+    {
+      "path": "template-api-evidence-2026-10-04.md",
+      "bytes": 13175,
+      "sha256": "b906b5126eda89e33762d7b2fac7fa82f62a6d9164374501fe1c446c8506cdd5"
+    },
+    {
+      "path": "template-price-band-2026-10-04.md",
+      "bytes": 8566,
+      "sha256": "beb2ae927812816f98a912f35c8859f25659de89b2063b2c624b4fad859b15f7"
+    },
+    {
+      "path": "v2-api-catalog-2026-10-03.md",
+      "bytes": 26643,
+      "sha256": "48106f0d81d24c444087facf6375e77a986f17144a33d4b120f509101e76eb1b"
+    },
+    {
+      "path": "v2-error-permission-matrix-2026-10-03.md",
+      "bytes": 4770,
+      "sha256": "eb08b0747e590885071d9eb787526fd5c02d5d012877ec8dffe30edb46b1eadf"
+    },
+    {
+      "path": "v2-event-traces-2026-10-03.md",
+      "bytes": 14549,
+      "sha256": "291b119d61e7cad13033967a8d2d3f930ccb7c2836f219046f144baec571f8c4"
+    },
+    {
+      "path": "v2-evidence-gaps-2026-10-03.md",
+      "bytes": 13659,
+      "sha256": "3b027f588d762a407b1bd1b88d81a24d0f5eaa2e4db6133dbebd68dea784c0f5"
+    },
+    {
+      "path": "v2-field-and-boundary-matrix-2026-10-03.md",
+      "bytes": 4583,
+      "sha256": "f2b71201c34bcdb7b76908e07e90f0e7b9fc1db5084b4200616855ac98ccfc9f"
+    },
+    {
+      "path": "v2-page-button-inventory-2026-10-03.md",
+      "bytes": 5571,
+      "sha256": "e69d5f8409af8cae04c5e8065890b21fd404797c83d58ca61718864d9d7f3fe2"
+    },
+    {
+      "path": "v2-technical-evidence-delivery-2026-10-03.md",
+      "bytes": 8135,
+      "sha256": "d9531678d2fab39ba31e303d94715c2492385c569dacc7119760a1a1526a1e1a"
+    }
+  ]
+}
