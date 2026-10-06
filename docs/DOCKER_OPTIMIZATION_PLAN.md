@@ -11,7 +11,7 @@
 - `TOOL_EXECUTION_MODE=demo`、Demo/Live 边界、签名校验和真实平台限制不因 Docker 改变。
 - 公网 API 地址、现有 API 路径、数据库模型、授权规则和更新发布协议不改变。
 - `/api/health/live` 只表示进程存活，`/api/health/ready` 继续检查 MySQL、Redis、连接池和后台任务。
-- 生产 Nginx、证书续期和 `/var/lib/amazon-toolbox/updates` 更新文件发布路径第一阶段保持在宿主机。
+- 生产 Nginx、证书续期和 `/var/lib/kesaitong-platform/updates` 更新文件发布路径第一阶段保持在宿主机。
 
 ## 2. 已确认的当前基线
 
@@ -27,7 +27,7 @@
 - 公开接口当前报告应用版本 `1.8.0`。
 - 运行环境报告 Python 3.10.12、Linux 5.15 系列内核。
 - `/api/health/ready` 当前为 `ok`，MySQL、Redis 正常，后台待处理任务为 0。
-- 现有部署目录为 `/opt/amazon-toolbox/backend`。
+- 现有 canonical 部署目录为 `/opt/kesaitong-platform/backend`；`/opt/amazon-toolbox` 仅作为兼容符号链接保留。
 - systemd 以 `toolbox` 非 root 用户启动一个 Uvicorn worker，只监听 `127.0.0.1:8000`。
 - Nginx 在宿主机终止 TLS，反向代理 API，并直接提供受控的安装包、blockmap 和 `latest.yml`。
 - 发布脚本已包含数据库备份、代码备份、Alembic、健康探测和失败回滚。
@@ -171,8 +171,8 @@ npm run docker:test:mariadb
 
 首个生产容器必须显式映射并备份：
 
-- `/var/lib/amazon-toolbox/updates`
-- `/var/lib/amazon-toolbox/.updates-staging`
+- `/var/lib/kesaitong-platform/updates`
+- `/var/lib/kesaitong-platform/.updates-staging`
 - 后端运行日志目录
 - 上传/运行时目录（若实际启用）
 - Chroma 数据目录（只有在线知识库模式启用时）
