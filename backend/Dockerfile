@@ -23,12 +23,12 @@ COPY --chown=toolbox:toolbox package.json /app/package.json
 COPY --chown=toolbox:toolbox backend /app/backend
 
 RUN mkdir -p \
-      /var/lib/amazon-toolbox/AmazonToolbox/logs \
-      /var/lib/amazon-toolbox/expense-attachments \
+      /var/lib/kesaitong-platform/AmazonToolbox/logs \
+      /var/lib/kesaitong-platform/expense-attachments \
       /app/backend/updates \
       /app/backend/.updates-staging \
       /app/backend/chroma_db \
-    && chown -R toolbox:toolbox /var/lib/amazon-toolbox /app/backend
+    && chown -R toolbox:toolbox /var/lib/kesaitong-platform /app/backend
 
 WORKDIR /app/backend
 
@@ -55,8 +55,8 @@ ENV APP_ENV=internal \
     PORT=8000 \
     LOG_LEVEL=INFO \
     LOG_FORMAT=json \
-    TOOLBOX_RUNTIME_DIR=/var/lib/amazon-toolbox \
-    EXPENSE_ATTACHMENT_DIR=/var/lib/amazon-toolbox/expense-attachments \
+    TOOLBOX_RUNTIME_DIR=/var/lib/kesaitong-platform \
+    EXPENSE_ATTACHMENT_DIR=/var/lib/kesaitong-platform/expense-attachments \
     UPDATE_RELEASE_DIR=/app/backend/updates \
     CHROMA_PERSIST_DIR=/app/backend/chroma_db
 

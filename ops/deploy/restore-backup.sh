@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_ROOT="/opt/amazon-toolbox"
+APP_ROOT="${APP_ROOT:-/opt/kesaitong-platform}"
 BACKUP_ROOT="${APP_ROOT}/backups"
 BACKUP_DIR="$(readlink -f "${1:?backup directory is required}")"
 BACKEND_DIR="${APP_ROOT}/backend"
-DATA_ROOT="/var/lib/amazon-toolbox"
+DATA_ROOT="${DATA_ROOT:-/var/lib/kesaitong-platform}"
 ATTACHMENT_DIR="${DATA_ROOT}/expense-attachments"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
@@ -96,11 +96,11 @@ elif [[ -f "${BACKUP_DIR}/current-venv.target.missing" ]]; then
   RESTORE_VENV_DIR="${LEGACY_VENV}"
   VENV_POINTER_ACTION="remove"
 elif [[ -f "${BACKUP_DIR}/toolbox-backend.service" ]]; then
-  if grep -Fq 'ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python' \
+  if grep -Eq 'ExecStart=/opt/(amazon-toolbox|kesaitong-platform)/backend/\.venv/bin/python' \
     "${BACKUP_DIR}/toolbox-backend.service"; then
     RESTORE_VENV_DIR="${LEGACY_VENV}"
     VENV_POINTER_ACTION="remove"
-  elif grep -Fq 'ExecStart=/opt/amazon-toolbox/current-venv/bin/python' \
+  elif grep -Eq 'ExecStart=/opt/(amazon-toolbox|kesaitong-platform)/current-venv/bin/python' \
     "${BACKUP_DIR}/toolbox-backend.service"; then
     echo "Backup is missing its current-venv target metadata" >&2
     exit 1

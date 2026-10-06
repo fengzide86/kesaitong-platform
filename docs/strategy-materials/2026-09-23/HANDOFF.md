@@ -17,7 +17,7 @@
 
 ## 代码基线
 
-代码仓库：`https://github.com/fengzide86/amazon-toolbox-vue`
+代码仓库：`https://github.com/fengzide86/kesaitong-platform`
 
 本次只读核对的 main 提交：`ebc756dc338a7da690b2cbc6ffbec362e4ef5cf9`。该提交的 `package.json` 版本为 `1.8.12`。这是代码快照，不是本轮重新验收生产环境的声明。接续时先检查当前实际分支、提交和工作区，保留本机已有修改，不强制覆盖。
 
@@ -82,7 +82,7 @@
 新机器使用一个不存在的新目录克隆资料分支：
 
 ```sh
-git clone --branch codex/strategy-materials-2026-09-23 --single-branch https://github.com/fengzide86/amazon-toolbox-vue.git amazon-toolbox-materials
+git clone --branch codex/strategy-materials-2026-09-23 --single-branch https://github.com/fengzide86/kesaitong-platform.git kesaitong-materials
 cd amazon-toolbox-materials
 git rev-parse HEAD
 ```

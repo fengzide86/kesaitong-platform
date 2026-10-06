@@ -1,5 +1,5 @@
 [Unit]
-Description=Amazon Toolbox control-plane backend
+Description=Kesaitong Platform control-plane backend (legacy unit name)
 Wants=network-online.target
 After=network-online.target mariadb.service
 
@@ -7,15 +7,15 @@ After=network-online.target mariadb.service
 Type=simple
 User=toolbox
 Group=toolbox
-WorkingDirectory=/opt/amazon-toolbox/backend
-EnvironmentFile=/opt/amazon-toolbox/backend/.env
+WorkingDirectory=/opt/kesaitong-platform/backend
+EnvironmentFile=/opt/kesaitong-platform/backend/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-Environment=TOOLBOX_RUNTIME_DIR=/opt/amazon-toolbox/backend/runtime
-Environment=UPDATE_RELEASE_DIR=/var/lib/amazon-toolbox/updates
-Environment=EXPENSE_ATTACHMENT_DIR=/var/lib/amazon-toolbox/expense-attachments
-EnvironmentFile=-/var/lib/amazon-toolbox/release.env
-ExecStart=/opt/amazon-toolbox/current-venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
+Environment=TOOLBOX_RUNTIME_DIR=/opt/kesaitong-platform/backend/runtime
+Environment=UPDATE_RELEASE_DIR=/var/lib/kesaitong-platform/updates
+Environment=EXPENSE_ATTACHMENT_DIR=/var/lib/kesaitong-platform/expense-attachments
+EnvironmentFile=-/var/lib/kesaitong-platform/release.env
+ExecStart=/opt/kesaitong-platform/current-venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=3s
 TimeoutStartSec=45s
@@ -34,15 +34,15 @@ RestrictSUIDSGID=true
 LockPersonality=true
 CapabilityBoundingSet=
 SystemCallArchitectures=native
-ReadWritePaths=-/opt/amazon-toolbox/backend/updates
-ReadWritePaths=-/opt/amazon-toolbox/backend/.updates-staging
-ReadWritePaths=-/var/lib/amazon-toolbox/updates
-ReadWritePaths=-/var/lib/amazon-toolbox/.updates-staging
-ReadWritePaths=-/var/lib/amazon-toolbox/expense-attachments
-ReadWritePaths=-/opt/amazon-toolbox/backend/chroma_db
-ReadWritePaths=-/opt/amazon-toolbox/backend/uploads
-ReadWritePaths=-/opt/amazon-toolbox/backend/runtime
-ReadWritePaths=-/opt/amazon-toolbox/backend/logs
+ReadWritePaths=-/opt/kesaitong-platform/backend/updates
+ReadWritePaths=-/opt/kesaitong-platform/backend/.updates-staging
+ReadWritePaths=-/var/lib/kesaitong-platform/updates
+ReadWritePaths=-/var/lib/kesaitong-platform/.updates-staging
+ReadWritePaths=-/var/lib/kesaitong-platform/expense-attachments
+ReadWritePaths=-/opt/kesaitong-platform/backend/chroma_db
+ReadWritePaths=-/opt/kesaitong-platform/backend/uploads
+ReadWritePaths=-/opt/kesaitong-platform/backend/runtime
+ReadWritePaths=-/opt/kesaitong-platform/backend/logs
 
 [Install]
 WantedBy=multi-user.target

@@ -11,12 +11,12 @@ CONTROL_PLANE_URL="${5:?control-plane URL is required}"
 [[ "${RELEASE_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid release id" >&2; exit 1; }
 [[ "${CONTROL_PLANE_URL}" =~ ^https://[^/[:space:]]+(/[^[:space:]]*)?$ ]] || { echo "Invalid control-plane URL" >&2; exit 1; }
 while [[ "${CONTROL_PLANE_URL}" == */ ]]; do CONTROL_PLANE_URL="${CONTROL_PLANE_URL%/}"; done
-APP_ROOT="/opt/amazon-toolbox"
+APP_ROOT="${APP_ROOT:-/opt/kesaitong-platform}"
 BACKEND_DIR="${APP_ROOT}/backend"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
 LEGACY_VENV="${BACKEND_DIR}/.venv"
-UPDATE_ROOT="/var/lib/amazon-toolbox"
+UPDATE_ROOT="${UPDATE_ROOT:-/var/lib/kesaitong-platform}"
 PUBLIC_UPDATES_DIR="${UPDATE_ROOT}/updates"
 UPDATE_STAGING_DIR="${UPDATE_ROOT}/.updates-staging"
 ATTACHMENT_DIR="${UPDATE_ROOT}/expense-attachments"
