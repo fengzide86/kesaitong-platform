@@ -2,6 +2,8 @@
 
 ## 当前交付入口
 
+团队获取资料、项目改名与云端迁移状态、CI 待办以及 AI 接续提示见 [最新团队交接](../../strategy-materials/2026-09-23/TEAM-SYNC-2026-10-06.md)。
+
 最新交付说明为 [DELIVERY-2026-10-06.md](DELIVERY-2026-10-06.md)，剩余条件和完成判据见 [remaining-gaps-2026-10-06.md](remaining-gaps-2026-10-06.md)。截至该说明所列现场证据：仓库到卖家确认的单笔成功链、配送模板新建/编辑/设默认/恢复/删除、子 SKU 的 FBA 转换与回读、商品推广编辑及精确标识关联、秒杀搜索/创建/编辑/取消、管理定价只读分支和按 SKU FBA 货件查询均已登记。**这不是全站或全部异常分支完成证明，也不是自动化脚本交付。**
 
 | 当前事实源 | 内容 |
@@ -51,15 +53,15 @@
 
 ## 资料来源
 
-- GitHub 仓库：`https://github.com/fengzide86/amazon-toolbox-vue.git`
-- 当前分支：`codex/strategy-materials-2026-09-23`，HEAD `cb24680`；主线 `origin/main` 为 `ebc756d`，产品版本 `1.8.12`。
+- GitHub 仓库：`https://github.com/fengzide86/kesaitong-platform.git`
+- 原采集时快照：分支 `codex/strategy-materials-2026-09-23`，HEAD `cb24680`；当时主线 `origin/main` 为 `ebc756d`，产品版本 `1.8.12`。最新技术/迁移基线见团队交接，不用历史 HEAD 代替当前检出提交。
 - 赛训资料入口：`docs/strategy-materials/2026-09-23/README.md`、`REVIEW.md`、`HANDOFF.md`、`manifest.json`、`05_V2商品字段与网络接口地图_2026-09-24.md`，以及 `sources/` 下 5 份 PDF、1 份 XLSX、1 张 JPG。
 - 本机商业计划（被 `.gitignore` 忽略，不在 GitHub）：`.tmp_business_plan_v2/source.docx`（2026-06，v1.0）和 `.tmp_business_plan_v2/commercial_validation_v2_clean.docx`（2026-08，v2.0；其余 repaired/redline 文件是衍生交付件）。
 - 外部入口：`http://www.bjysoft.cn:8730/User/Welcome6`。
 - 现场采集：`live-observations-2026-10-03.md`、`coverage-matrix-2026-10-03.md`、`network-observations-2026-10-03.md`、`scope-exclusions-2026-10-03.md`、`legacy-script-reference-2026-10-03.md`。
 - 旧资料盘点：`legacy-folder-inventory-2026-10-03.md`、`old-script-step-map-2026-10-03.md`；前者记录迁移目录、商品字段资料和旧运行环境，后者记录旧脚本步骤与高影响动作。
 - 技术证据底座：`v2-page-button-inventory-2026-10-03.md`、`v2-api-catalog-2026-10-03.md`、`v2-event-traces-2026-10-03.md`、`v2-field-and-boundary-matrix-2026-10-03.md`、`v2-error-permission-matrix-2026-10-03.md`、`v2-evidence-gaps-2026-10-03.md`、`parallel-execution-matrix-2026-10-03.md`。
-- 历史交付入口：`FINAL-STATUS-2026-10-03.md`、`DELIVERY-2026-10-03.md`；当前入口见顶部 `DELIVERY-2026-10-04.md`。历史压缩包 `D:\AmazonToolboxData\deliverables\V2平台技术证据审计包_2026-10-04-r7.zip` 含有已更正的稳定性因果结论，不推荐继续使用；文档更正本身不代表已重新打包。
+- 历史交付入口：`FINAL-STATUS-2026-10-03.md`、`DELIVERY-2026-10-03.md`；当前入口见顶部 `DELIVERY-2026-10-06.md`。历史压缩包 `D:\AmazonToolboxData\deliverables\V2平台技术证据审计包_2026-10-04-r7.zip` 含有已更正的稳定性因果结论，不推荐继续使用；文档更正本身不代表已重新打包。
 
 ## 证据等级
 
