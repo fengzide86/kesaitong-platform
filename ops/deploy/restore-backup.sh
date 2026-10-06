@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_ROOT="${APP_ROOT:-/opt/kesaitong-platform}"
+# Match deployment templates; resolve legacy aliases on input, not via overrides.
+APP_ROOT="/opt/kesaitong-platform"
 BACKUP_ROOT="${APP_ROOT}/backups"
-BACKUP_DIR="$(readlink -f "${1:?backup directory is required}")"
+BACKUP_DIR="$(readlink -e -- "${1:?backup directory is required}")"
 BACKEND_DIR="${APP_ROOT}/backend"
-DATA_ROOT="${DATA_ROOT:-/var/lib/kesaitong-platform}"
+DATA_ROOT="/var/lib/kesaitong-platform"
 ATTACHMENT_DIR="${DATA_ROOT}/expense-attachments"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
@@ -41,6 +42,9 @@ require_commands() {
 
 validate_venv_target() {
   local target="$1"
+  # Old backup metadata still points through /opt/amazon-toolbox. Resolve it
+  # before checking the boundary, and reject links escaping the canonical root.
+  target="$(readlink -e -- "${target}")" || return 1
   [[ "${target}" == "${VENV_ROOT}/"* || "${target}" == "${LEGACY_VENV}" ]] || {
     echo "Invalid backend venv target: ${target}" >&2
     return 1
@@ -50,15 +54,16 @@ validate_venv_target() {
 
 atomic_switch_current_venv() {
   local target="$1"
-  validate_venv_target "${target}"
+  target="$(readlink -e -- "${target}")" || return 1
+  validate_venv_target "${target}" || return 1
   [[ ! -e "${CURRENT_VENV}" || -L "${CURRENT_VENV}" ]] || {
     echo "${CURRENT_VENV} must be absent or a symbolic link" >&2
     return 1
   }
   CURRENT_VENV_LINK_TMP="${APP_ROOT}/.current-venv.restore.$$"
   [[ ! -e "${CURRENT_VENV_LINK_TMP}" && ! -L "${CURRENT_VENV_LINK_TMP}" ]] || return 1
-  ln -s "${target}" "${CURRENT_VENV_LINK_TMP}"
-  mv -Tf "${CURRENT_VENV_LINK_TMP}" "${CURRENT_VENV}"
+  ln -s "${target}" "${CURRENT_VENV_LINK_TMP}" || return 1
+  mv -Tf "${CURRENT_VENV_LINK_TMP}" "${CURRENT_VENV}" || return 1
   CURRENT_VENV_LINK_TMP=""
 }
 
@@ -90,6 +95,10 @@ require_commands chmod chown cp curl grep ln mkdir mktemp mv mysql nginx readlin
 
 VENV_POINTER_ACTION="keep"
 if [[ -f "${BACKUP_DIR}/current-venv.target" ]]; then
+  [[ ! -L "${BACKUP_DIR}/current-venv.target" ]] || {
+    echo "Backup venv metadata must not be a symbolic link" >&2
+    exit 1
+  }
   IFS= read -r RESTORE_VENV_DIR <"${BACKUP_DIR}/current-venv.target"
   VENV_POINTER_ACTION="switch"
 elif [[ -f "${BACKUP_DIR}/current-venv.target.missing" ]]; then
@@ -112,6 +121,7 @@ else
   echo "Backup does not contain current-venv metadata" >&2
   exit 1
 fi
+RESTORE_VENV_DIR="$(readlink -e -- "${RESTORE_VENV_DIR}")"
 validate_venv_target "${RESTORE_VENV_DIR}"
 RESTORE_VENV_PYTHON="${RESTORE_VENV_DIR}/bin/python"
 if [[ "${VENV_POINTER_ACTION}" != "keep" && -e "${CURRENT_VENV}" && ! -L "${CURRENT_VENV}" ]]; then

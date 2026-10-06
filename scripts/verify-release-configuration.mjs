@@ -131,7 +131,15 @@ requireText('scripts/verify-release-mariadb-gate.mjs', [
   "delete environment.TOOLBOX_CI_ATTESTED_SHA",
   "'npm run test:mariadb:required'",
 ])
-requireText('backend/Dockerfile', ['constraints-py310.txt', '-c /tmp/requirements/constraints-py310.txt'])
+requireText('backend/Dockerfile', [
+  'constraints-py310.txt',
+  '-c /tmp/requirements/constraints-py310.txt',
+  '/var/lib/kesaitong-platform/AmazonToolbox/logs',
+  '/var/lib/kesaitong-platform/expense-attachments',
+  'chown -R toolbox:toolbox /var/lib/kesaitong-platform /app/backend',
+  'TOOLBOX_RUNTIME_DIR=/var/lib/kesaitong-platform',
+  'EXPENSE_ATTACHMENT_DIR=/var/lib/kesaitong-platform/expense-attachments',
+])
 requireText('backend/requirements.txt', ['httpx==0.27.2'])
 rejectText('backend/requirements-dev.txt', ['httpx=='])
 requireText('backend/constraints-py310.txt', [
@@ -151,25 +159,33 @@ requireText('.github/workflows/test.yml', [
   "-c 'import aiomysql, alembic, httpx, main, pymysql'",
 ])
 requireText('compose.yaml', [
-  'EXPENSE_ATTACHMENT_DIR: /var/lib/amazon-toolbox/expense-attachments',
-  'toolbox_expense_attachments:/var/lib/amazon-toolbox/expense-attachments',
+  // Keep project/volume identities: renaming them would silently create empty persistent volumes.
+  'name: ${COMPOSE_PROJECT_NAME:-amazon-toolbox}',
+  'image: amazon-toolbox-backend:local',
+  'TOOLBOX_RUNTIME_DIR: /var/lib/kesaitong-platform',
+  'EXPENSE_ATTACHMENT_DIR: /var/lib/kesaitong-platform/expense-attachments',
+  'toolbox_runtime:/var/lib/kesaitong-platform',
+  'toolbox_expense_attachments:/var/lib/kesaitong-platform/expense-attachments',
+  '/var/lib/kesaitong-platform:size=64m,mode=0700,uid=10001,gid=10001',
 ])
+rejectText('compose.yaml', ['/var/lib/amazon-toolbox'])
 requireText('ops/systemd/toolbox-backend.service', [
-  'EnvironmentFile=-/var/lib/amazon-toolbox/release.env',
-  'Environment=TOOLBOX_RUNTIME_DIR=/opt/amazon-toolbox/backend/runtime',
-  'ReadWritePaths=-/var/lib/amazon-toolbox/expense-attachments',
-  'ReadWritePaths=-/opt/amazon-toolbox/backend/runtime',
-  'ReadWritePaths=-/opt/amazon-toolbox/backend/chroma_db',
-  'ExecStart=/opt/amazon-toolbox/current-venv/bin/python',
+  'EnvironmentFile=-/var/lib/kesaitong-platform/release.env',
+  'Environment=TOOLBOX_RUNTIME_DIR=/opt/kesaitong-platform/backend/runtime',
+  'ReadWritePaths=-/var/lib/kesaitong-platform/expense-attachments',
+  'ReadWritePaths=-/opt/kesaitong-platform/backend/runtime',
+  'ReadWritePaths=-/opt/kesaitong-platform/backend/chroma_db',
+  'ExecStart=/opt/kesaitong-platform/current-venv/bin/python',
 ])
 requireText('ops/nginx/amazon-toolbox.conf', [
   'location /api/',
-  'root /var/lib/amazon-toolbox/web/current;',
-  'root /var/lib/amazon-toolbox/web;',
+  'root /var/lib/kesaitong-platform/web/current;',
+  'root /var/lib/kesaitong-platform/web;',
   'location = /web-version.json',
   'location /updates/',
 ])
 requireText('ops/deploy/deploy-web.sh', [
+  'WEB_ROOT="/var/lib/kesaitong-platform/web"',
   'mv -Tf',
   'web-version.json',
   'previous_web_release',
@@ -181,6 +197,8 @@ requireText('ops/deploy/deploy-web.sh', [
   'Public Web activation verification failed',
 ])
 requireText('ops/deploy/deploy-backend.sh', [
+  'APP_ROOT="/opt/kesaitong-platform"',
+  'UPDATE_ROOT="/var/lib/kesaitong-platform"',
   'BACKUP_COMPLETE=1',
   'MIGRATION_STARTED=1',
   'restore-backup.sh',
@@ -212,10 +230,13 @@ requireText('ops/deploy/deploy-backend.sh', [
   'runuser -u toolbox -- test -w "${BACKEND_DIR}/runtime"',
 ])
 requireText('ops/deploy/restore-backup.sh', [
+  'APP_ROOT="/opt/kesaitong-platform"',
+  'DATA_ROOT="/var/lib/kesaitong-platform"',
   'trap restore_failure ERR',
   'Restore failed; toolbox-backend remains stopped.',
   '"${RESTORE_VENV_PYTHON}" - "${BACKEND_DIR}/.env"',
-  "ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python",
+  'ExecStart=/opt/(amazon-toolbox|kesaitong-platform)/backend/\\.venv/bin/python',
+  'ExecStart=/opt/(amazon-toolbox|kesaitong-platform)/current-venv/bin/python',
   'database restore schema must be application-owned',
   'DROP VIEW IF EXISTS',
   'DROP TABLE IF EXISTS',
@@ -277,6 +298,10 @@ rejectText('ops/deploy/restore-backup.sh', [
   "trap 'systemctl start toolbox-backend || true' EXIT",
   'subprocess.run(command, stdin=source',
 ])
-rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python'])
+rejectText('ops/systemd/toolbox-backend.service', [
+  '/opt/amazon-toolbox',
+  '/var/lib/amazon-toolbox',
+  'ExecStart=/opt/kesaitong-platform/backend/.venv/bin/python',
+])
 
 process.stdout.write('release_configuration=verified\n')

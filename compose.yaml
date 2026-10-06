@@ -18,8 +18,8 @@ x-api-environment: &api-environment
   RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
   LOG_LEVEL: INFO
   LOG_FORMAT: json
-  TOOLBOX_RUNTIME_DIR: /var/lib/amazon-toolbox
-  EXPENSE_ATTACHMENT_DIR: /var/lib/amazon-toolbox/expense-attachments
+  TOOLBOX_RUNTIME_DIR: /var/lib/kesaitong-platform
+  EXPENSE_ATTACHMENT_DIR: /var/lib/kesaitong-platform/expense-attachments
   UPDATE_RELEASE_DIR: /app/backend/updates
   CHROMA_PERSIST_DIR: /app/backend/chroma_db
 
@@ -106,8 +106,8 @@ services:
       mariadb:
         condition: service_healthy
     volumes:
-      - toolbox_runtime:/var/lib/amazon-toolbox
-      - toolbox_expense_attachments:/var/lib/amazon-toolbox/expense-attachments
+      - toolbox_runtime:/var/lib/kesaitong-platform
+      - toolbox_expense_attachments:/var/lib/kesaitong-platform/expense-attachments
       - toolbox_updates:/app/backend/updates
       - toolbox_update_staging:/app/backend/.updates-staging
       - toolbox_chroma:/app/backend/chroma_db
@@ -135,8 +135,8 @@ services:
     ports:
       - 127.0.0.1:${TOOLBOX_API_PORT:-8000}:8000
     volumes:
-      - toolbox_runtime:/var/lib/amazon-toolbox
-      - toolbox_expense_attachments:/var/lib/amazon-toolbox/expense-attachments
+      - toolbox_runtime:/var/lib/kesaitong-platform
+      - toolbox_expense_attachments:/var/lib/kesaitong-platform/expense-attachments
       - toolbox_updates:/app/backend/updates
       - toolbox_update_staging:/app/backend/.updates-staging
       - toolbox_chroma:/app/backend/chroma_db
@@ -163,8 +163,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER in .env.docker}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.docker}
       REDIS_URL: redis://redis:6379/1
-      TOOLBOX_RUNTIME_DIR: /var/lib/amazon-toolbox
-      EXPENSE_ATTACHMENT_DIR: /var/lib/amazon-toolbox/expense-attachments
+      TOOLBOX_RUNTIME_DIR: /var/lib/kesaitong-platform
+      EXPENSE_ATTACHMENT_DIR: /var/lib/kesaitong-platform/expense-attachments
       MARIADB_TEST_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mariadb:3306/${MYSQL_DATABASE}
     command:
       - python
@@ -188,7 +188,7 @@ services:
       - ALL
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /var/lib/amazon-toolbox:size=64m,mode=0700,uid=10001,gid=10001
+      - /var/lib/kesaitong-platform:size=64m,mode=0700,uid=10001,gid=10001
     mem_limit: 768m
     cpus: 2.0
     pids_limit: 256

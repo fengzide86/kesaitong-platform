@@ -20,6 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run release:policy
+      - name: Deployment rename and restore path guards (isolated fixtures)
+        run: python3 scripts/tests/deployment-rename.test.py
       - run: npm run security:audit
       - run: npm run typecheck
       - run: npm run lint -- --max-warnings=0

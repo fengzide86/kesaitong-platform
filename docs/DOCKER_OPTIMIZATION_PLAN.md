@@ -1,5 +1,18 @@
 # Docker 与云服务器完整优化方案
 
+## 2026-10-06 改名收尾验收
+
+本节记录本次目录改名的实际验收，不代表完成了下文的生产容器化方案。下文硬件、空间、版本及 SSH 限制属于旧方案快照，不是当前设备或服务状态。
+
+- 项目仓库：`fengzide86/kesaitong-platform`；本地开发目录：`D:\开发项目\课赛通-核心平台`。
+- 部署脚本、systemd、Nginx、Dockerfile 和 Compose 的正式路径统一为 `/opt/kesaitong-platform`、`/var/lib/kesaitong-platform`。部署脚本的固定根目录与配置模板保持一致，不支持单独覆盖根目录环境变量。
+- `/opt/amazon-toolbox`、`/var/lib/amazon-toolbox` 仍作为兼容符号链接保留；`toolbox-backend.service`、Nginx 配置文件名、Compose 项目名/镜像名/卷名及发布锁标识有意保留，避免新建空数据卷或绕过现有锁。不要机械替换所有 `amazon-toolbox` / `toolbox` 字样。
+- 旧备份路径和旧 venv 指针先解析真实路径，再检查正式目录边界；符号链接逃逸、无效指针与原子切换失败都会拒绝，历史备份内容不改写。
+- 新增 `python3 scripts/tests/deployment-rename.test.py`：在 Linux 临时目录中通过 14 项测试，覆盖新旧路径、历史服务回退、边界拒绝、条件上下文失败传播及 Bash 语法。仅测试恢复前置检查和临时链接，不执行生产数据库恢复。已接入 GitHub Actions。
+- `node scripts/verify-release-configuration.mjs` 通过；线上 7 份已有备份的 venv 指针只读检查全部有效。
+- 线上恢复命令 `/usr/local/sbin/toolbox-restore-backup` 已备份后更新；Nginx 已平滑重载。后端保持 active，HTTPS readiness、网页版本与更新清单返回 200。
+- 本次未发布新的业务程序、未操作数据库恢复；线上应用仍为 `1.8.12`（`f1276c98077ab91c5bcdb520b92f49870e5e1f48`）。本地及服务器均未提供 Docker，因此没有宣称完成真实容器构建/启动验收。
+
 ## 1. 目标与不可改变项
 
 本方案用于提高环境一致性、测试真实性、部署可回滚性和日志可观察性，不改变现有业务功能。
@@ -13,7 +26,7 @@
 - `/api/health/live` 只表示进程存活，`/api/health/ready` 继续检查 MySQL、Redis、连接池和后台任务。
 - 生产 Nginx、证书续期和 `/var/lib/kesaitong-platform/updates` 更新文件发布路径第一阶段保持在宿主机。
 
-## 2. 已确认的当前基线
+## 2. 原方案基线（历史快照）
 
 ### 本地 Windows
 

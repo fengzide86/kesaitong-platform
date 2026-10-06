@@ -20,7 +20,8 @@ if parsed.username or parsed.password or parsed.query or parsed.fragment:
     raise RuntimeError("control plane URL must not contain credentials, query, or fragment")
 PY
 
-WEB_ROOT="${WEB_ROOT:-/var/lib/kesaitong-platform/web}"
+# Keep this in sync with the Nginx root; legacy paths remain server-side aliases.
+WEB_ROOT="/var/lib/kesaitong-platform/web"
 RELEASES_DIR="${WEB_ROOT}/releases"
 ASSETS_DIR="${WEB_ROOT}/assets"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_ID}"

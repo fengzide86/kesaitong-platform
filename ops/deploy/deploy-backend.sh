@@ -11,12 +11,14 @@ CONTROL_PLANE_URL="${5:?control-plane URL is required}"
 [[ "${RELEASE_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid release id" >&2; exit 1; }
 [[ "${CONTROL_PLANE_URL}" =~ ^https://[^/[:space:]]+(/[^[:space:]]*)?$ ]] || { echo "Invalid control-plane URL" >&2; exit 1; }
 while [[ "${CONTROL_PLANE_URL}" == */ ]]; do CONTROL_PLANE_URL="${CONTROL_PLANE_URL%/}"; done
-APP_ROOT="${APP_ROOT:-/opt/kesaitong-platform}"
+# These roots must match the shipped systemd/Nginx configuration.
+# Legacy paths remain filesystem aliases; arbitrary overrides are not supported.
+APP_ROOT="/opt/kesaitong-platform"
 BACKEND_DIR="${APP_ROOT}/backend"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
 LEGACY_VENV="${BACKEND_DIR}/.venv"
-UPDATE_ROOT="${UPDATE_ROOT:-/var/lib/kesaitong-platform}"
+UPDATE_ROOT="/var/lib/kesaitong-platform"
 PUBLIC_UPDATES_DIR="${UPDATE_ROOT}/updates"
 UPDATE_STAGING_DIR="${UPDATE_ROOT}/.updates-staging"
 ATTACHMENT_DIR="${UPDATE_ROOT}/expense-attachments"
@@ -72,6 +74,7 @@ require_commands() {
 
 validate_venv_target() {
   local target="$1"
+  target="$(readlink -e -- "${target}")" || return 1
   [[ "${target}" == "${VENV_ROOT}/"* || "${target}" == "${LEGACY_VENV}" ]] || {
     echo "Invalid backend venv target: ${target}" >&2
     return 1
@@ -97,7 +100,8 @@ validate_venv_build_marker() {
 
 atomic_switch_current_venv() {
   local target="$1"
-  validate_venv_target "${target}"
+  target="$(readlink -e -- "${target}")" || return 1
+  validate_venv_target "${target}" || return 1
   [[ ! -e "${CURRENT_VENV}" || -L "${CURRENT_VENV}" ]] || {
     echo "${CURRENT_VENV} must be absent or a symbolic link" >&2
     return 1
@@ -107,8 +111,8 @@ atomic_switch_current_venv() {
     echo "Temporary venv link already exists: ${CURRENT_VENV_LINK_TMP}" >&2
     return 1
   }
-  ln -s "${target}" "${CURRENT_VENV_LINK_TMP}"
-  mv -Tf "${CURRENT_VENV_LINK_TMP}" "${CURRENT_VENV}"
+  ln -s "${target}" "${CURRENT_VENV_LINK_TMP}" || return 1
+  mv -Tf "${CURRENT_VENV_LINK_TMP}" "${CURRENT_VENV}" || return 1
   CURRENT_VENV_LINK_TMP=""
 }
 
@@ -116,8 +120,8 @@ restore_current_venv() {
   local target_file="${BACKUP_DIR}/current-venv.target"
   if [[ -f "${target_file}" ]]; then
     local target
-    IFS= read -r target <"${target_file}"
-    validate_venv_target "${target}"
+    IFS= read -r target <"${target_file}" || return 1
+    validate_venv_target "${target}" || return 1
     atomic_switch_current_venv "${target}"
   elif [[ -f "${target_file}.missing" ]]; then
     [[ ! -e "${CURRENT_VENV}" || -L "${CURRENT_VENV}" ]] || return 1
