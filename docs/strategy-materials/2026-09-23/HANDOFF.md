@@ -83,7 +83,7 @@
 
 ```sh
 git clone --branch codex/strategy-materials-2026-09-23 --single-branch https://github.com/fengzide86/kesaitong-platform.git kesaitong-materials
-cd amazon-toolbox-materials
+cd kesaitong-materials
 git rev-parse HEAD
 ```
 
