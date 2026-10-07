@@ -61,8 +61,10 @@ describe('返佣页面隔离与确认流程', () => {
     mocks.confirmCommissionSettlement.mockReturnValue(new Promise(done => { resolve = done }))
     const wrapper = mount(AgencyCommissionPanel, { global: { plugins: [ElementPlus] } })
     await flushPromises()
+    await wrapper.find('#commission-month').setValue(preview.month)
     await wrapper.findAll('button').find(button => button.text() === '预览结算')!.trigger('click')
     await flushPromises()
+    expect(mocks.commissionPreview).toHaveBeenCalledWith(1, preview.month)
     const button = wrapper.findAll('button').find(item => item.text() === '确认已线下结算')!
     await button.trigger('click')
     await button.trigger('click')
