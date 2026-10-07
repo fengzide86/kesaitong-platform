@@ -66,6 +66,7 @@ describe('business workspace sync outbox', () => {
       getSnapshot: vi.fn().mockResolvedValue({ status: 'idle', recordKind: 'live', items: [] }),
       cancel: vi.fn().mockResolvedValue({ status: 'cancelled', items: [] }),
       loadSampleImport: vi.fn(),
+      selectImportFile: vi.fn(),
       remapImportItems: vi.fn(),
       create: vi.fn(),
       start: vi.fn(),
@@ -97,6 +98,169 @@ describe('business workspace sync outbox', () => {
     await store.loadSampleImport()
     return store
   }
+
+  async function prepareLiveSelection() {
+    const tool = {
+      id: 'live-tool', name: '批量发货', capability_key: 'ship_script', platform_key: 'amazon',
+      availability: 'live', script_status: 'script_ready', release_status: 'available', supports_live_batch: true,
+      available_plans: ['Y199'], tool_version: '1.0.0', runner_api_version: 1,
+      batch_input_schema: [{ key: 'order_id', label: '订单号', required: true }],
+    }
+    localStorage.setItem('toolbox_user', JSON.stringify({ user_id: 123, device_id: 'test-device', product_type: 'business', plan_code: 'Y199', platform_scope: ['amazon'] }))
+    apiMocks.getBusinessBootstrap.mockResolvedValue({ entitlements: { max_batch_rows: 20 }, tools: [tool] })
+    electronBatch.selectImportFile.mockResolvedValue({ importId: 'prepared-import', validCount: 1, rows: [], errors: [] })
+    const store = useBusinessWorkspaceStore()
+    await store.init()
+    store.chooseTool(store.tools[0])
+    await store.selectImportFile()
+    return { store, tool }
+  }
+
+  it('rebinds a same-ID withdrawn tool and clears its prepared input without executing', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    const oldSelection = store.selectedTool
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 20 }, tools: [{ ...tool, script_status: 'blocked' }] })
+    await store.refreshBootstrap()
+    expect(store.selectedTool).toBe(store.tools[0])
+    expect(store.selectedTool).not.toBe(oldSelection)
+    expect(store.selectedTool?.script_status).toBe('blocked')
+    expect(store.importPreview).toBeNull()
+    expect(store.preparationNotice).toContain('旧导入已清除')
+    await expect(store.selectImportFile()).rejects.toThrow('不支持批量准备')
+    await expect(store.startBatch()).rejects.toThrow('请先导入有效数据')
+    expect(electronBatch.selectImportFile).toHaveBeenCalledOnce()
+    expect(apiMocks.createBusinessBatch).not.toHaveBeenCalled()
+    store.dispose()
+  })
+
+  it.each([
+    { batch_input_schema: [{ key: 'sku', label: 'SKU', required: true }] },
+    { tool_version: '2.0.0' }, { runner_api_version: 2 }, { available_plans: ['Y999'] },
+  ])('invalidates prior imports when same-ID preparation metadata changes: %j', async changes => {
+    const { store, tool } = await prepareLiveSelection()
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 20 }, tools: [{ ...tool, ...changes }] })
+    await store.refreshBootstrap()
+    expect(store.selectedTool).toBe(store.tools[0])
+    expect(store.selectedTool).toMatchObject(changes)
+    expect(store.importPreview).toBeNull()
+    expect(store.preparationNotice).toContain('旧导入已清除')
+    await expect(store.startBatch()).rejects.toThrow('请先导入有效数据')
+    expect(apiMocks.createBusinessBatch).not.toHaveBeenCalled()
+    store.dispose()
+  })
+
+  it('invalidates old input for changed batch limits or explicit permission withdrawal', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 5 }, tools: [tool] })
+    await store.refreshBootstrap()
+    expect(store.importPreview).toBeNull()
+    await store.selectImportFile()
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 5, batch_execution: false }, tools: [tool] })
+    await store.refreshBootstrap()
+    expect(store.importPreview).toBeNull()
+    await expect(store.selectImportFile()).rejects.toThrow('不支持批量准备')
+    store.dispose()
+  })
+
+  it('invalidates prepared input when the current plan changes without changing tool ID', async () => {
+    const { store } = await prepareLiveSelection()
+    localStorage.setItem('toolbox_user', JSON.stringify({ user_id: 123, device_id: 'test-device', product_type: 'business', plan_code: 'Y15', platform_scope: ['amazon'] }))
+    store.reconcileToolSelection()
+    expect(store.importPreview).toBeNull()
+    await expect(store.selectImportFile()).rejects.toThrow('不支持批量准备')
+    store.dispose()
+  })
+
+  it('updates descriptive metadata without clearing a compatible import', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    const preview = store.importPreview
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 20, display_note: '新文案' }, tools: [{ ...tool, name: '新版名称', description: '更新说明' }] })
+    await store.refreshBootstrap()
+    expect(store.selectedTool).toBe(store.tools[0])
+    expect(store.selectedTool?.name).toBe('新版名称')
+    expect(store.importPreview).toBe(preview)
+    expect(store.preparationNotice).toBeNull()
+    store.dispose()
+  })
+
+  it('does not attach a late import parsed against a withdrawn same-ID schema', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    const late = deferred<unknown>()
+    electronBatch.selectImportFile.mockReturnValueOnce(late.promise)
+    const importing = store.selectImportFile()
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 20 }, tools: [{ ...tool, batch_input_schema: [{ key: 'sku', label: 'SKU' }] }] })
+    await store.refreshBootstrap()
+    late.resolve({ importId: 'obsolete-schema', validCount: 1, rows: [], errors: [] })
+    await importing
+    expect(store.importPreview).toBeNull()
+    expect(store.selectedTool?.batch_input_schema).toEqual([{ key: 'sku', label: 'SKU' }])
+    store.dispose()
+  })
+
+  it('keeps refresh ownership when an overlapping import finishes first and blocks new work until blocked metadata arrives', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    const importing = deferred<unknown>()
+    const refreshing = deferred<unknown>()
+    electronBatch.selectImportFile.mockReturnValueOnce(importing.promise)
+    const oldImport = store.selectImportFile()
+    apiMocks.getBusinessBootstrap.mockReturnValueOnce(refreshing.promise)
+    const refresh = store.refreshBootstrap()
+    expect(store.bootstrapRefreshing).toBe(true)
+    importing.resolve({ importId: 'overlapping-import', validCount: 1, rows: [], errors: [] })
+    await oldImport
+    // Import completion may release its own spinner, not directory ownership.
+    expect(store.loading).toBe(false)
+    expect(store.bootstrapRefreshing).toBe(true)
+    await expect(store.startBatch()).rejects.toThrow('正在刷新工具目录')
+    await expect(store.selectImportFile()).rejects.toThrow('正在刷新工具目录')
+    await expect(store.loadSampleImport()).rejects.toThrow('正在刷新工具目录')
+    expect(apiMocks.createBusinessBatch).not.toHaveBeenCalled()
+    expect(electronBatch.selectImportFile).toHaveBeenCalledTimes(2)
+    refreshing.resolve({ entitlements: { max_batch_rows: 20 }, tools: [{ ...tool, script_status: 'blocked' }] })
+    await refresh
+    expect(store.bootstrapRefreshing).toBe(false)
+    expect(store.selectedTool?.script_status).toBe('blocked')
+    expect(store.importPreview).toBeNull()
+    store.dispose()
+  })
+
+  it('reconciles withdrawn metadata after an already-pending startup rejects without retaining its old input', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    const starting = deferred<BusinessBatchSnapshot>()
+    vi.spyOn(BusinessLiveCoordinator.prototype, 'start').mockReturnValueOnce(starting.promise)
+    const originalSelection = store.selectedTool
+    const start = store.startBatch().catch(error => error)
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 20 }, tools: [{ ...tool, script_status: 'blocked' }] })
+    await store.refreshBootstrap()
+    expect(store.selectedTool).toBe(originalSelection)
+    expect(store.importPreview?.importId).toBe('prepared-import')
+    starting.reject(new Error('授权启动失败'))
+    expect(await start).toMatchObject({ message: '授权启动失败' })
+    expect(store.selectedTool).toBe(store.tools[0])
+    expect(store.selectedTool?.script_status).toBe('blocked')
+    expect(store.importPreview).toBeNull()
+    expect(store.preparationNotice).toContain('旧导入已清除')
+    expect(store.snapshot.status).toBe('idle')
+    expect(electronBatch.cancel).not.toHaveBeenCalled()
+    store.dispose()
+  })
+
+  it('does not rewrite a running batch tool, imported input or snapshot during directory refresh', async () => {
+    const { store, tool } = await prepareLiveSelection()
+    store.snapshot = { status: 'running', recordKind: 'live', tool: store.selectedTool!, items: [], counts: {} }
+    const activeTool = store.selectedTool
+    const activeSnapshot = store.snapshot
+    const activeInput = store.importPreview
+    apiMocks.getBusinessBootstrap.mockResolvedValueOnce({ entitlements: { max_batch_rows: 2 }, tools: [{ ...tool, script_status: 'blocked', tool_version: '2.0.0' }] })
+    await store.refreshBootstrap()
+    expect(store.tools[0].script_status).toBe('blocked')
+    expect(store.selectedTool).toBe(activeTool)
+    expect(store.snapshot).toBe(activeSnapshot)
+    expect(store.snapshot.tool?.tool_version).toBe('1.0.0')
+    expect(store.importPreview).toBe(activeInput)
+    expect(electronBatch.cancel).not.toHaveBeenCalled()
+    store.dispose()
+  })
 
   it('routes cancellation to Demo while its create request is pending and snapshot still belongs to Live', async () => {
     const created = deferred<unknown>()

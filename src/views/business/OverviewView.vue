@@ -2,11 +2,11 @@
   <div class="business-overview">
     <PageHeader
       eyebrow="PROFESSIONAL OPERATIONS"
-      title="专业工作台已就绪"
-      :description="hasTools ? '选择演示工具，在同一视图掌控多个虚拟账号的并发进度。' : '批量演示工具会根据验证场景逐个开放。'"
+      title="专业批量工作台"
+      :description="hasTools ? '查看真实工具目录和开放条件，准备自己的数据，跟进批次与待处理问题。' : '当前授权尚无开放的真实批量工具；可先查看准备项、授权与使用帮助。'"
     >
       <template #actions>
-        <span class="validation-badge">内部验证版</span>
+        <button class="secondary-link" type="button" @click="helpOpen = true">使用帮助</button>
         <router-link class="primary-link" to="/business/workspace"><ArrowRight :size="16" />查看工作台</router-link>
         <router-link class="secondary-link" to="/business/license">查看授权信息</router-link>
       </template>
@@ -18,53 +18,65 @@
     </section>
     <section v-else-if="store.snapshot.recordKind === 'demo' && store.snapshot.status === 'completed'" class="completion-note" role="status">最近一次批量演示已结束。人工操作与异常案例是演示结果，不是待处理任务；可到记录中复盘。</section>
     <section class="capability-grid">
-      <article><FileSpreadsheet :size="20" /><div><span>内置演示样例</span><strong>最多 50 个逻辑并发项</strong></div><small>不启动等量浏览器，不读取真实客户资料</small></article>
-      <article><PanelsTopLeft :size="20" /><div><span>批量并发演示</span><strong>全部账号同步推进</strong></div><small>所有页面与结果均为模拟</small></article>
-      <article><ShieldCheck :size="20" /><div><span>模拟人工提示</span><strong>展示完整交互状态</strong></div><small>不会登录或修改真实平台</small></article>
+      <article><FileSpreadsheet :size="20" /><div><span>真实工具目录</span><strong>{{ customerToolCount }} 项目录能力</strong></div><small>本机当前 {{ usableToolCount }} 个可用批量工具；按脚本、授权和桌面能力判断</small></article>
+      <article><PanelsTopLeft :size="20" /><div><span>批次与结果</span><strong>真实批次单独记录</strong></div><small>原表行号帮助核对；未完成不等于可直接重试</small></article>
+      <article><ShieldCheck :size="20" /><div><span>随时求助</span><strong>导入前也能联系支持</strong></div><small>无工具、导入问题和执行记录均可从使用帮助提交工单</small></article>
     </section>
     <section class="surface recent">
-      <header><div><span>最近演示批次</span><small>模拟记录不计入真实执行统计</small></div><router-link to="/business/records">全部记录</router-link></header>
-      <AsyncStateNotice :state="historyState" :message="store.historyError || ''" loading-text="正在加载演示记录..." @retry="loadHistory" />
-      <div v-if="(historyState === 'data' || historyState === 'stale') && store.demoHistory.length" class="batch-list">
-        <article v-for="batch in store.demoHistory.slice(0, 5)" :key="batch.id">
-          <div><strong>{{ batch.tool_name_snapshot }}</strong><span>{{ formatDate(batch.started_at || batch.created_at) }}</span></div>
-          <span class="batch-count">{{ batch.played_count + batch.skipped_count + batch.error_count }}/{{ batch.row_count }} 已结束</span>
+      <header><div><span>最近真实批次</span><small>历史演示保留在记录页，不计入真实执行统计</small></div><router-link to="/business/records">全部记录</router-link></header>
+      <AsyncStateNotice :state="historyState" :message="store.historyError || ''" loading-text="正在加载真实批次..." @retry="loadHistory" />
+      <div v-if="(historyState === 'data' || historyState === 'stale') && store.history.length" class="batch-list">
+        <article v-for="batch in store.history.slice(0, 5)" :key="batch.id">
+          <div><strong>{{ batch.tool_name }}</strong><span>{{ formatDate(batch.started_at) }}</span></div>
+          <span class="batch-count">{{ batch.completed_count + batch.failed_count }}/{{ batch.total_count }} 已结束</span>
           <span :class="['status', `is-${batch.status}`]">{{ batchStatus(batch.status) }}</span>
         </article>
       </div>
       <div v-else-if="historyState === 'empty'" class="empty">
         <span class="empty-icon"><Layers3 :size="24" /></span>
-        <strong>还没有批量演示记录</strong>
-        <p>完成第一个模拟批次后，演示结果会保存在这里。</p>
+        <strong>还没有真实批次记录</strong>
+        <p>开放工具完成真实批次后，结果会显示在这里；历史演示仍可在记录页查看。</p>
       </div>
     </section>
+    <BusinessHelpDrawer v-model="helpOpen" entry-point="专业概览" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowRight, BellRing, FileSpreadsheet, Layers3, PanelsTopLeft, ShieldCheck } from '@lucide/vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import type { AsyncDataState } from '@/features/async/state'
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
 import { activeInterventionCount } from '@/features/business/run-presentation'
+import BusinessHelpDrawer from '@/features/business/BusinessHelpDrawer.vue'
+import { isCustomerTool, isToolCurrentlyUsable } from '@/features/tools/presentation'
+import { getRuntimeCapabilities } from '@/runtime/capabilities'
+import { licensePlanCode, readStoredLicense } from '@/features/user/model'
 const store = useBusinessWorkspaceStore()
+const helpOpen = ref(false)
+const runtime = getRuntimeCapabilities()
 const waitingCount = computed(() => activeInterventionCount(store.snapshot))
-const hasTools = computed(() => store.tools.length > 0)
+const hasTools = computed(() => store.tools.some(isCustomerTool))
+const customerToolCount = computed(() => store.tools.filter(isCustomerTool).length)
+const usableToolCount = computed(() => {
+  const license = readStoredLicense()
+  return store.tools.filter(tool => isCustomerTool(tool) && isToolCurrentlyUsable(tool, { planCode: licensePlanCode(license), platformScope: license.platform_scope, platformKey: tool.platform_key || tool.platformKey, runtimeAvailable: runtime.batchLive, mode: 'batch' })).length
+})
 const historyState = computed<AsyncDataState>(() => {
   if (store.historyLoading) return 'loading'
-  if (store.historyError) return store.demoHistory.length ? 'stale' : 'error'
-  return store.demoHistory.length ? 'data' : 'empty'
+  if (store.historyError) return store.history.length ? 'stale' : 'error'
+  return store.history.length ? 'data' : 'empty'
 })
 const formatDate = (value: string | null | undefined): string => value
   ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
   : '-'
 const statusLabels: Record<string, string> = {
-  created: '待演示', running: '演示中', completed: '演示完成', cancelled: '已退出', error: '演示异常', interrupted: '已中断',
+  created: '等待开始', running: '执行中', completed: '已完成', cancelled: '已结束', error: '执行异常', interrupted: '已中断',
 }
 const batchStatus = (value: string): string => statusLabels[value] || value
-const loadHistory = (): void => { void store.loadDemoHistory().catch(() => undefined) }
+const loadHistory = (): void => { void store.loadHistory().catch(() => undefined) }
 onMounted(loadHistory)
 </script>
 

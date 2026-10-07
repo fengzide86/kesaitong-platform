@@ -27,7 +27,7 @@ function deferred() {
 
 function render() {
   return mount(RecordsView, {
-    global: { stubs: { ElDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" role="dialog"><slot /><slot name="footer" /></section>' }, RouterLink: { template: '<a><slot /></a>' } } },
+    global: { stubs: { BusinessHelpDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" data-testid="help">帮助</section>' }, ElDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" role="dialog"><slot /><slot name="footer" /></section>' }, RouterLink: { template: '<a><slot /></a>' } } },
   })
 }
 
@@ -62,6 +62,8 @@ describe('business record request ordering', () => {
     const wrapper = render()
     wrappers.push(wrapper)
     await flushPromises()
+    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '历史演示')!.trigger('click')
+    await flushPromises()
     await wrapper.get('.pagination button').trigger('click')
     expect(mocks.loadDemoHistory).toHaveBeenLastCalledWith(true)
     await wrapper.get('.detail-link').trigger('click')
@@ -69,11 +71,8 @@ describe('business record request ordering', () => {
     expect(mocks.getDemoBatch).toHaveBeenCalledWith('one')
     expect(wrapper.get('[role="dialog"]').text()).toContain('人工操作案例（无待办）')
     expect(wrapper.get('[role="dialog"]').text()).not.toContain('private')
-    const replay = wrapper.findAll('.detail-actions button').find(button => button.text() === '重新准备演示')!
-    await replay.trigger('click')
-    await flushPromises()
-    expect(store.resetWorkspace).toHaveBeenCalledOnce()
-    expect(mocks.push).toHaveBeenCalledWith('/business/workspace')
+    expect(wrapper.text()).not.toContain('重新准备演示')
+    expect(store.resetWorkspace).not.toHaveBeenCalled()
   })
 
   it('retries failed batch details without discarding the history list', async () => {
@@ -83,6 +82,8 @@ describe('business record request ordering', () => {
     mocks.getDemoBatch.mockRejectedValueOnce(new Error('详情网络失败')).mockResolvedValueOnce({ ...store.demoHistory[0], items: [] })
     const wrapper = render()
     wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '历史演示')!.trigger('click')
     await flushPromises()
     await wrapper.get('.detail-link').trigger('click')
     await flushPromises()
@@ -100,6 +101,7 @@ describe('business record request ordering', () => {
     const wrapper = render()
     wrappers.push(wrapper)
     await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
+    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('还没有真实批次记录')
 
@@ -118,6 +120,7 @@ describe('business record request ordering', () => {
     const wrapper = render()
     wrappers.push(wrapper)
     await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
+    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
 
     oldDemo.resolve()
     await flushPromises()
@@ -134,6 +137,7 @@ describe('business record request ordering', () => {
     const wrapper = render()
     wrappers.push(wrapper)
     await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
+    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('当前真实批次请求失败')
 
@@ -141,5 +145,17 @@ describe('business record request ordering', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('当前真实批次请求失败')
     expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+  })
+  it('defaults to real history and keeps help available without records', async () => {
+    mocks.loadHistory.mockResolvedValue(undefined)
+    const wrapper = render()
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(mocks.loadHistory).toHaveBeenCalledWith(false)
+    expect(mocks.loadDemoHistory).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('真实批次')
+    expect(wrapper.text()).not.toContain('开始批量演示')
+    await wrapper.findAll('button').find(button => button.text() === '记录核对 / 使用帮助')!.trigger('click')
+    expect(wrapper.find('[data-testid="help"]').exists()).toBe(true)
   })
 })

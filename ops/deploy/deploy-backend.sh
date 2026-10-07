@@ -11,12 +11,26 @@ CONTROL_PLANE_URL="${5:?control-plane URL is required}"
 [[ "${RELEASE_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid release id" >&2; exit 1; }
 [[ "${CONTROL_PLANE_URL}" =~ ^https://[^/[:space:]]+(/[^[:space:]]*)?$ ]] || { echo "Invalid control-plane URL" >&2; exit 1; }
 while [[ "${CONTROL_PLANE_URL}" == */ ]]; do CONTROL_PLANE_URL="${CONTROL_PLANE_URL%/}"; done
-APP_ROOT="/opt/amazon-toolbox"
+canonical_deployment_root() {
+  local legacy="$1" current="$2" source="$1" resolved
+  # Resolve the compatibility link once, before deriving any guarded paths.
+  # An unexpected/dangling legacy link must fail, not fall back to another tree.
+  if [[ ! -e "${legacy}" && ! -L "${legacy}" ]]; then source="${current}"; fi
+  resolved="$(readlink -e -- "${source}")" || return 1
+  [[ "${resolved}" == "${legacy}" || "${resolved}" == "${current}" ]] || {
+    echo "Invalid deployment root: ${resolved}" >&2
+    return 1
+  }
+  test -d "${resolved}" || return 1
+  printf '%s\n' "${resolved}"
+}
+
+APP_ROOT="$(canonical_deployment_root /opt/amazon-toolbox /opt/kesaitong-platform)"
 BACKEND_DIR="${APP_ROOT}/backend"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
 LEGACY_VENV="${BACKEND_DIR}/.venv"
-UPDATE_ROOT="/var/lib/amazon-toolbox"
+UPDATE_ROOT="$(canonical_deployment_root /var/lib/amazon-toolbox /var/lib/kesaitong-platform)"
 PUBLIC_UPDATES_DIR="${UPDATE_ROOT}/updates"
 UPDATE_STAGING_DIR="${UPDATE_ROOT}/.updates-staging"
 ATTACHMENT_DIR="${UPDATE_ROOT}/expense-attachments"
@@ -71,7 +85,8 @@ require_commands() {
 }
 
 validate_venv_target() {
-  local target="$1"
+  local target
+  target="$(readlink -e -- "$1")" || return 1
   [[ "${target}" == "${VENV_ROOT}/"* || "${target}" == "${LEGACY_VENV}" ]] || {
     echo "Invalid backend venv target: ${target}" >&2
     return 1
@@ -96,7 +111,8 @@ validate_venv_build_marker() {
 }
 
 atomic_switch_current_venv() {
-  local target="$1"
+  local target
+  target="$(readlink -e -- "$1")" || return 1
   validate_venv_target "${target}"
   [[ ! -e "${CURRENT_VENV}" || -L "${CURRENT_VENV}" ]] || {
     echo "${CURRENT_VENV} must be absent or a symbolic link" >&2

@@ -192,7 +192,7 @@ onUnmounted(() => {
 .sidebar-overlay {
   position: fixed;
   inset: 0;
-  z-index: 998;
+  z-index: calc(var(--z-sidebar) - 1);
   background: var(--color-overlay);
   backdrop-filter: blur(5px);
 }
@@ -246,6 +246,7 @@ onUnmounted(() => {
   .app-layout :deep(.studio-header),
   .content-studio {
     margin-left: 0;
+    width: 100%;
   }
 
   .content-studio {

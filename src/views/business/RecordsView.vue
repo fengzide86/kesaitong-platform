@@ -1,11 +1,11 @@
 <template>
   <div class="records-page">
-    <PageHeader eyebrow="BUSINESS RECORDS" title="批量流程记录" description="模拟批次与真实批次完全分开，不保存客户原始数据。">
-      <template #actions><button @click="load(false)"><RefreshCw :size="15" />刷新</button></template>
+    <PageHeader eyebrow="BUSINESS RECORDS" title="批量执行记录" description="默认查看真实批次；历史演示单独保留，不计入真实任务结果。">
+      <template #actions><button type="button" @click="helpOpen = true">记录核对 / 使用帮助</button><button @click="load(false)"><RefreshCw :size="15" />刷新</button></template>
     </PageHeader>
     <div class="record-tabs" role="tablist" aria-label="批次记录类型">
-      <button type="button" role="tab" :aria-selected="activeTab === 'demo'" :class="{ active: activeTab === 'demo' }" @click="activeTab='demo'">演示记录</button>
       <button type="button" role="tab" :aria-selected="activeTab === 'live'" :class="{ active: activeTab === 'live' }" @click="activeTab='live'">真实批次</button>
+      <button type="button" role="tab" :aria-selected="activeTab === 'demo'" :class="{ active: activeTab === 'demo' }" @click="activeTab='demo'">历史演示</button>
     </div>
     <p v-if="activeTab === 'demo'" class="demo-note">模拟结果仅用于展示批量流程，不代表真实账号处理成功。</p>
     <AsyncStateNotice v-if="loadState === 'stale'" :state="loadState" :message="loadError" @retry="load(failedAppend)" />
@@ -26,8 +26,8 @@
       <div v-else class="empty">
         <span><Archive :size="24" /></span>
         <strong>{{ activeTab === 'demo' ? '还没有批量演示记录' : '还没有真实批次记录' }}</strong>
-        <p>{{ activeTab === 'demo' ? '完成第一个模拟批次后，演示结果会显示在这里。' : '当前没有真实批次记录。' }}</p>
-        <router-link v-if="activeTab === 'demo'" to="/business/workspace">开始批量演示</router-link>
+        <p>{{ activeTab === 'demo' ? '这里仅保留旧演示记录，不提供新的演示入口。' : '当前没有真实批次记录。可到工作台查看工具开放状态与准备项。' }}</p>
+        <router-link v-if="activeTab === 'live'" to="/business/workspace">查看工具与准备项</router-link>
       </div>
     </section>
     <footer v-if="rows.length" class="pagination">
@@ -42,17 +42,18 @@
         <h2 class="detail-title">{{ detail.toolName }}</h2>
         <p>{{ detail.kind === 'demo' ? '模拟演示' : '真实执行' }} · {{ statusText(detail.status) }} · {{ detail.total }} 个账号</p>
         <p class="detail-disclosure">{{ detail.kind === 'demo' ? '完成、人工操作、异常均为演示案例，不代表真实平台结果，也无需继续处理历史案例。' : '这里只展示持久化的批次结果。不会从历史记录重新启动浏览器或自动恢复真实任务。' }}</p>
+        <p v-if="detail.kind === 'live'" class="detail-disclosure">“未完成”不是“确定未写入”。结果不明时，应先在原电脑核对平台上的同一对象，再决定是否重新处理；本页不会判断业务是否可重试。导出结果用于核对，不是自动重试清单。</p>
         <div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>账号序号</th><th>原表行号</th><th>状态</th><th>结果</th></tr></thead><tbody><tr v-for="item in detail.items" :key="item.label"><td>{{ item.label }}</td><td>{{ item.sourceRow || '本机未保留' }}</td><td>{{ item.status }}</td><td>{{ item.result }}</td></tr></tbody></table></div>
         <p v-if="!detail.items.length">该批次尚无账号结果记录。</p>
         <p class="detail-disclosure">原表行号仅在导入过的本机保留，用于对照源文件。仅导出行号和脱敏结果，不包含账号、原始单元格、内部任务标识或服务端原文。</p>
       </template>
-      <template #footer><div v-if="detail" class="detail-actions"><button type="button" @click="exportResults"><Download :size="15" />导出脱敏结果</button><button v-if="detail.kind === 'demo'" type="button" :disabled="store.isActive" @click="demonstrateAgain">重新准备演示</button><button type="button" @click="drawerOpen = false">关闭</button></div></template>
+      <template #footer><div v-if="detail" class="detail-actions"><button type="button" @click="exportResults"><Download :size="15" />导出脱敏结果</button><button type="button" @click="helpOpen = true">结果核对求助</button><button type="button" @click="drawerOpen = false">关闭</button></div></template>
     </el-drawer>
+    <BusinessHelpDrawer v-model="helpOpen" entry-point="批次记录核对" :context="detail ? { toolName: detail.toolName, recordKind: detail.kind, status: detail.status, total: detail.total } : undefined" />
   </div>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElDrawer } from 'element-plus'
 import { Archive, CircleAlert, Download, RefreshCw } from '@lucide/vue'
 import { getBusinessBatch, getDemoBatch } from '@/utils/api'
@@ -60,14 +61,15 @@ import { authService } from '@/utils/auth'
 import { unwrapApiData } from '@/features/demo/model'
 import { historyCsv, parseHistoryDetail, type HistoryDetail } from '@/features/business/history'
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
+import BusinessHelpDrawer from '@/features/business/BusinessHelpDrawer.vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 const store = useBusinessWorkspaceStore()
-const router = useRouter()
+const helpOpen = ref(false)
 type RecordTab = 'demo' | 'live'
 interface BatchRow { id: string | number; toolName: string; startedAt?: string | null; total: number; processed: number; attention: number; status: string; detailAccessible?: boolean }
-const activeTab = ref<RecordTab>('demo')
+const activeTab = ref<RecordTab>('live')
 const loadError = ref('')
 const loadState = ref<AsyncDataState>('loading')
 let loadSequence = 0
@@ -138,21 +140,12 @@ function exportResults(): void {
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-async function demonstrateAgain(): Promise<void> {
-  if (!detail.value || store.isActive) return
-  try {
-    const toolId = detail.value.toolId
-    await store.resetWorkspace()
-    const tool = store.tools.find(item => String(item.id) === toolId && item.availability === 'demo_only')
-    if (tool) store.chooseTool(tool)
-    await router.push('/business/workspace')
-  } catch (error) { detailError.value = error instanceof Error ? error.message : '暂时无法准备演示，请重试。' }
-}
 const formatDate = (value: string | null | undefined): string => value ? new Date(value).toLocaleString('zh-CN') : '-'
 const statusLabels: Record<string, string> = {
   created: '待演示', running: '进行中', completed: '演示完成', cancelled: '已退出', error: '演示异常', interrupted: '已中断',
 }
-const statusText = (value: string): string => activeTab.value === 'live' && value === 'completed' ? '已完成' : statusLabels[value] || value
+const liveStatusLabels: Record<string, string> = { created: '等待开始', pending: '等待开始', running: '执行中', completed: '已完成', cancelled: '已结束', error: '执行异常', failed: '未完成', interrupted: '已中断', waiting_user: '需要操作' }
+const statusText = (value: string): string => (activeTab.value === 'live' ? liveStatusLabels[value] : statusLabels[value]) || value
 </script>
 <style scoped>
 .records-list article{position:relative;padding-block:14px!important;padding-bottom:48px!important}.detail-link{position:absolute;right:20px;bottom:8px;height:30px}.pagination,.detail-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.pagination{color:var(--color-text-secondary);font-size:var(--type-meta)}.detail-title{color:var(--color-text);font-size:22px;line-height:1.4;overflow-wrap:anywhere}.detail-disclosure{padding:12px;border-radius:10px;background:var(--color-surface-soft);font-size:var(--type-meta);line-height:1.7}.detail-table-wrap{overflow:auto;margin-top:16px}.detail-table{width:100%;border-collapse:collapse;font-size:var(--type-control);text-align:left}.detail-table th,.detail-table td{padding:12px;border-bottom:1px solid var(--color-border);vertical-align:top}.detail-table th{white-space:nowrap;color:var(--color-text-secondary)}.detail-actions button:disabled{opacity:.5;cursor:not-allowed}

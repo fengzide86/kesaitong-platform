@@ -8,6 +8,7 @@ import {
   type IncomingMessage,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
+  type WebContents,
 } from 'electron'
 import { join } from 'node:path'
 
@@ -23,6 +24,8 @@ import type {
 import { DesktopBatchController } from './desktop-batch-controller.cjs'
 import { RunnerClient } from './runner-client.cjs'
 import { ExecutionReportOutbox } from './execution-report-outbox.cjs'
+import { LocalArtifactService } from './local-artifact-service.cjs'
+import type { LocalArtifactReadRequest, LocalArtifactReadResult } from '../../src/shared/ipc/artifact-contract.js'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -96,10 +99,14 @@ export class DesktopAutomationController {
   private readonly demoActivityTokens = new Set<string>()
   private runner: RunnerLike | null = null
   private singleRunActive = false
+  private singleStartInFlight = false
   private readonly reportOutbox: ExecutionReportOutbox
+  private readonly artifacts: LocalArtifactService
+  private pendingArtifactOwner: { owner: WebContents; generation: number } | null = null
 
   constructor(options: DesktopAutomationControllerOptions) {
     this.options = options
+    this.artifacts = new LocalArtifactService({ directory: join(app.getPath('userData'), 'automation-artifacts') })
     this.reportOutbox = new ExecutionReportOutbox({
       directory: join(app.getPath('userData'), 'pending-records'),
       apiBase: options.controlApiBase,
@@ -119,6 +126,13 @@ export class DesktopAutomationController {
     if (this.options.automationEnabled) this.reportOutbox.start()
     this.registerToolLaunchIpc()
     this.registerSingleRunIpc()
+    this.options.registerAutomationHandle('artifacts:read', (event: IpcMainInvokeEvent, request: LocalArtifactReadRequest): LocalArtifactReadResult | Promise<LocalArtifactReadResult> => {
+      if (this.pendingArtifactOwner?.owner === event.sender) {
+        return { status: 'unavailable', kind: request.kind, code: 'NOT_AVAILABLE', message: '任务正在准备，请稍后查看本机证据。' }
+      }
+      return this.artifacts.read(event.sender, request)
+    })
+    this.options.registerAutomationHandle('artifacts:clear', (event: IpcMainInvokeEvent) => this.resetArtifactsForOwner(event.sender.id))
     this.registerDemoActivityIpc()
     this.batchController.registerIpc()
   }
@@ -145,6 +159,11 @@ export class DesktopAutomationController {
     this.options.onActivityChanged()
   }
 
+  resetArtifactsForOwner(ownerId: number): void {
+    this.artifacts.reset(ownerId)
+    if (this.pendingArtifactOwner?.owner.id === ownerId) this.pendingArtifactOwner = null
+  }
+
   async cancelActiveForWindowClose(): Promise<void> {
     await this.batchController.cancelActiveForWindowClose()
     await this.runner?.cancel().catch(() => undefined)
@@ -152,6 +171,8 @@ export class DesktopAutomationController {
   }
 
   async cleanup(): Promise<void> {
+    this.artifacts.clear()
+    this.pendingArtifactOwner = null
     this.reportOutbox.dispose()
     this.embeddedBrowserHost.release()
     const cleanupTasks: Promise<unknown>[] = [this.batchController.cleanup()]
@@ -200,6 +221,11 @@ export class DesktopAutomationController {
       env: { ...this.runnerEnvironment(), TOOLBOX_PERSIST_REPORTS: '1' },
       onEvent: (rawEvent: unknown) => {
         const event = parseDesktopIpcEvent('automation:event', rawEvent)
+        const pending = this.pendingArtifactOwner
+        if (pending && event.type === 'run.started') {
+          this.artifacts.registerRun(pending.owner, pending.generation, event.runId)
+        }
+        this.artifacts.observe(event)
         if (event.type === 'run.started' || event.type === 'run.preparing') this.singleRunActive = true
         if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) this.singleRunActive = false
         this.options.onActivityChanged()
@@ -284,17 +310,33 @@ export class DesktopAutomationController {
 
   private registerSingleRunIpc(): void {
     const register = this.options.registerAutomationHandle
-    register('automation:start', async (_event: IpcMainInvokeEvent, rawTool: unknown) => {
+    register('automation:start', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
-      return this.getRunner().start({
-        ...tool,
-        browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',
-      })
+      // Keep the original single-Runner boundary while binding evidence to one
+      // launch request. Auth reset must not release a still-pending start.
+      if (this.singleStartInFlight || this.singleRunActive) {
+        throw Object.assign(new Error('当前任务尚未结束，请先停止或等待结束。'), { code: 'RUN_ALREADY_ACTIVE' })
+      }
+      this.singleStartInFlight = true
+      const pending = { owner: event.sender, generation: this.artifacts.begin(event.sender) }
+      this.pendingArtifactOwner = pending
+      try {
+        const result = await this.getRunner().start({
+          ...tool,
+          browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',
+        })
+        this.artifacts.registerRun(pending.owner, pending.generation, asRecord(result).runId)
+        return result
+      } finally {
+        this.singleStartInFlight = false
+        if (this.pendingArtifactOwner === pending) this.pendingArtifactOwner = null
+      }
     })
-    register('automation:preflight', async (_event: IpcMainInvokeEvent, rawTool: unknown) => {
+    register('automation:preflight', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
+      this.resetArtifactsForOwner(event.sender.id)
       return this.getRunner().preflight({
         ...tool,
         browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',

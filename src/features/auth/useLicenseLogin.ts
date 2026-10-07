@@ -10,7 +10,7 @@ import { licenseLoginResponseSchema, publicSettingsSchema } from './model'
 const stats = [
   { value: 'C', unit: '端', desc: '个人工具箱 · 面向参赛学生' },
   { value: 'B', unit: '端', desc: '批量工作台 · 面向代打团队' },
-  { value: '50', unit: '项', desc: '批量演示上限 · 非真实账号并发' },
+  { value: '8', unit: '类', desc: '任务入口 · 以当前开放状态为准' },
 ]
 
 const featureTags = ['物流模板', '运费比较', '个人工具箱', '批量工作台', '人工接手', '执行记录']
@@ -19,7 +19,8 @@ const helpSteps = [
   '联系人工客服确认套餐后，您会收到一个授权码',
   '在此页面输入授权码进行激活',
   '系统会自动绑定您当前使用的设备',
-  '激活成功后即可体验当前套餐包含的演示工具',
+  '激活成功后可进入当前套餐包含的工具和工作台；能否执行以工具的当前开放状态为准',
+  '真实工具只操作比赛模拟平台；演示工具使用本地沙盒，不会代替真实平台任务',
 ]
 
 function validateAuthCode(code: string): { valid: true } | { valid: false; message: string } {

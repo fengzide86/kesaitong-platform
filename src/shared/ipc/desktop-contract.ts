@@ -4,6 +4,7 @@ import { batchEventSchema } from '../../features/business/model.js'
 import type { FreightQuoteRequest, FreightRatePack } from '../freight/types.js'
 import type { FreightWorkbookOptions } from '../freight/workbook-parser.js'
 import { runnerEventSchema } from './automation-contract.js'
+import { localArtifactReadRequestSchema } from './artifact-contract.js'
 
 export const DESKTOP_IPC_PROTOCOL_VERSION = 1 as const
 export const DESKTOP_IPC_PAYLOAD_ERROR_CODE = 'IPC_PAYLOAD_INVALID' as const
@@ -141,6 +142,8 @@ export const notificationFocusSchema = z.object({
 })
 
 export const desktopIpcInvocationSchemas = {
+  'artifacts:read': z.tuple([localArtifactReadRequestSchema]),
+  'artifacts:clear': z.tuple([]),
   'credential-save-user-code': z.tuple([nonEmptyTextSchema]),
   'credential-load-user-code': z.tuple([]),
   'credential-clear-user-code': z.tuple([]),

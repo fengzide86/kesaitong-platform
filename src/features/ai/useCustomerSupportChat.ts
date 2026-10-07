@@ -272,7 +272,14 @@ onMounted(async () => {
       const problemCode = typeof context.problem_code === 'string' ? context.problem_code : ''
       const toolName = typeof context.tool_name === 'string' ? context.tool_name : '工具'
       const problem = problemCode ? `，问题编号 ${problemCode}` : ''
-      inputMessage.value = `${toolName}本次操作未完成${problem}，请帮我处理。`
+      const requiresReview = context.result_requires_review === true
+        || (context.execution_mode === 'live' && (context.run_status === 'failed' || context.run_status === 'cancelled'))
+      const situation = requiresReview
+        ? '本次客户端已停止，当前平台结果待核对'
+        : context.record_pending === true ? '本次执行记录仍待同步'
+        : context.execution_mode === 'demo' ? '本次本地演示遇到问题'
+        : context.execution_mode === 'preflight' ? '本次只读预检遇到问题' : '本次操作遇到问题'
+      inputMessage.value = `${toolName}${situation}${problem}，请帮我核对处理。`
       await sendMessage()
     }
   } catch {

@@ -6,6 +6,7 @@ import { useTaskRunStore } from '@/stores/taskRun'
 import { createDemoRun, updateDemoRun } from '@/utils/api'
 import { showToast } from '@/utils'
 import { confirmAction } from '@/shared/ui/confirm'
+import { authService } from '@/utils/auth'
 import type { RunStatus } from '@/automation'
 import { demoRunSchema, unwrapApiData } from '@/features/demo/model'
 import { demoActivityToken, setDemoActivity } from '@/utils/demoActivity'
@@ -14,6 +15,7 @@ import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import type { FreightQuoteResult } from '@/shared/freight/types'
 import { flushPendingDemoReceipts, queueDemoReceipt, type DemoReceipt } from './demo-receipts'
 import type { RunnerPreflightResult } from '@/shared/ipc/automation-contract'
+import { localArtifactReadResultSchema, type LocalArtifactDiagnosticSummary, type LocalArtifactKind, type LocalArtifactUnavailableCode } from '@/shared/ipc/artifact-contract'
 
 
 export function useSingleAutomationRun() {
@@ -37,7 +39,18 @@ const endingRun = ref(false)
 const taskStarted = ref(false)
 const taskStarting = ref(false)
 const browserRegistered = ref(false)
+const problemDetails = ref<HTMLDetailsElement | null>(null)
 const preflightResult = ref<RunnerPreflightResult | null>(null)
+type EvidenceReadState = 'idle' | 'loading' | 'ready' | 'missing' | 'error'
+const evidenceOpen = ref(false)
+const evidenceView = ref<LocalArtifactKind>('diagnostic')
+const screenshotState = ref<EvidenceReadState>('idle')
+const screenshotDataUrl = ref('')
+const screenshotMessage = ref('本次运行没有可读取的截图。')
+const diagnosticState = ref<EvidenceReadState>('idle')
+const diagnosticMessage = ref('仅显示当前执行与同步摘要。')
+const localDiagnostic = ref<LocalArtifactDiagnosticSummary | null>(null)
+let evidenceRequestVersion = 0
  const loggedRunIds = new Set<string>()
  const telemetryRuns = new Map<string, Promise<string | null>>()
 const pendingReceipt = ref<DemoReceipt | null>(null)
@@ -77,11 +90,23 @@ const freightQuote = computed(() => (runResult.value?.freightQuote || null) as F
 const adapterVersion = computed(() => String(runResult.value?.adapterVersion || appStore.currentTool?.launchGrant?.toolVersion || '1.0.0'))
 const evidenceSummary = computed(() => ({
   fingerprint: String(runResult.value?.pageFingerprint || '').slice(0, 12),
-  screenshot: Boolean(runResult.value?.screenshot),
+  screenshot: (typeof runResult.value?.screenshot === 'string' && Boolean(runResult.value.screenshot.trim()))
+    || taskRunStore.artifacts.some(artifact => artifact !== null && typeof artifact === 'object' && 'type' in artifact && artifact.type === 'screenshot'),
   signatureVerified: runResult.value?.signatureVerified === true,
 }))
+const hasArtifactReader = computed(() => isDesktop.value && typeof window.electronAPI?.artifacts?.read === 'function')
+const canReadDiagnostic = computed(() => !isPreflight.value && hasArtifactReader.value && Boolean(taskRunStore.runId))
+const canViewScreenshot = computed(() => canReadDiagnostic.value && evidenceSummary.value.screenshot)
+const screenshotAvailabilityMessage = computed(() => {
+  if (isPreflight.value) return '只读预检没有关联业务运行，不提供本机运行截图。'
+  if (!evidenceSummary.value.screenshot) return '本次运行未提供截图；仍可查看诊断信息。'
+  if (!taskRunStore.runId) return '截图缺少运行关联信息，当前无法安全读取。'
+  if (!hasArtifactReader.value) return '当前客户端不支持安全读取本机截图；请在原设备使用支持此能力的桌面版本。'
+  return '截图只在本机查看，不自动上传。'
+})
 const isActiveRun = computed(() => !isPreflight.value && ['idle', 'preparing', 'running', 'waiting_user', 'paused'].includes(runStatus.value))
 const isTerminal = computed(() => ['completed', 'failed', 'cancelled'].includes(runStatus.value))
+const needsPlatformReview = computed(() => !isDemo.value && !isPreflight.value && ['failed', 'cancelled'].includes(runStatus.value))
  const isBrowserRetryableError = computed(() => false)
  const interactionLocked = computed(() => ['preparing', 'running', 'paused'].includes(runStatus.value))
 const displayUrl = computed(() => isPreflight.value
@@ -123,15 +148,15 @@ const problemCode = computed(() => {
   return String(source).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase() || 'UNKNOWN'
 })
 const preflightMessage = computed(() => preflightResult.value?.blockedMessage || '当前工具尚未发布可执行脚本，只能查看页面并生成扫描报告。')
- const failureTitle = computed(() => isDemo.value ? '交互演示异常' : '自动执行失败')
+ const failureTitle = computed(() => isDemo.value ? '交互演示异常' : '执行已停止，请核对结果')
  const failureDescription = computed(() => {
    const stepId = currentStep.value?.id
    if (!isDemo.value) {
-     if (stepId === 'prepare') return '执行准备未完成，请检查授权和本机运行环境后重试。'
-     if (stepId === 'open') return '平台页面未能正常载入，自动处理已停止，请检查网络后重试。'
+     if (stepId === 'prepare') return '执行准备未完成。请先查看问题详情，核对授权和本机运行环境。'
+     if (stepId === 'open') return '平台页面未能正常载入。请先核对平台状态、网络和问题详情。'
      if (stepId === 'inspect') return '平台页面暂不符合执行条件，请核对登录状态或联系支持。'
      if (stepId === 'verify' || stepId === 'summary') return '本次结果未能确认。请先核对平台现场，避免重复处理。'
-     return '自动处理已停止，请核对平台现场后重试，或携带问题编号联系支持。'
+     return '自动处理已停止。请先核对平台现场和问题详情，无法确认时联系支持，避免重复处理。'
    }
    if (stepId === 'prepare') return '模拟场景在准备阶段停止，可重新加载演示。'
    if (stepId === 'open') return '模拟页面没有正常载入，演示已安全停止。'
@@ -145,6 +170,143 @@ const technicalError = computed(() => {
   const message = taskRunStore.error?.message || '未提供更多信息'
   return `${code} · ${message}`
 })
+
+function safeDiagnosticCode(value: unknown): string {
+  return typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(value) ? value : '未提供'
+}
+const diagnosticRows = computed(() => [
+  { label: '执行方式', value: isPreflight.value ? '浏览器只读预检，不执行业务动作' : isBrowserPreview.value ? '浏览器流程预览，不操作外部平台' : isDemo.value ? '本地交互沙盒' : '真实平台执行' },
+  { label: '执行状态', value: customerStatusText.value },
+  { label: '当前阶段', value: stageItems.value[currentStageIndex.value]?.label || '未提供' },
+  { label: '问题编号', value: problemCode.value },
+  { label: '错误码', value: safeDiagnosticCode(taskRunStore.error?.code || preflightResult.value?.blockedCode) },
+  { label: '业务结果', value: needsPlatformReview.value ? '待核对同一平台业务对象；停止不等于未生效' : isPreflight.value ? '未执行任何业务动作' : isDemo.value ? '仅代表本地演示或预览，不代表平台结果' : runStatus.value === 'completed' ? '工具返回已完成；截图读取和同步不会改变结果' : '尚未形成最终结果' },
+  { label: '记录同步', value: isPreflight.value ? '只读预检，不生成业务执行记录' : recordSyncing.value ? '正在同步记录，执行结果不变' : recordPending.value ? '记录待同步，无需重新执行任务' : isTerminal.value ? '当前未提示待同步；云端记录请到工具记录核对' : '执行尚未结束' },
+])
+const localDiagnosticRows = computed(() => {
+  const summary = localDiagnostic.value
+  if (!summary) return []
+  const statuses: Record<string, string> = { running: '执行中', paused: '已暂停', waiting_user: '需要操作', completed: '已完成', failed: '执行未完成', cancelled: '已停止' }
+  const rows = [{ label: '本机事件状态', value: statuses[summary.runStatus] || '未提供' }]
+  if (summary.errorCode) rows.push({ label: '本机错误码', value: summary.errorCode })
+  if (summary.recordPending !== undefined) rows.push({ label: '本机记录回执', value: summary.recordPending ? '待同步，不代表工具失败' : '未提示待同步' })
+  if (summary.pageFingerprint) rows.push({ label: '页面指纹', value: `${summary.pageFingerprint.slice(0, 12)}（不是截图）` })
+  if (summary.pageChanged !== undefined) rows.push({ label: '页面变化', value: summary.pageChanged ? '检测到结构变化' : '未检测到结构变化；不是业务成功判断' })
+  if (summary.pageScan) rows.push({ label: '页面扫描统计', value: `控件 ${summary.pageScan.controlCount} · 表单 ${summary.pageScan.formCount} · 标题 ${summary.pageScan.headingCount}` })
+  if (summary.network) rows.push({ label: '网络事件统计', value: `记录 ${summary.network.recordCount} · 响应 ${summary.network.responseCount} · 失败 ${summary.network.failureCount} · 丢弃 ${summary.network.dropped}（不代表业务结果）` })
+  return rows
+})
+
+function artifactUnavailableMessage(kind: LocalArtifactKind, code: LocalArtifactUnavailableCode): string {
+  const name = kind === 'screenshot' ? '截图' : '诊断文件'
+  const messages: Record<LocalArtifactUnavailableCode, string> = {
+    NOT_AVAILABLE: `当前运行没有可用的本机${name}。`,
+    NO_EVIDENCE: `本次运行未登记可读取的${name}，不会生成替代证据。`,
+    FORBIDDEN_PATH: `该${name}不符合本机证据读取范围，已阻止读取。`,
+    MISSING: `本机${name}不存在或已被清理，当前执行结果不变。`,
+    TOO_LARGE: `本机${name}超过安全读取大小，当前无法查看。`,
+    INVALID_CONTENT: `本机${name}内容未通过校验，当前无法查看。`,
+    READ_FAILED: `本机${name}暂时读取失败，可以重试读取；不会重新执行工具。`,
+    SESSION_CHANGED: `授权或当前任务已变化，旧${name}不能继续读取。`,
+  }
+  return messages[code]
+}
+
+function clearEvidence(): void {
+  evidenceRequestVersion += 1
+  screenshotDataUrl.value = ''
+  screenshotState.value = 'idle'
+  diagnosticState.value = 'idle'
+  localDiagnostic.value = null
+}
+function closeEvidence(): void {
+  evidenceOpen.value = false
+  clearEvidence()
+}
+function evidenceIdentity(): string {
+  const user = authService.getUser()
+  return JSON.stringify([user?.user_id ?? user?.id ?? '', user?.staff_id ?? '', user?.auth_code_id ?? '', user?.role ?? authService.getRole()].map(value => String(value)))
+}
+let lastEvidenceIdentity = evidenceIdentity()
+function handleEvidenceUserUpdate(): void {
+  const identity = evidenceIdentity()
+  if (identity !== lastEvidenceIdentity) closeEvidence()
+  lastEvidenceIdentity = identity
+}
+async function readRunEvidence(kind: LocalArtifactKind): Promise<void> {
+  const requestVersion = ++evidenceRequestVersion
+  const runId = taskRunStore.runId
+  const reader = window.electronAPI?.artifacts
+  if (kind === 'screenshot') {
+    screenshotDataUrl.value = ''
+    screenshotState.value = 'loading'
+  } else {
+    localDiagnostic.value = null
+    diagnosticState.value = 'loading'
+  }
+  if (isPreflight.value || !runId || !hasArtifactReader.value || !reader) {
+    if (kind === 'screenshot') {
+      screenshotState.value = 'missing'
+      screenshotMessage.value = screenshotAvailabilityMessage.value
+    } else {
+      diagnosticState.value = 'missing'
+      diagnosticMessage.value = isPreflight.value ? '只读预检没有运行编号，目前只显示预检状态，不提供可读取的运行诊断文件。' : !runId ? '尚无运行编号，仅显示当前执行与同步摘要。' : '当前客户端没有安全读取本机诊断文件的能力；以下状态摘要仍可查看。'
+    }
+    return
+  }
+  try {
+    const result = await reader.read({ runId, kind })
+    if (requestVersion !== evidenceRequestVersion || !evidenceOpen.value || taskRunStore.runId !== runId) return
+    const parsed = localArtifactReadResultSchema.safeParse(result)
+    if (!parsed.success || parsed.data.kind !== kind) throw new Error('INVALID_ARTIFACT_RESPONSE')
+    const artifact = parsed.data
+    if (artifact.status === 'unavailable') {
+      const state = ['NOT_AVAILABLE', 'NO_EVIDENCE', 'MISSING', 'SESSION_CHANGED'].includes(artifact.code) ? 'missing' : 'error'
+      if (kind === 'screenshot') {
+        screenshotState.value = state
+        screenshotMessage.value = artifactUnavailableMessage(kind, artifact.code)
+      } else {
+        diagnosticState.value = state
+        diagnosticMessage.value = `${artifactUnavailableMessage(kind, artifact.code)} 当前执行与同步摘要仍可查看。`
+      }
+    } else if (artifact.kind === 'screenshot') {
+      screenshotDataUrl.value = artifact.dataUrl
+      screenshotState.value = 'ready'
+    } else {
+      localDiagnostic.value = artifact.summary
+      diagnosticState.value = 'ready'
+    }
+  } catch {
+    if (requestVersion !== evidenceRequestVersion || !evidenceOpen.value || taskRunStore.runId !== runId) return
+    if (kind === 'screenshot') {
+      screenshotState.value = 'error'
+      screenshotMessage.value = '本机截图暂时读取失败或内容无效，可重试读取；不会重新执行工具。'
+    } else {
+      diagnosticState.value = 'error'
+      diagnosticMessage.value = '本机诊断暂时读取失败或内容无效，当前执行与同步摘要仍可查看。重试读取不会重新执行工具。'
+    }
+  }
+}
+async function showRunEvidence(kind: LocalArtifactKind = 'diagnostic'): Promise<void> {
+  if (kind === 'screenshot' && !canViewScreenshot.value) return
+  lastEvidenceIdentity = evidenceIdentity()
+  evidenceView.value = kind
+  evidenceOpen.value = true
+  await readRunEvidence(kind)
+}
+function screenshotImageFailed(): void {
+  screenshotDataUrl.value = ''
+  screenshotState.value = 'error'
+  screenshotMessage.value = '截图图片无法显示，可能已损坏；可重新读取，不会重新执行工具。'
+}
+watch(evidenceOpen, value => { if (!value) clearEvidence() })
+watch(() => [taskRunStore.runId, appStore.currentTool?.id], closeEvidence)
+
+function showProblemDetails() {
+  if (!problemDetails.value) return
+  problemDetails.value.open = true
+  problemDetails.value.querySelector('summary')?.focus()
+}
 
 function stageState(index: number) {
   if (runStatus.value === 'completed') return 'done'
@@ -167,7 +329,7 @@ async function stopRun() {
   try {
     if (!await confirmAction({
       title: '停止本次处理？',
-      message: '停止后可以返回工具箱重新发起。',
+      message: isDemo.value ? '停止后可以返回工具箱重新发起演示。' : '停止不会撤回已提交的平台操作。停止后请先核对平台状态，确认结果后再决定是否发起新任务。',
       confirmText: '停止处理',
       cancelText: '继续运行',
       danger: true,
@@ -186,7 +348,7 @@ async function closeWorkspace() {
   try {
     if (isActiveRun.value && !await confirmAction({
       title: isDemo.value ? '退出交互演示？' : '停止当前自动处理？',
-      message: isBrowserPreview.value ? '当前流程预览尚未完成，退出后会停止播放。' : isDemo.value ? '当前演示尚未完成，退出后本地沙盒会停止。' : '退出后会安全停止浏览器操作并保留问题记录。',
+      message: isBrowserPreview.value ? '当前流程预览尚未完成，退出后会停止播放。' : isDemo.value ? '当前演示尚未完成，退出后本地沙盒会停止。' : '退出会停止本次处理，但不会撤回已提交的平台操作。请先核对平台状态，无法确认时联系支持。',
       confirmText: isDemo.value ? '退出演示' : '停止处理',
       cancelText: '留在这里',
       danger: true,
@@ -215,6 +377,13 @@ async function restartRun() {
       await startDemoTask()
       return
     }
+    if (currentTool.executionMode === 'live' && needsPlatformReview.value && !await confirmAction({
+      title: '作为新任务再次执行？',
+      message: '这会使用新授权重新发起任务，不会恢复上次任务。请先核对平台状态；若上次操作已生效，再次执行可能重复处理。',
+      confirmText: '发起新任务',
+      cancelText: '先核对平台',
+      danger: true,
+    })) return
     const nextTool = currentTool.executionMode === 'live'
       ? await refreshLiveLaunch(currentTool)
       : { ...currentTool, demoRunId: createLocalDemoRunId(), executionMode: 'demo' as const }
@@ -261,6 +430,10 @@ async function openSupport() {
     platform_key: appStore.currentTool?.platformKey,
     error_code: taskRunStore.error?.code,
     problem_code: problemCode.value,
+    run_status: runStatus.value,
+    execution_mode: appStore.currentTool?.executionMode,
+    result_requires_review: needsPlatformReview.value,
+    record_pending: recordPending.value,
   }))
   await closeWorkspace()
   if (!appStore.toolVisible) router.push('/user/ai-chat')
@@ -405,6 +578,8 @@ async function retryRecordSync() {
 onMounted(() => {
   void flushPendingDemoReceipts()
   window.addEventListener('online', flushPendingDemoReceipts)
+  window.addEventListener('toolbox:auth-cleared', closeEvidence)
+  window.addEventListener('toolbox:user-updated', handleEvidenceUserUpdate)
   // Desktop runs wait for the WebView's dom-ready event so preflight uses the
   // same embedded host instead of opening a second Playwright window.
   if (!isDesktop.value) void startDemoTask()
@@ -415,10 +590,13 @@ watch(runStatus, status => {
   if (status === 'failed' || status === 'cancelled' || status === 'completed') {
     browserLoading.value = false
   }
-})
+}, { immediate: true })
 
 onUnmounted(() => {
+  closeEvidence()
   window.removeEventListener('online', flushPendingDemoReceipts)
+  window.removeEventListener('toolbox:auth-cleared', closeEvidence)
+  window.removeEventListener('toolbox:user-updated', handleEvidenceUserUpdate)
   void deactivateDemoActivity()
   void cancelPreflight()
   if (browserRegistered.value) void window.electronAPI?.automation?.unregisterBrowser()
@@ -427,10 +605,13 @@ onUnmounted(() => {
   return {
     browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
     preflightResult, preflightMessage,
-    platformName, platformShortName, isActiveRun, isTerminal, interactionLocked, displayUrl,
+    platformName, platformShortName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,
     freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing, retryRecordSync,
+    evidenceOpen, evidenceView, diagnosticRows, localDiagnosticRows, diagnosticState, diagnosticMessage,
+    screenshotState, screenshotDataUrl, screenshotMessage, canReadDiagnostic, canViewScreenshot, screenshotAvailabilityMessage,
+    showRunEvidence, readRunEvidence, screenshotImageFailed,
     currentStageIndex, runningMessage, customerStatusText, problemCode, runStatus, userAction,
-    isBrowserRetryableError, failureTitle, failureDescription, technicalError,
+    isBrowserRetryableError, failureTitle, failureDescription, technicalError, problemDetails, showProblemDetails,
     stageState, completeUserAction, stopRun, closeWorkspace, restartRun, startReadyScript, openSupport, registerWorkspaceBrowser,
   }
 }

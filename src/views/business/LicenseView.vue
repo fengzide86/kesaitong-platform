@@ -1,6 +1,6 @@
 <template>
   <div class="license-page">
-    <PageHeader eyebrow="BUSINESS LICENSE" title="授权信息" description="这里展示当前专业套餐、本机授权状态和演示模式边界。">
+    <PageHeader eyebrow="BUSINESS LICENSE" title="专业授权信息" description="核对当前套餐、本机设备与席位，以及真实任务的运行条件。">
       <template #actions><button class="refresh-license" type="button" :disabled="loading" @click="loadLicense"><RefreshCw :size="15" />刷新授权</button></template>
     </PageHeader>
     <p v-if="loading" role="status">正在核对套餐与本机授权…</p>
@@ -13,10 +13,10 @@
     <section v-if="user && !loading && !loadError" class="limits-grid">
       <article><span>这台电脑</span><strong>{{ deviceAuthorized ? '已授权' : '未识别到本机授权' }}</strong><small>{{ devices.length }} / {{ user.max_devices }} 台设备</small></article>
       <article><span>真实任务单批上限</span><strong>{{ store.entitlements.max_batch_rows || 50 }}</strong><small>仅统计有效导入行，需工具已开放真实执行</small></article>
-      <article><span>并发演示上限</span><strong>50</strong><small>逻辑演示，不代表真实账号并发</small></article>
       <article><span>真实执行</span><strong>1 个活动任务</strong><small>依次执行；最多保留 {{ store.entitlements.max_open_sessions || 6 }} 个待操作浏览器现场</small></article>
       <article><span>授权席位</span><strong>{{ user.seat_used ?? '待核对' }} / {{ user.seat_limit ?? '待核对' }}</strong><small>释放或扩容请联系授权提供方，不会自动增加收费</small></article>
     </section>
+    <p>套餐授权不等于工具已开放。真实批次还需工具发布状态、脚本就绪、桌面端和输入检查均满足；不会自动启用尚未开放的能力。</p>
     <p class="security-note"><ShieldCheck :size="16" />客户密码、Cookie 和 Excel 原文不会上传到服务端。</p>
   </div>
 </template>

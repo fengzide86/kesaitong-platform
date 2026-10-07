@@ -1,9 +1,9 @@
 <template>
   <div class="toolbox-page" data-testid="tools-page">
     <PageHeader
-      eyebrow="流程演示工具"
-      title="选择一个工具开始处理"
-      description="按工具状态选择交互演示或真实执行；真实自动化仅在课赛通 KST 桌面端运行。"
+      eyebrow="课赛通工具箱"
+      title="先选要完成的任务"
+      description="从注册公司、选品到商品、物流、营销与发货，按任务找到工具；平台操作由桌面端执行。"
     >
       <template #actions>
         <router-link class="plan-chip" to="/user/plans">
@@ -13,6 +13,25 @@
       </template>
     </PageHeader>
     <AsyncStateNotice v-if="staleError" state="stale" :message="staleError" @retry="loadData" />
+
+    <section class="directory-filters" aria-label="工具查找">
+      <label class="search-box"><Search :size="17" /><input v-model.trim="searchQuery" type="search" aria-label="搜索任务或工具" placeholder="搜索任务、工具或能力" /></label>
+      <label class="available-filter"><input v-model="onlyUsable" type="checkbox" />当前可用</label>
+      <button type="button" :aria-pressed="selectedTask === 'all'" @click="selectedTask = 'all'">全部任务</button>
+      <button v-if="otherToolCount" type="button" :aria-pressed="selectedTask === 'other'" @click="selectedTask = 'other'">其他工具 {{ otherToolCount }}</button>
+    </section>
+    <div class="task-groups" aria-label="按任务选择工具">
+      <section v-for="group in PRODUCT_TASK_GROUPS" :key="group.id" class="task-group">
+        <h3>{{ group.title }}</h3>
+        <div class="task-grid">
+          <button v-for="task in PRODUCT_TASKS.filter(item => item.group === group.id)" :key="task.id" type="button" :data-task-id="task.id" :aria-pressed="selectedTask === task.id" @click="selectedTask = task.id">
+            <strong>{{ task.title }}</strong><span>{{ task.preparation }}</span>
+            <small>{{ loading ? '正在核对工具' : loadError ? '工具目录待重试' : toolCountForTask(task.id) ? `${toolCountForTask(task.id)} 项工具 · 按状态与授权使用` : '尚无开放工具 · 可先准备资料' }}</small>
+          </button>
+        </div>
+      </section>
+    </div>
+    <p class="directory-summary" role="status">{{ selectedTaskTitle }} · {{ filteredTools.length }} 项匹配工具<span v-if="onlyUsable"> · 已核对套餐、发布状态与本机能力</span></p>
 
     <div v-if="loading" class="tool-grid" aria-label="工具加载中">
       <div v-for="item in 6" :key="item" class="tool-card skeleton-card"></div>
@@ -25,23 +44,24 @@
       <button type="button" @click="loadData">重新加载</button>
     </div>
 
-    <div v-else-if="tools.length" class="tool-grid">
+    <div v-else-if="filteredTools.length" class="tool-grid">
       <button
-        v-for="tool in tools"
+        v-for="tool in filteredTools"
         :key="tool.id"
         type="button"
         :class="['tool-card', `is-${toolState(tool)}`, { 'is-launching': launchingToolId === tool.id, 'is-focused': route.query?.tool === tool.id }]"
-        :disabled="launchingToolId !== null || toolState(tool) === 'maintenance'"
-        :aria-label="`${tool.name}，${liveUnavailable(tool) ? '需要下载桌面端运行' : toolState(tool) === 'available' ? '打开能力说明并开始演示' : toolState(tool) === 'locked' ? '查看可用套餐' : '暂时不可用'}`"
+        :disabled="launchingToolId !== null || (!hasToolDetails(tool) && toolExecutionUnavailable(tool))"
+        :aria-label="`${tool.name}，${hasToolDetails(tool) ? '查看工具说明，' : ''}${toolActionText(tool)}`"
         :data-testid="'tool-card-' + tool.name"
         @click="hasToolDetails(tool) ? openDetails(tool) : handleToolClick(tool)"
       >
         <span v-if="launchingToolId === tool.id" class="launch-rail" aria-hidden="true"></span>
         <span class="tool-card-top">
           <span class="tool-icon"><component :is="toolIcon(tool)" :size="21" /></span>
-          <span v-if="toolState(tool) === 'locked'" class="state-badge locked"><LockKeyhole :size="12" /> 当前套餐未包含</span>
+          <span v-if="toolState(tool) === 'platform-locked'" class="state-badge locked"><LockKeyhole :size="12" /> 当前平台未授权</span>
+          <span v-else-if="toolState(tool) === 'locked'" class="state-badge locked"><LockKeyhole :size="12" /> 当前套餐未包含</span>
           <span v-else-if="toolState(tool) === 'maintenance'" class="state-badge maintenance">暂时不可用</span>
-          <span v-else :class="['state-badge', scriptPreflightRequired(tool) ? 'demo' : isLiveTool(tool) ? 'live' : 'demo']">{{ liveUnavailable(tool) ? '桌面端执行' : scriptPreflightRequired(tool) ? '脚本开发中' : isLiveTool(tool) ? (tool.availability === 'live_beta' ? '真实执行 Beta' : '真实执行') : '交互演示' }}</span>
+          <span v-else class="state-badge live">{{ getToolPresentation(tool).label }}</span>
         </span>
 
         <span class="tool-copy">
@@ -53,7 +73,7 @@
           <span class="tool-operational-meta">
             <span><small>目标平台</small><b>{{ toolPlatformLabel(tool) }}</b></span>
             <span><small>输入字段</small><b>{{ toolInputCount(tool) }} 项</b></span>
-            <span><small>执行产出</small><b>{{ isLiveTool(tool) ? '执行记录与核验结果' : runtime.singleLive ? '本地沙盒演示记录' : '示例流程与说明' }}</b></span>
+            <span><small>操作类型</small><b>{{ getToolPresentation(tool).operationLabel }}</b></span>
           </span>
         </span>
 
@@ -66,15 +86,8 @@
           <template v-if="launchingToolId === tool.id">
             <LoaderCircle :size="16" class="spin" /> 正在打开…
           </template>
-          <template v-else-if="toolState(tool) === 'locked'">
-            查看可用套餐 <ArrowRight :size="16" />
-          </template>
-          <template v-else-if="toolState(tool) === 'maintenance'">维护中</template>
-          <template v-else-if="liveUnavailable(tool)">
-            下载桌面端 <Download :size="16" />
-          </template>
           <template v-else>
-            {{ scriptPreflightRequired(tool) ? '打开浏览器预检' : isLiveTool(tool) ? '开始执行' : '开始交互演示' }} <ArrowRight :size="16" />
+            {{ toolActionText(tool) }} <ArrowRight :size="16" />
           </template>
           </span>
         </span>
@@ -83,8 +96,8 @@
 
     <div v-else class="empty-state">
       <Wrench :size="44" :stroke-width="1.5" />
-      <h3>当前平台暂无可用工具</h3>
-      <p>你可以切换平台，或稍后再试。</p>
+      <h3>{{ tools.length ? '没有符合条件的工具' : '当前平台尚无开放工具' }}</h3>
+      <p>{{ onlyUsable ? '当前可用同时要求套餐包含、工具已开放和本机支持；可取消筛选查看使用条件。' : '可先查看任务准备要求，或切换任务、搜索词与平台。不会以模拟流程替代真实功能。' }}</p>
     </div>
 
     <el-drawer v-model="detailsVisible" direction="rtl" size="min(420px, 92vw)" class="tool-detail-drawer">
@@ -96,6 +109,8 @@
       </template>
       <div v-if="detailsTool" class="drawer-content">
         <p class="drawer-description">{{ detailsTool.description || defaultDescription(detailsTool) }}</p>
+        <p v-if="toolState(detailsTool) === 'platform-locked'" class="drawer-authorization-note">当前授权未包含{{ toolPlatformLabel(detailsTool) }}，请联系授权提供方核对平台范围。更换套餐并不代表已获此平台授权。</p>
+        <p v-else-if="toolState(detailsTool) === 'locked'" class="drawer-authorization-note">当前套餐未包含此工具，可查看可用套餐；平台范围和工具开放状态仍需分别核对。</p>
         <section v-if="toolCapabilities(detailsTool).length">
           <span class="section-label">可以帮你完成</span>
           <div class="drawer-tags"><span v-for="tag in toolCapabilities(detailsTool)" :key="tag"><CheckCircle2 :size="14" />{{ tag }}</span></div>
@@ -108,10 +123,10 @@
           <span class="section-label">什么时候需要你操作</span>
           <ul><li v-for="scenario in normalizedList(detailsTool.intervention_scenarios)" :key="scenario">{{ scenario }}</li></ul>
         </section>
-        <div class="drawer-assurance"><ShieldCheck :size="17" /><span>{{ liveUnavailable(detailsTool) ? '真实自动化需要桌面端本地 Runner；网页版不会读取或执行外部平台操作。' : scriptPreflightRequired(detailsTool) ? '当前先打开本机浏览器扫描页面；脚本完成并验收前，不会填写、点击或提交业务数据。' : isLiveTool(detailsTool) ? '工具将在本机浏览器中操作比赛模拟平台，登录数据不上传。' : runtime.singleLive ? '这是本地交互沙盒，会真实填写和点击，但不访问外部平台。' : '浏览器版展示模拟流程，不启动本地执行器，也不操作外部平台。' }}</span></div>
+        <div class="drawer-assurance"><ShieldCheck :size="17" /><span>{{ getToolPresentation(detailsTool).description }}{{ liveUnavailable(detailsTool) ? ' 需要下载桌面端，本网页不会启动外部平台操作。' : '' }}</span></div>
       </div>
       <template #footer>
-        <button class="drawer-primary" :disabled="Boolean(detailsTool && toolState(detailsTool) === 'maintenance')" @click="launchFromDetails">
+        <button class="drawer-primary" :disabled="!detailsTool || launchingToolId !== null || toolExecutionUnavailable(detailsTool)" @click="launchFromDetails">
           {{ detailsActionText }} <ArrowRight :size="16" />
         </button>
       </template>
@@ -144,12 +159,12 @@ import {
   Boxes,
   CheckCircle2,
   CircleAlert,
-  Download,
   LoaderCircle,
   LockKeyhole,
   Megaphone,
   PackageCheck,
   PackagePlus,
+  Search,
   ShieldCheck,
   Truck,
   UserPlus,
@@ -168,10 +183,11 @@ import {
   toolCatalogSchema,
   type ToolCatalogItem,
 } from '@/features/tools/model'
-import { buildDemoLaunch, buildLiveLaunch, buildPreflightLaunch, isLiveTool } from '@/features/automation/launch'
+import { buildLiveLaunch, buildPreflightLaunch, isLiveTool } from '@/features/automation/launch'
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import { downloadDesktopInstaller } from '@/runtime/desktop-download'
 import { validateSingleToolInput } from '@/features/automation/input-validation'
+import { PRODUCT_TASKS, PRODUCT_TASK_GROUPS, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable, isToolIncluded, isToolInPlatformScope, isToolPublished, type ProductTaskId } from '@/features/tools/presentation'
 
 const router = useRouter() || { push: () => {} }
 const route = useRoute() || { query: {} }
@@ -188,6 +204,27 @@ const runDialogVisible = ref(false)
 const pendingTool = ref<ToolCatalogItem | null>(null)
 const runInput = ref<Record<string, string | number | undefined>>({})
 const runtime = getRuntimeCapabilities()
+const profileVersion = ref(0)
+const refreshProfile = () => { profileVersion.value += 1 }
+const searchQuery = ref('')
+const onlyUsable = ref(false)
+type TaskFilter = ProductTaskId | 'all' | 'other'
+function taskFilter(value: unknown): TaskFilter {
+  return value === 'other' || PRODUCT_TASKS.some(task => task.id === value) ? value as TaskFilter : 'all'
+}
+const selectedTask = ref<TaskFilter>(taskFilter(route.query?.task))
+const selectedTaskTitle = computed(() => PRODUCT_TASKS.find(task => task.id === selectedTask.value)?.title || (selectedTask.value === 'other' ? '其他工具' : '全部任务'))
+const otherToolCount = computed(() => tools.value.filter(tool => !getToolTaskIds(tool).length).length)
+const toolCountForTask = (taskId: ProductTaskId) => tools.value.filter(tool => getToolTaskIds(tool).includes(taskId)).length
+const filteredTools = computed(() => tools.value.filter(tool => {
+  const taskIds = getToolTaskIds(tool)
+  if (selectedTask.value === 'other' ? taskIds.length > 0 : selectedTask.value !== 'all' && !taskIds.includes(selectedTask.value)) return false
+  if (onlyUsable.value && !isToolCurrentlyUsable(tool, currentUsability.value)) return false
+  const query = searchQuery.value.toLocaleLowerCase()
+  const taskWords = PRODUCT_TASKS.filter(task => taskIds.includes(task.id)).map(task => `${task.title} ${task.intent}`).join(' ')
+  return !query || `${tool.name} ${tool.description} ${tool.capability_key || ''} ${toolCapabilities(tool).join(' ')} ${taskWords}`.toLocaleLowerCase().includes(query)
+}))
+watch(() => route.query?.task, value => { selectedTask.value = taskFilter(value) })
 let catalogSequence = 0
 let launchSequence = 0
 
@@ -201,6 +238,7 @@ function setNumberInput(key: string, value: number | null | undefined): void {
 }
 
 const userInfo = computed(() => {
+  void profileVersion.value
   try {
     return readStoredLicense()
   } catch {
@@ -212,6 +250,13 @@ const currentPlanName = computed(() => userInfo.value.plan_name || '当前授权
 const currentPlanCode = computed(() => {
   return licensePlanCode(userInfo.value)
 })
+const currentUsability = computed(() => ({
+  planCode: currentPlanCode.value,
+  platformScope: userInfo.value.platform_scope,
+  platformKey: platformStore.currentPlatform,
+  runtimeAvailable: runtime.singleLive,
+  mode: 'single' as const,
+}))
 
 const iconMap = {
   register: UserPlus,
@@ -267,7 +312,19 @@ function liveUnavailable(tool: ToolCatalogItem): boolean {
 }
 
 function scriptPreflightRequired(tool: ToolCatalogItem): boolean {
-  return isLiveTool(tool) && tool.script_status !== 'script_ready'
+  return getToolPresentation(tool).action === 'inspect'
+}
+function toolExecutionUnavailable(tool: ToolCatalogItem): boolean {
+  return ['unavailable', 'calculate'].includes(getToolPresentation(tool).action)
+}
+
+function toolActionText(tool: ToolCatalogItem): string {
+  if (toolState(tool) === 'platform-locked') return '核对平台授权'
+  if (toolState(tool) === 'locked') return '查看可用套餐'
+  const presentation = getToolPresentation(tool)
+  if (presentation.action === 'unavailable' || presentation.action === 'calculate') return presentation.actionLabel
+  if (liveUnavailable(tool)) return '下载桌面端'
+  return presentation.actionLabel
 }
 
 function openDetails(rawTool: unknown) {
@@ -277,21 +334,13 @@ function openDetails(rawTool: unknown) {
 
 const detailsActionText = computed(() => {
   if (!detailsTool.value) return '关闭'
-  if (toolState(detailsTool.value) === 'locked') return '查看可用套餐'
-  if (toolState(detailsTool.value) === 'maintenance') return '当前维护中'
-  if (liveUnavailable(detailsTool.value)) return '下载 KST 桌面端'
-  if (scriptPreflightRequired(detailsTool.value)) return '打开浏览器预检'
-  return isLiveTool(detailsTool.value) ? '填写参数并执行' : '开始交互演示'
+  return toolActionText(detailsTool.value)
 })
 
 async function launchFromDetails() {
-  if (!detailsTool.value || toolState(detailsTool.value) === 'maintenance') return
+  if (!detailsTool.value || toolExecutionUnavailable(detailsTool.value)) return
   const tool = detailsTool.value
   detailsVisible.value = false
-  if (liveUnavailable(tool)) {
-    await downloadKstDesktop()
-    return
-  }
   handleToolClick(tool)
 }
 
@@ -304,23 +353,25 @@ async function downloadKstDesktop(): Promise<void> {
 }
 
 function toolState(tool: ToolCatalogItem) {
-  const releaseStatus = tool.release_status || (tool.status === 'online' ? 'available' : tool.status) || 'maintenance'
-  if (!['available', 'beta', 'online'].includes(releaseStatus)) return 'maintenance'
-  const availablePlans = Array.isArray(tool.available_plans)
-    ? tool.available_plans.map(item => String(item).toUpperCase())
-    : []
-  if (availablePlans.length && !availablePlans.includes(currentPlanCode.value)) return 'locked'
+  if (!isToolPublished(tool)) return 'maintenance'
+  if (!isToolInPlatformScope(tool, currentUsability.value)) return 'platform-locked'
+  if (!isToolIncluded(tool, currentPlanCode.value)) return 'locked'
   return 'available'
 }
 
 function handleToolClick(rawTool: unknown) {
   const tool = toolCatalogItemSchema.parse(rawTool)
   const state = toolState(tool)
+  if (!isCustomerTool(tool) || toolExecutionUnavailable(tool)) return
+  if (state === 'platform-locked') {
+    showToast(`当前授权未包含${toolPlatformLabel(tool)}，请联系授权提供方核对平台范围；更换套餐并不代表已获此平台授权。`, 'info')
+    router.push({ path: '/user/ai-chat', query: { tool: tool.id, reason: 'platform-scope' } })
+    return
+  }
   if (state === 'locked') {
     router.push({ path: '/user/plans', query: { tool: tool.id } })
     return
   }
-  if (state === 'maintenance') return
   if (liveUnavailable(tool)) {
     void downloadKstDesktop()
     return
@@ -349,7 +400,7 @@ async function loadData() {
   try {
     const next = toolCatalogSchema
       .parse(await getTools({ platform_key: platform }))
-      .filter(tool => tool.supports_demo_single || tool.supports_live_single)
+      .filter(tool => isCustomerTool(tool) && tool.supports_live_single)
     if (current()) tools.value = next
   } catch (error) {
     if (!current()) return
@@ -371,17 +422,18 @@ async function confirmRun() {
 }
 
 async function runTool(tool: ToolCatalogItem, input: Record<string, unknown> = {}) {
+  // Internal demo launchers remain in their module; this directory never
+  // falls back to them when real execution conditions are not satisfied.
+  if (!isCustomerTool(tool) || !isToolCurrentlyUsable(tool, currentUsability.value)) return
   if (launchingToolId.value !== null) return
   const sequence = ++launchSequence
   const platformKey = platformStore.currentPlatform
   launchingToolId.value = tool.id
   try {
     if (isLiveTool(tool) && !runtime.singleLive) throw new Error('真实自动化仅支持已启用本地 Runner 的桌面客户端')
-    const launchTool = isLiveTool(tool)
-      ? scriptPreflightRequired(tool)
-        ? buildPreflightLaunch(tool, platformKey, input)
-        : await buildLiveLaunch(tool, platformKey, input)
-      : buildDemoLaunch(tool, platformKey, input)
+    const launchTool = scriptPreflightRequired(tool)
+      ? buildPreflightLaunch(tool, platformKey, input)
+      : await buildLiveLaunch(tool, platformKey, input)
     if (sequence === launchSequence && platformKey === platformStore.currentPlatform) appStore.openTool(launchTool)
   } catch (error) {
     if (sequence === launchSequence) showToast(errorMessage(error, '工具启动失败，请稍后重试'), 'error')
@@ -401,11 +453,12 @@ watch(() => platformStore.currentPlatform, () => {
   tools.value = []
   void loadData()
 })
-onMounted(loadData)
-onUnmounted(() => { catalogSequence += 1; launchSequence += 1 })
+onMounted(() => { void loadData(); window.addEventListener('toolbox:user-updated', refreshProfile) })
+onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEventListener('toolbox:user-updated', refreshProfile) })
 </script>
 
 <style scoped>
+.directory-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 22px}.search-box{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.search-box input{width:100%;min-width:0;border:0;background:transparent;color:var(--color-text);font:inherit;outline:none}.search-box:focus-within{outline:2px solid var(--color-focus-ring)}.available-filter{display:flex;align-items:center;gap:6px;font-size:13px}.directory-filters>button{padding:9px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-text);cursor:pointer}.directory-filters>button[aria-pressed=true]{border-color:var(--color-primary);color:var(--color-primary)}.task-groups{display:grid;gap:16px;margin-bottom:20px}.task-group h3{margin:0 0 10px;font-size:14px;color:var(--color-text-secondary)}.task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.task-grid button{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}.task-grid button[aria-pressed=true]{border-color:var(--color-primary);background:var(--color-primary-soft)}.task-grid span{font-size:12px;line-height:1.6;color:var(--color-text-secondary)}.task-grid small{font-size:11px;color:var(--color-text-tertiary)}.directory-summary{font-size:13px;color:var(--color-text-secondary)}@media(max-width:760px){.task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.task-grid{grid-template-columns:1fr}}
 .toolbox-page {
   width: min(1120px, 100%);
   margin: 0 auto;
@@ -650,6 +703,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1 })
 .drawer-heading strong { color: var(--color-text); font-size: 15px; }
 .drawer-content { display: grid; gap: 25px; }
 .drawer-description { margin: 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.75; }
+.drawer-authorization-note { margin: 0; padding: 12px; border-radius: 10px; color: var(--color-warning); background: var(--color-warning-soft); font-size: var(--type-meta); line-height: 1.7; }
 .drawer-content section { display: grid; gap: 11px; }
 .section-label { color: var(--color-text); font-size:var(--type-control); font-weight: 750; }
 .drawer-tags { display: grid; gap: 7px; }
@@ -664,7 +718,9 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1 })
 :deep(.tool-detail-drawer .el-drawer__footer) { padding: 16px 22px 22px; border-top: 1px solid var(--color-border); }
 
 .is-locked .tool-icon,
-.is-locked .tool-action {
+.is-locked .tool-action,
+.is-platform-locked .tool-icon,
+.is-platform-locked .tool-action {
   color: var(--color-warning);
   background-color: var(--color-warning-soft);
 }

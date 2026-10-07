@@ -24,6 +24,12 @@ import type {
 } from './desktop-contract.js'
 import type { RunnerEvent, RunnerPreflightResult } from './automation-contract.js'
 import type { UpdateDeferPhase, UpdateSnapshot } from './update-contract.js'
+import type { LocalArtifactReadRequest, LocalArtifactReadResult } from './artifact-contract.js'
+
+export interface LocalArtifactBridge {
+  read(request: LocalArtifactReadRequest): Promise<LocalArtifactReadResult>
+  clear(): Promise<void>
+}
 
 export interface UpdateBridge {
   getState(): Promise<UpdateSnapshot>
@@ -132,6 +138,7 @@ export interface ToolboxElectronApi {
   demoActivity?: DemoActivityBridge
   batch?: BatchBridge
   automation?: AutomationBridge
+  artifacts?: LocalArtifactBridge
   credentialStore?: CredentialStoreBridge
   notifications?: NotificationBridge
   freight?: FreightBridge

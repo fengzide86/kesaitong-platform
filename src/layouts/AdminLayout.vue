@@ -149,7 +149,7 @@ onUnmounted(() => {
   inset: 0;
   background: var(--color-overlay);
   backdrop-filter: blur(4px);
-  z-index: 998;
+  z-index: calc(var(--z-sidebar) - 1);
 }
 
 @media (max-width: 1024px) {

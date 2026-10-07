@@ -70,6 +70,54 @@ describe('customer support handoff errors', () => {
     wrapper.unmount()
   })
 
+  it.each(['failed', 'cancelled'])('携带 %s 客户端上下文时保留发送流程，但不断言平台业务未完成', async runStatus => {
+    localStorage.setItem('toolbox_support_context', JSON.stringify({
+      tool_name: '平台工具', problem_code: 'ISSUE001', run_status: runStatus, result_requires_review: true,
+    }))
+    api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请先核对平台记录' })
+    const { chat, wrapper } = harness()
+    await flushPromises()
+    expect(api.sendChatMessage).toHaveBeenCalledWith('session-1', '平台工具本次客户端已停止，当前平台结果待核对，问题编号 ISSUE001，请帮我核对处理。', { platform_key: 'amazon' })
+    expect(chat.messages.value.find(item => item.role === 'user')?.content).not.toContain('本次操作未完成')
+    expect(localStorage.getItem('toolbox_support_context')).toBeNull()
+    expect(confirmAction).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('记录待同步的客服上下文不被改写成平台任务失败', async () => {
+    localStorage.setItem('toolbox_support_context', JSON.stringify({
+      tool_name: '平台工具', run_status: 'completed', record_pending: true,
+    }))
+    api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请保持联网核对记录' })
+    const { chat, wrapper } = harness()
+    await flushPromises()
+    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe('平台工具本次执行记录仍待同步，请帮我核对处理。')
+    expect(confirmAction).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('旧支持上下文缺少结果字段时使用中性问题说明，不编造已核对结果', async () => {
+    localStorage.setItem('toolbox_support_context', JSON.stringify({ tool_name: '平台工具', problem_code: 'OLD001' }))
+    api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请说明遇到的问题' })
+    const { chat, wrapper } = harness()
+    await flushPromises()
+    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe('平台工具本次操作遇到问题，问题编号 OLD001，请帮我核对处理。')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['demo', '本次本地演示遇到问题'], ['preflight', '本次只读预检遇到问题'],
+  ])('%s 支持上下文不被描述成真实平台业务待核对', async (executionMode, situation) => {
+    localStorage.setItem('toolbox_support_context', JSON.stringify({
+      tool_name: '平台工具', execution_mode: executionMode, run_status: 'failed', result_requires_review: false,
+    }))
+    api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请查看问题详情' })
+    const { chat, wrapper } = harness()
+    await flushPromises()
+    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe(`平台工具${situation}，请帮我核对处理。`)
+    wrapper.unmount()
+  })
+
   it('exposes a retry after initial connection failure', async () => {
     api.createChatSession.mockRejectedValueOnce(new Error('offline'))
     const { chat, wrapper } = harness()

@@ -8,6 +8,9 @@ export const toolCatalogItemSchema = z.object({
   category: z.string().default('automation'),
   platform_key: z.string().optional(),
   capability_key: z.string().optional(),
+  task_ids: z.array(z.string()).optional(),
+  // Unknown future kinds remain visible; presentation interprets only known kinds.
+  tool_kind: z.string().optional(),
   capability_tags: z.union([z.array(z.string()), z.string()]).optional(),
   preparation_notes: z.union([z.array(z.string()), z.string()]).optional(),
   intervention_scenarios: z.union([z.array(z.string()), z.string()]).optional(),

@@ -436,6 +436,38 @@ async function assertCaptureReady(page: Page, routePath: string, mockState?: Api
   expect(mockState?.unmatchedRequests ?? [], 'All API requests used by a visual baseline must be explicitly mocked').toEqual([])
 }
 
+async function assertShellHeaderLayout(page: Page): Promise<void> {
+  if (!await page.locator('.studio-header').count()) return
+  const collisions = await page.locator('.studio-header').evaluate(header => {
+    const box = (selector: string): DOMRect | null => {
+      const element = header.querySelector(selector)
+      if (!element || getComputedStyle(element).display === 'none') return null
+      const rectangle = element.getBoundingClientRect()
+      return rectangle.width && rectangle.height ? rectangle : null
+    }
+    const issues: string[] = []
+    const leading = box('.header-leading')
+    const tools = box('.header-tools')
+    if (leading && tools && leading.right > tools.left + 1) issues.push('title overlaps header tools')
+    const actions = box('.shell-page-actions')
+    const platform = box('.platform-switcher')
+    const trailing = box('.header-right')
+    if (actions && platform && actions.right > platform.left + 1) issues.push('page actions overlap platform switcher')
+    if (actions && trailing && actions.right > trailing.left + 1) issues.push('page actions overlap account controls')
+    if (platform && trailing && platform.right > trailing.left + 1) issues.push('platform switcher overlaps account controls')
+    if (actions) {
+      for (const control of header.querySelectorAll('.shell-page-actions button, .shell-page-actions a')) {
+        const rectangle = control.getBoundingClientRect()
+        if (rectangle.width && (rectangle.left < actions.left - 1 || rectangle.right > actions.right + 1)) {
+          issues.push('page action overflows its allocated width')
+        }
+      }
+    }
+    return issues
+  })
+  expect(collisions, 'Shell title, page actions and account controls must not overlap').toEqual([])
+}
+
 async function capture(page: Page, width: number, height: number, name: string, routePath: string, mockState?: ApiMockState): Promise<void> {
   await assertCaptureReady(page, routePath, mockState)
   await expect(page.locator('main').first()).toBeVisible({ timeout: 15_000 })
@@ -443,6 +475,12 @@ async function capture(page: Page, width: number, height: number, name: string, 
   await assertCaptureReady(page, routePath, mockState)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(1)
+  // At the collapsed-sidebar breakpoint the header must recover the full
+  // viewport width; merely having no document overflow misses a clipped title.
+  if (width <= 1024 && await page.locator('.studio-header').count()) {
+    const headerWidth = await page.locator('.studio-header').evaluate(element => element.getBoundingClientRect().width)
+    expect(headerWidth).toBeGreaterThanOrEqual(width - 1)
+  }
   const clippedShellPixels = await page.locator('.studio-header, main').evaluateAll(elements =>
     elements.reduce((maximum, element) => {
       if (getComputedStyle(element).display === 'none') return maximum
@@ -450,6 +488,7 @@ async function capture(page: Page, width: number, height: number, name: string, 
     }, 0),
   )
   expect(clippedShellPixels).toBeLessThanOrEqual(1)
+  await assertShellHeaderLayout(page)
 
   const undersizedControls = await page.locator('button:visible, input:visible, [role="menuitem"]:visible').evaluateAll(elements =>
     elements.filter(element => Number.parseFloat(getComputedStyle(element).fontSize) < 14).length,

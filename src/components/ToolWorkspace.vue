@@ -19,10 +19,13 @@
         <button v-if="isActiveRun" class="control-button danger" type="button" :disabled="endingRun" @click="stopRun">
           <Square :size="14" />{{ endingRun ? '正在停止…' : isDemo ? '停止演示' : '停止执行' }}
         </button>
+        <button v-else-if="needsPlatformReview" class="control-button" type="button" @click="showProblemDetails">
+          <CircleAlert :size="14" />查看问题详情
+        </button>
         <button v-else-if="isTerminal" class="control-button" type="button" :disabled="restarting || endingRun" @click="restartRun">
           <LoaderCircle v-if="restarting" :size="14" class="spin" />
           <RotateCcw v-else :size="14" />
-          {{ restarting ? '正在打开…' : (isDemo ? '重新演示' : '重新执行') }}
+          {{ restarting ? '正在打开…' : (isDemo ? '重新演示' : '发起新任务') }}
         </button>
       </div>
     </header>
@@ -69,8 +72,15 @@
         <div v-if="isTerminal && (recordPending || recordSyncing)" class="demo-disclosure" role="status" data-testid="record-sync-status">
           {{ recordSyncing ? '正在同步记录…' : '任务结果不变，记录待同步。无需重新执行任务。' }}
           <button v-if="isDemo && recordPending" type="button" class="secondary-action" :disabled="recordSyncing" @click="retryRecordSync">仅重试同步记录</button>
-          <span v-if="!isDemo">请保持联网，稍后到工具记录核对。</span>
+          <span v-if="!isDemo">记录补传与工具执行互相独立，不会为同步记录重新运行工具。请保持联网，稍后到工具记录核对；仍未同步时可联系支持。</span>
         </div>
+        <section class="run-inspection" aria-label="执行诊断与本机证据" data-testid="run-inspection-actions">
+          <div>
+            <button class="inspection-button" type="button" data-testid="view-run-diagnostic" @click="showRunEvidence('diagnostic')"><CircleAlert :size="15" />查看诊断信息</button>
+            <button v-if="canViewScreenshot" class="inspection-button" type="button" data-testid="view-local-screenshot" @click="showRunEvidence('screenshot')"><Image :size="15" />查看本机截图</button>
+          </div>
+          <p data-testid="screenshot-availability">{{ screenshotAvailabilityMessage }}</p>
+        </section>
         <section v-if="isPreflight" class="preflight-card" data-testid="preflight-result">
           <div :class="['preflight-icon', { ready: preflightResult?.canStart }]"><Check v-if="preflightResult?.canStart" :size="24" /><CircleAlert v-else :size="24" /></div>
           <span class="eyebrow">只读浏览器预检</span>
@@ -132,16 +142,16 @@
           <div v-if="!isBrowserPreview" class="result-proof-grid">
             <div><span>适配器版本</span><strong>v{{ adapterVersion }}</strong></div>
             <div><span>结果核验</span><strong>PASS</strong></div>
-            <div><span>证据截图</span><strong>{{ evidenceSummary.screenshot ? '已生成' : '本地记录' }}</strong></div>
+            <div><span>证据截图</span><strong>{{ evidenceSummary.screenshot ? '已记录（本机）' : '未提供截图' }}</strong></div>
           </div>
           <section v-if="freightQuote?.selected" class="freight-result">
             <header><div><span>推荐物流方案</span><strong>{{ freightQuote.selected.carrierName }}</strong></div><b>¥{{ freightQuote.selected.totalCny?.toFixed(2) }}<small> / ${{ freightQuote.selected.totalUsd?.toFixed(2) }}</small></b></header>
             <div class="freight-breakdown"><span>计费重 <b>{{ freightQuote.selected.billableWeightKg?.toFixed(2) }}kg</b></span><span>基础运费 <b>¥{{ freightQuote.selected.baseFreightCny?.toFixed(2) }}</b></span><span>固定费 <b>¥{{ freightQuote.selected.fixedFeeCny?.toFixed(2) }}</b></span><span>附加费 <b>¥{{ freightQuote.selected.surchargeCny?.toFixed(2) }}</b></span></div>
             <small>费率包 {{ freightQuote.ratePackVersion }} · 汇率 {{ freightQuote.exchangeRateCnyPerUsd }} · 已比较 {{ freightQuote.candidates.length }} 个渠道</small>
           </section>
-          <details v-if="!isBrowserPreview" class="execution-evidence"><summary>查看执行证据</summary><p>页面指纹：{{ evidenceSummary.fingerprint || '本地沙盒' }} · 签名：{{ evidenceSummary.signatureVerified ? '已验证' : (isDemo ? '内置演示适配器' : '等待验证记录') }}</p></details>
+          <details v-if="!isBrowserPreview" class="execution-evidence"><summary>查看执行证据说明</summary><p>页面指纹：{{ evidenceSummary.fingerprint || '未提供' }} · 签名：{{ evidenceSummary.signatureVerified ? '已验证' : (isDemo ? '内置演示适配器' : '等待验证记录') }}</p><p v-if="evidenceSummary.screenshot">{{ canViewScreenshot ? '截图保存在本机，可通过上方入口查看本次运行已登记的证据。' : screenshotAvailabilityMessage }} 页面指纹不是截图，也不代表业务结果已核对。</p></details>
           <button class="primary-action" type="button" @click="closeWorkspace">返回工具箱</button>
-          <button class="secondary-action" type="button" @click="restartRun">{{ isBrowserPreview ? '重新预览' : isDemo ? '重新交互演示' : '使用新授权重新执行' }}</button>
+          <button class="secondary-action" type="button" :disabled="restarting || endingRun" @click="restartRun">{{ isBrowserPreview ? '重新预览' : isDemo ? '重新交互演示' : '作为新任务再次执行' }}</button>
         </div>
 
         <div v-else-if="runStatus === 'failed'" class="result-card failed">
@@ -149,41 +159,74 @@
           <h2>{{ failureTitle }}</h2>
           <p>{{ failureDescription }}</p>
           <div class="problem-code">问题编号：{{ problemCode }}</div>
-          <button class="primary-action" type="button" @click="restartRun">
-            {{ isDemo ? '重新加载演示' : '重新获取授权并执行' }}
+          <p v-if="needsPlatformReview" class="recovery-guidance" data-testid="platform-review-guidance">请先到平台页面或平台业务记录核对本次操作是否生效。结果不明时不要重复执行；重新发起是新任务，不是断点续跑。</p>
+          <button v-if="isDemo" class="primary-action" type="button" :disabled="restarting || endingRun" @click="restartRun">
+            重新加载演示
           </button>
+          <button v-else class="primary-action" type="button" @click="showProblemDetails">查看问题详情</button>
           <button class="secondary-action" type="button" @click="closeWorkspace">返回工具箱</button>
-          <details class="technical-details">
+          <details ref="problemDetails" class="technical-details">
             <summary>查看问题详情</summary>
             <p>{{ technicalError }}</p>
+            <p v-if="needsPlatformReview">客户端停止不等于平台操作未生效。请提供问题编号与核对情况，不要发送平台密码、Cookie 或完整客户资料。</p>
             <button type="button" @click="openSupport">携带问题信息联系客服</button>
           </details>
+          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun" @click="restartRun">作为新任务再次执行</button>
         </div>
 
         <div v-else class="result-card cancelled">
           <div class="result-icon"><Square :size="23" /></div>
           <h2>{{ isDemo ? '已退出演示' : '自动处理已停止' }}</h2>
-          <p>{{ isBrowserPreview ? '流程预览已经停止，不影响外部数据。' : isDemo ? '本地交互沙盒已经停止，不影响外部数据。' : '本次浏览器操作已安全停止。' }}</p>
-          <button class="primary-action" type="button" @click="restartRun">{{ isDemo ? '重新演示' : '重新执行' }}</button>
+          <p>{{ isBrowserPreview ? '流程预览已经停止，不影响外部数据。' : isDemo ? '本地交互沙盒已经停止，不影响外部数据。' : '客户端已停止本次处理，但已提交的平台操作不会自动撤回，当前结果仍需核对。' }}</p>
+          <p v-if="needsPlatformReview" class="recovery-guidance" data-testid="platform-review-guidance">请先到平台页面或平台业务记录核对结果，无法确认时联系支持；再次执行会发起新任务，不是恢复上次任务。</p>
+          <button v-if="isDemo" class="primary-action" type="button" :disabled="restarting || endingRun" @click="restartRun">重新演示</button>
+          <button v-else class="primary-action" type="button" @click="showProblemDetails">查看问题详情</button>
           <button class="secondary-action" type="button" @click="closeWorkspace">返回工具箱</button>
+          <details v-if="needsPlatformReview" ref="problemDetails" class="technical-details">
+            <summary>查看问题详情</summary>
+            <p>问题编号：{{ problemCode }}。客户端停止只表示本次处理结束，不能据此判断已提交的业务操作是否生效。</p>
+            <button type="button" @click="openSupport">携带问题信息联系客服</button>
+          </details>
+          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun" @click="restartRun">作为新任务再次执行</button>
         </div>
       </aside>
     </div>
+    <RunEvidenceDrawer
+      v-model="evidenceOpen"
+      :view="evidenceView"
+      :diagnostic-rows="diagnosticRows"
+      :local-diagnostic-rows="localDiagnosticRows"
+      :diagnostic-state="diagnosticState"
+      :diagnostic-message="diagnosticMessage"
+      :screenshot-state="screenshotState"
+      :screenshot-message="screenshotMessage"
+      :screenshot-data-url="screenshotDataUrl"
+      :can-read-diagnostic="canReadDiagnostic"
+      :can-view-screenshot="canViewScreenshot"
+      :needs-platform-review="needsPlatformReview"
+      @select="showRunEvidence"
+      @reload="readRunEvidence"
+      @image-error="screenshotImageFailed"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { ArrowLeft, Check, CircleAlert, LoaderCircle, LockKeyhole, RotateCcw, Square, Zap } from '@lucide/vue'
+import { ArrowLeft, Check, CircleAlert, Image, LoaderCircle, LockKeyhole, RotateCcw, Square, Zap } from '@lucide/vue'
 import { useSingleAutomationRun } from '@/features/automation/useSingleAutomationRun'
 import DemoCasePreview from '@/components/DemoCasePreview.vue'
+import RunEvidenceDrawer from '@/features/automation/RunEvidenceDrawer.vue'
 
 const {
   browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
-  platformName, platformShortName, isActiveRun, isTerminal, interactionLocked, displayUrl,
+  platformName, platformShortName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,
   preflightResult, preflightMessage,
   freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing, retryRecordSync,
+  evidenceOpen, evidenceView, diagnosticRows, localDiagnosticRows, diagnosticState, diagnosticMessage,
+  screenshotState, screenshotDataUrl, screenshotMessage, canReadDiagnostic, canViewScreenshot, screenshotAvailabilityMessage,
+  showRunEvidence, readRunEvidence, screenshotImageFailed,
   currentStageIndex, runningMessage, customerStatusText, problemCode, runStatus, userAction,
-  failureTitle, failureDescription, technicalError,
+  failureTitle, failureDescription, technicalError, problemDetails, showProblemDetails,
   stageState, completeUserAction, stopRun, closeWorkspace, restartRun, startReadyScript, openSupport, registerWorkspaceBrowser,
 } = useSingleAutomationRun()
 </script>
@@ -312,7 +355,12 @@ const {
 .mock-table { margin-top: 18px; padding: 14px 18px; border: 1px solid var(--color-border); border-radius: 9px; background: white; }
 .mock-table span { display: block; height: 9px; margin: 13px 0; border-radius: 5px; background: #e2e8f0; }
 
-.progress-panel { display: flex; flex-direction: column; padding: 18px; animation: workspacePanelIn 420ms var(--ease-emphasized) 130ms both; }
+.progress-panel { display: flex; flex-direction: column; padding: 18px; overflow-y: auto; overscroll-behavior: contain; animation: workspacePanelIn 420ms var(--ease-emphasized) 130ms both; }
+.progress-panel>.demo-disclosure,.progress-panel>.result-card,.progress-panel>.preflight-card { flex-shrink: 0; }
+.run-inspection { flex-shrink: 0; margin: 0 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--color-border); }
+.run-inspection>div { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 7px; }
+.inspection-button { min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: 9px; color: var(--color-primary); background: var(--color-surface); font: 700 var(--type-meta)/1.5 var(--font-family); cursor: pointer; }
+.run-inspection p { margin: 9px 0 0; color: var(--color-text-tertiary); font-size: var(--type-micro); line-height: 1.6; overflow-wrap: anywhere; }
 .demo-disclosure { margin: 0 0 12px; padding: 8px 10px; border: 1px solid rgba(45,95,202,.16); border-radius: 9px; color: var(--color-primary); background: var(--color-primary-soft); font-size: var(--type-meta); line-height: 1.45; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
 .panel-heading span { font-size: 17px; font-weight: 800; }
@@ -360,6 +408,7 @@ const {
 .result-proof-grid{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:0 0 14px}.result-proof-grid>div{display:grid;gap:3px;padding:9px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface-soft);text-align:left}.result-proof-grid span{color:var(--color-text-tertiary);font-size:var(--type-micro)}.result-proof-grid strong{color:var(--color-text);font-size:var(--type-meta)}
 .freight-result{width:100%;display:grid;gap:10px;margin:0 0 14px;padding:13px;border-radius:11px;color:var(--color-execution-text);background:linear-gradient(145deg,var(--color-ink),var(--color-ink-soft));text-align:left}.freight-result header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}.freight-result header>div{display:grid;gap:3px}.freight-result header span,.freight-result>small{color:rgba(255,255,255,.58);font-size:var(--type-micro)}.freight-result header strong{font-size:var(--type-control)}.freight-result header>b{color:#d8c39d;font-size:19px}.freight-result header small{font-size:var(--type-meta)}.freight-breakdown{display:grid;grid-template-columns:repeat(2,1fr);gap:5px}.freight-breakdown span{display:flex;justify-content:space-between;padding:6px 7px;border:1px solid rgba(255,255,255,.08);border-radius:7px;color:rgba(255,255,255,.6);font-size:var(--type-micro)}.freight-breakdown b{color:#fff}.execution-evidence{width:100%;margin:0 0 14px;padding:9px 10px;border:1px solid var(--color-border);border-radius:9px;text-align:left}.execution-evidence summary{cursor:pointer;color:var(--color-text-secondary);font-size:var(--type-meta);font-weight:700}.execution-evidence p{margin:8px 0 0;font:var(--type-micro)/1.55 var(--font-mono);word-break:break-all}
 .problem-code { margin: -5px 0 18px; padding: 9px; border-radius: 7px; color: var(--color-text-secondary); background: var(--color-surface-soft); font-size:var(--type-meta); }
+.result-card .recovery-guidance { padding: 11px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-soft); text-align: left; font-size: var(--type-meta); }
 .primary-action, .secondary-action { width: 100%; min-height: 40px; border-radius: 8px; font-size:var(--type-control); font-weight: 800; cursor: pointer; }
 .primary-action { border: 0; color: white; background: var(--color-primary); }
 .secondary-action { margin-top: 9px; border: 1px solid var(--color-border); color: var(--color-text); background: white; }

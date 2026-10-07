@@ -123,6 +123,18 @@ describe('AdminSidebar', () => {
       expect(labels).not.toContain('后台账号管理')
       expect(labels).not.toContain('代理与交付')
       expect(labels).toContain('客服规则管理')
+      expect(wrapper.findAll('.menu-group-title').map(group => group.text())).toEqual(['客户交付', '客户支持'])
+    })
+
+    it('按交付支持结算配置分组且不重复任何入口', async () => {
+      const wrapper = mount(AdminSidebar, { global: { plugins: [createPinia(), mockRouter] } })
+      await flushPromises()
+
+      expect(wrapper.findAll('.menu-group-title').map(group => group.text())).toEqual(['客户交付', '客户支持', '经营结算', '平台配置'])
+      const paths = wrapper.findAll('a.menu-nav-item').map(link => link.attributes('href'))
+      expect(new Set(paths).size).toBe(paths.length)
+      expect(wrapper.find('[aria-labelledby="admin-nav-delivery"]').text()).toContain('代理与交付')
+      expect(wrapper.find('[aria-labelledby="admin-nav-finance"]').text()).toContain('公账支出')
     })
 
     it('代理账号不渲染内部后台菜单', async () => {

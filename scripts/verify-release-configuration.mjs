@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { execFileSync } from 'node:child_process'
 
 const root = process.cwd()
 const read = filename => fs.readFileSync(path.join(root, filename), 'utf8')
@@ -278,5 +279,13 @@ rejectText('ops/deploy/restore-backup.sh', [
   'subprocess.run(command, stdin=source',
 ])
 rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python'])
+
+// The existing frontend/production release gate runs these real filesystem
+// regressions as well as static invariants, including migrated compatibility
+// roots and directory/symbolic-link escapes. No deployment script is executed.
+execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
+  cwd: root,
+  stdio: 'inherit',
+})
 
 process.stdout.write('release_configuration=verified\n')

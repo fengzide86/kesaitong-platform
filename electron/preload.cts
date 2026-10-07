@@ -39,6 +39,11 @@ import type { FreightQuoteResult } from '../src/shared/freight/types.js'
 import type { ParsedFreightWorkbook } from '../src/shared/freight/workbook-parser.js'
 import type { RunnerEvent } from '../src/shared/ipc/automation-contract.js'
 import type { UpdateDeferPhase, UpdateSnapshot } from '../src/shared/ipc/update-contract.js'
+import {
+  localArtifactReadResultSchema,
+  type LocalArtifactReadRequest,
+  type LocalArtifactReadResult,
+} from '../src/shared/ipc/artifact-contract.js'
 
 type Unsubscribe = () => void
 type UnknownCallback = (data: unknown) => void
@@ -88,6 +93,13 @@ const deviceId = readRuntimeArgument('toolbox-device-id')
 const deviceName = decodeURIComponent(readRuntimeArgument('toolbox-device-name'))
 const automationEnabled = readRuntimeArgument('toolbox-automation-enabled') === 'true'
 
+// Expired/cleared authentication must also revoke this window's local evidence.
+if (automationEnabled) {
+  window.addEventListener('toolbox:auth-cleared', () => {
+    void invokeDesktop('artifacts:clear').catch(() => undefined)
+  })
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   runtime: { controlApiBase, deviceId, deviceName },
   updates: {
@@ -107,7 +119,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadUserCode: (): Promise<string | null> => invokeDesktop('credential-load-user-code'),
     clearUserCode: (): Promise<boolean> => invokeDesktop('credential-clear-user-code'),
   },
-  ...(automationEnabled ? { automation: {
+  ...(automationEnabled ? { artifacts: {
+    read: async (request: LocalArtifactReadRequest): Promise<LocalArtifactReadResult> =>
+      localArtifactReadResultSchema.parse(await invokeDesktop('artifacts:read', request)),
+    clear: (): Promise<void> => invokeDesktop('artifacts:clear'),
+  }, automation: {
     start: (tool: AutomationTool): Promise<AutomationStartResult> => invokeDesktop('automation:start', tool),
     preflight: (tool: AutomationTool): Promise<AutomationPreflightResult> => invokeDesktop('automation:preflight', tool),
     pause: (): Promise<AutomationStatusResult> => invokeDesktop('automation:pause'),

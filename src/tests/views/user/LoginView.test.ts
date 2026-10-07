@@ -62,12 +62,16 @@ describe('LoginView', () => {
       expect(mark.attributes('aria-hidden')).toBe('true')
     })
 
-    it('展示真实产品边界，不使用未经验证的提效指标', () => {
+    it('展示八类任务入口和当前开放边界，不将入口数量宣传为已验收工具或并发能力', () => {
       const wrapper = mountWithPinia(LoginView)
       const units = wrapper.findAll('.stat-unit').map(item => item.text())
-      expect(units).toEqual(['端', '端', '项'])
-      expect(wrapper.text()).toContain('非真实账号并发')
+      const values = wrapper.findAll('.stat-number').map(item => item.text())
+      expect(units).toEqual(['端', '端', '类'])
+      expect(values).toEqual(['C', 'B', '8'])
+      expect(wrapper.text()).toContain('任务入口 · 以当前开放状态为准')
+      expect(wrapper.text()).not.toMatch(/批量演示上限|非真实账号并发|8.*已验收工具/)
       expect(wrapper.text()).not.toContain('秒级响应')
+      wrapper.unmount()
     })
 
     it('功能标签只展示当前产品能力，不宣传未落地的自动化脚本', () => {
@@ -251,6 +255,18 @@ describe('LoginView', () => {
   })
 
   describe('帮助弹窗测试', () => {
+    it('按当前工具开放状态解释真实工具与演示，不把所有授权说成仅能体验演示', async () => {
+      const wrapper = mountWithPinia(LoginView)
+      await wrapper.findAll('.footer-link')[0].trigger('click')
+      const helpText = wrapper.get('.help-steps').text()
+      expect(helpText).toContain('当前套餐包含的工具和工作台')
+      expect(helpText).toContain('当前开放状态')
+      expect(helpText).toContain('真实工具只操作比赛模拟平台')
+      expect(helpText).toContain('演示工具使用本地沙盒')
+      expect(helpText).not.toContain('当前套餐包含的演示工具')
+      wrapper.unmount()
+    })
+
     it('设备绑定说明兼容浏览器使用，不声称只能绑定 Windows', async () => {
       const wrapper = mountWithPinia(LoginView)
       await wrapper.findAll('.footer-link')[0].trigger('click')
@@ -329,6 +345,40 @@ describe('LoginView', () => {
   })
 
   describe('无障碍测试', () => {
+    it('空闲登录按钮只向辅助技术展示验证并登录', () => {
+      const wrapper = mountWithPinia(LoginView)
+      expect(wrapper.get('.btn-content').attributes('aria-hidden')).toBe('false')
+      expect(wrapper.get('.btn-content').text()).toBe('验证并登录')
+      expect(wrapper.get('.btn-loading').attributes('aria-hidden')).toBe('true')
+      wrapper.unmount()
+    })
+
+    it('验证中的登录按钮只向辅助技术展示加载文案', async () => {
+      mockVerifyAuthCode.mockReturnValue(new Promise(() => {}))
+      const wrapper = mountWithPinia(LoginView)
+      await wrapper.get('#authCode').setValue('TEST-CODE-1234')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      expect(wrapper.get('.btn-content').attributes('aria-hidden')).toBe('true')
+      expect(wrapper.get('.btn-loading').attributes('aria-hidden')).toBe('false')
+      expect(wrapper.get('.btn-loading').text()).toBe('验证中...')
+      wrapper.unmount()
+    })
+
+    it('验证通过后的登录按钮不向辅助技术保留加载文案', async () => {
+      mockVerifyAuthCode.mockResolvedValue({ success: true, data: { token: 'test' } })
+      const wrapper = mountWithPinia(LoginView)
+      await wrapper.get('#authCode').setValue('TEST-CODE-1234')
+      await wrapper.get('form').trigger('submit')
+      await flushPromises()
+
+      expect(wrapper.get('.btn-content').attributes('aria-hidden')).toBe('false')
+      expect(wrapper.get('.btn-content').text()).toBe('验证通过，正在进入')
+      expect(wrapper.get('.btn-loading').attributes('aria-hidden')).toBe('true')
+      wrapper.unmount()
+    })
+
     it('授权码输入框应该有关联的 label', () => {
       const wrapper = mountWithPinia(LoginView)
       const label = wrapper.find('label[for="authCode"]')

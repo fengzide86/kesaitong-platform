@@ -3,13 +3,15 @@
     <PageHeader
       eyebrow="BATCH AUTOMATION"
       title="批量自动化工作台"
-      description="选择工具并导入本地 Excel；演示工具模拟批量流程，已发布工具由桌面端执行。"
+      description="按业务任务找到已开放工具，导入自己的 Excel 并检查字段；真实批量执行由桌面端提供。"
     >
       <template #actions>
-        <div class="privacy-mark"><ShieldCheck :size="16" />Excel 原文和登录凭据仅留在本机</div>
+        <button class="help-entry" type="button" @click="helpOpen = true">使用帮助</button>
       </template>
     </PageHeader>
     <AsyncStateNotice v-if="store.bootstrapStale" state="stale" :message="store.error || ''" @retry="refreshTools" />
+    <p v-if="store.bootstrapRefreshing && !store.isActive" class="preparation-notice" role="status">正在更新工具目录，暂不能导入或开始新的批次；当前执行不受影响。</p>
+    <p v-if="store.preparationNotice && !store.isActive" class="preparation-notice" role="status">{{ store.preparationNotice }}</p>
     <AsyncStateNotice
       v-if="!store.isActive && (store.recoveryPending || store.recoveryStorageUnavailable)"
       state="stale"
@@ -18,11 +20,12 @@
       @retry="store.retryRecovery()"
     />
     <template v-if="!store.isActive && store.snapshot.status !== 'completed'">
+      <p class="workspace-privacy"><ShieldCheck :size="16" /><span>Excel 原文和登录凭据仅留在本机</span></p>
       <section v-if="!store.bootstrap" class="workspace-loading-state">
         <template v-if="store.error">
           <span><CircleAlert :size="24" /></span>
-          <strong>批量演示工作台暂时无法载入</strong>
-          <small>连接恢复后可以直接重试，不会影响已经完成的本地预览。</small>
+          <strong>批量工作台暂时无法载入</strong>
+          <small>可重试加载目录或打开使用帮助，不会重新执行已有批次。</small>
           <button type="button" @click="refreshTools"><RefreshCw :size="16" />重新载入</button>
         </template>
         <template v-else>
@@ -31,48 +34,54 @@
         </template>
       </section>
 
-      <section v-else-if="!store.tools.length" class="workspace-ready-empty">
+      <section v-else-if="!customerTools.length" class="workspace-ready-empty">
         <div class="ready-brand"><span>BUSINESS WORKSPACE</span><strong>专业工作台</strong></div>
         <div class="ready-symbol"><Boxes :size="30" /></div>
         <h1>当前还没有开放的批量工具</h1>
-        <p>前端、授权和演示框架已经准备好。业务工具会按内部验证范围逐个加入。</p>
-        <div class="ready-flow" aria-label="批量演示方式">
+        <p>当前目录没有向你开放真实批量工具。内部测试工具不会替代真实功能；你可以先准备业务资料、检查授权或联系支持。</p>
+        <div class="ready-flow" aria-label="批量执行准备">
           <article><FileSpreadsheet :size="19" /><div><strong>本地导入</strong><span>客户表格只在本机解析</span></div></article>
           <i></i>
-          <article><Layers3 :size="19" /><div><strong>并发演示</strong><span>各账号独立推进模拟步骤</span></div></article>
+          <article><Layers3 :size="19" /><div><strong>检查准备项</strong><span>按实际任务准备对象和字段</span></div></article>
           <i></i>
-          <article><CircleAlert :size="19" /><div><strong>案例提示</strong><span>只展示演示中的注意事项</span></div></article>
+          <article><CircleAlert :size="19" /><div><strong>核对后执行</strong><span>工具开放后再导入和确认</span></div></article>
         </div>
         <div class="ready-actions">
-          <button type="button" :disabled="store.loading" @click="refreshTools">
+          <button type="button" :disabled="store.loading || store.bootstrapRefreshing" @click="refreshTools">
             <LoaderCircle v-if="store.loading" :size="16" class="spin" />
             <RefreshCw v-else :size="16" />
             刷新可用工具
           </button>
           <router-link to="/business/license">查看授权信息</router-link>
         </div>
-        <small class="ready-note"><ShieldCheck :size="14" />没有真实脚本支持的功能不会出现在这里</small>
+        <small class="ready-note"><ShieldCheck :size="14" />工具未开放时不会自动启动任何平台任务</small>
+        <div class="task-preparation"><article v-for="task in PRODUCT_TASKS" :key="task.id"><strong>{{ task.title }}</strong><p>{{ task.preparation }}</p></article></div>
       </section>
 
       <section v-else class="batch-setup">
         <div class="setup-stage-rail" aria-label="批量执行流程">
-          <div v-for="(stage, index) in ['选择工具','导入数据','检查映射',setupIsDemo ? '并发演示' : '队列执行']" :key="stage" :class="{ active: setupStageIndex === index, done: setupStageIndex > index }"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ stage }}</strong></div>
+          <div v-for="(stage, index) in ['选择工具','导入数据','检查映射','队列执行']" :key="stage" :class="{ active: setupStageIndex === index, done: setupStageIndex > index }"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ stage }}</strong></div>
         </div>
 
         <div class="setup-section">
           <div class="section-number">01</div>
-          <div class="section-copy"><strong>选择批量工具</strong><span>真实执行与交互演示由工具发布状态决定</span></div>
+          <div class="section-copy"><strong>选择批量工具</strong><span>按任务查找，查看开放状态与执行条件</span></div>
+          <div class="catalog-filters">
+            <label>搜索工具<input v-model="search" type="search" placeholder="搜索任务、工具名称或说明" /></label>
+            <label>业务任务<select v-model="taskFilter"><option value="">全部八项任务</option><option v-for="task in PRODUCT_TASKS" :key="task.id" :value="task.id">{{ task.title }}</option></select></label>
+            <label>开放状态<select v-model="stateFilter"><option value="">全部状态</option><option value="execute">可执行 / 受控试用</option><option value="inspect">只读检查</option><option value="unavailable">准备中 / 暂不可用</option></select></label>
+          </div>
           <div class="business-tools">
-            <button v-for="tool in store.tools" :key="tool.id" :class="{ selected: store.selectedTool?.id === tool.id }" @click="store.chooseTool(tool)">
+            <button v-for="tool in filteredTools" :key="tool.id" :class="{ selected: selectedTool?.id === tool.id }" :disabled="!canPrepare(tool)" @click="selectTool(tool)">
               <span class="tool-icon"><Boxes :size="19" /></span>
-              <span><strong>{{ tool.name }}</strong><small>{{ tool.availability === 'demo_only' ? '批量流程演示' : !runtime.batchLive ? '桌面端比赛模拟平台执行' : '比赛模拟平台执行' }} · {{ tool.business_description || tool.description }}</small></span>
-              <Check v-if="store.selectedTool?.id === tool.id" :size="17" />
+              <span><strong>{{ tool.name }} · {{ getToolPresentation(tool).label }}</strong><small>{{ getToolPresentation(tool).description }}</small><small>{{ canPrepare(tool) ? String(tool.business_description || tool.description || '按工具支持范围检查并执行') : '当前不支持批量启动，可打开使用帮助了解准备条件。' }}</small></span>
+              <Check v-if="selectedTool?.id === tool.id" :size="17" />
             </button>
-            <div v-if="!store.tools.length" class="no-tools">当前授权暂无已开放的批量工具，请联系管理员配置。</div>
+            <div v-if="!filteredTools.length" class="no-tools">没有符合筛选条件的工具。请调整搜索或打开使用帮助。</div>
           </div>
         </div>
 
-        <div class="setup-section" :class="{ disabled: !store.selectedTool }">
+        <div class="setup-section" :class="{ disabled: !selectedTool }">
           <div class="section-number">02</div>
           <div class="section-copy"><strong>导入本地 Excel</strong><span>只在本机解析；原始单元格、账号和 Cookie 均不会上传</span></div>
           <div v-if="webLiveSelected" class="desktop-required-callout">
@@ -82,19 +91,15 @@
           </div>
           <div v-else class="import-zone">
             <div class="import-actions">
-              <button class="import-choice featured" :disabled="!store.selectedTool || store.loading" @click="loadSample">
-                <Sparkles :size="18" /><span><strong>一键载入演示数据</strong><small>自动匹配当前工具的 8 条样例</small></span>
-              </button>
-              <button data-testid="business-file-upload" class="import-choice" :disabled="!store.selectedTool || store.loading" @click="chooseFile">
+              <button data-testid="business-file-upload" class="import-choice" :disabled="!selectedTool || store.loading || store.bootstrapRefreshing" @click="chooseFile">
                 <Upload :size="18" /><span><strong>选择自己的 Excel</strong><small>.xlsx / .csv，最多 {{ store.entitlements.max_batch_rows || 50 }} 行</small></span>
               </button>
-              <button class="import-choice compact" :disabled="store.loading" @click="downloadSample">
-                <Download :size="18" /><span><strong>下载测试模板</strong><small>保存到电脑后可直接修改</small></span>
-              </button>
+              <button class="import-choice compact" type="button" @click="helpOpen = true"><CircleAlert :size="18" /><span><strong>查看导入准备与帮助</strong><small>使用真实业务资料，不载入虚构账号</small></span></button>
             </div>
+            <div v-if="selectedTool" class="input-preparation"><strong>导入前请准备</strong><p>{{ selectedTasks.map(task => task.preparation).join(' ') || '准备当前工具所需的账号和业务对象，仅在本机填写。' }}</p><ul v-if="inputFields.length"><li v-for="field in inputFields" :key="field.key">{{ field.label }}：{{ field.required ? '必填，使用本机真实资料' : '按实际情况填写' }}</li></ul><p v-else>字段格式以工具要求为准；导入后仍须检查映射和问题行，不会生成演示数据。</p></div>
             <div v-if="store.importPreview" class="selected-import"><FileSpreadsheet :size="16" /><span><strong>{{ store.importPreview.fileName }}</strong><small>{{ store.importPreview.worksheetName ? `已匹配工作表：${store.importPreview.worksheetName}` : '字段匹配完成' }}<template v-if="store.importPreview.templateVersion"> · 模板 {{ store.importPreview.templateVersion }}</template></small></span></div>
             <div v-if="store.importPreview" class="import-result">
-              <span class="valid"><CheckCircle2 :size="15" />{{ store.importPreview.validCount }} 个演示项</span>
+              <span class="valid"><CheckCircle2 :size="15" />{{ store.importPreview.validCount }} 行通过字段检查</span>
               <span v-if="store.importPreview.errorCount" class="invalid"><CircleAlert :size="15" />{{ store.importPreview.errorCount }} 行需要修正</span>
             </div>
             <div v-if="store.importPreview?.rows?.length" class="preview-list">
@@ -106,61 +111,93 @@
             <div v-if="store.importPreview?.errors?.length" class="error-list">
               <div v-for="problem in store.importPreview.errors.slice(0, 4)" :key="problem.rowNumber">第 {{ problem.rowNumber }} 行：{{ problem.message }}</div>
               <button type="button" @click="exportErrors">导出问题清单</button>
+              <button type="button" @click="helpOpen = true">导入问题求助</button>
             </div>
           </div>
         </div>
 
         <footer v-if="webLiveSelected" class="setup-footer desktop-footer">
-          <div><strong>桌面端专属能力</strong><span>演示模式可直接在网页运行；真实批量自动化继续由本机 Runner 执行。</span></div>
+          <div><strong>桌面端专属能力</strong><span>网页版可查看目录与记录；不会启动平台浏览器或执行任务。</span></div>
           <button type="button" @click="downloadDesktop"><Download :size="16" />下载 KST 桌面端</button>
         </footer>
         <footer v-else class="setup-footer">
-          <div><strong>{{ setupIsDemo ? '流程演示' : '真实执行' }}</strong><span>{{ setupIsDemo ? '账号在本地模拟流程中并发推进，不操作外部平台。' : '系统按受控队列操作比赛模拟平台，只有结果核验通过才会记为成功。' }}</span></div>
-          <button :disabled="!store.importPreview?.validCount || store.loading" @click="beginBatch">
-            <LoaderCircle v-if="store.loading" :size="16" class="spin" /><Play v-else :size="16" />{{ setupIsDemo ? '开始批量演示' : '开始批量执行' }}
+          <div><strong>真实执行</strong><span>系统按受控队列操作工具支持的平台；导入通过不代表任务成功，异常结果需先核对。</span></div>
+          <button :disabled="!selectedTool || !store.importPreview?.validCount || store.loading || store.bootstrapRefreshing" @click="beginBatch">
+            <LoaderCircle v-if="store.loading" :size="16" class="spin" /><Play v-else :size="16" />开始批量执行
           </button>
         </footer>
       </section>
     </template>
 
     <BusinessBatchRunConsole v-else @exit="endBatch" @new="newBatch" />
+    <p v-if="importError" class="import-failure" role="alert">{{ importError }} <button type="button" @click="helpOpen = true">导入问题求助</button></p>
+    <BusinessHelpDrawer v-model="helpOpen" :entry-point="importError ? '导入问题' : '批量工作台'" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { Boxes, Check, CheckCircle2, CircleAlert, Download, FileSpreadsheet, Layers3, LoaderCircle, Play, RefreshCw, ShieldCheck, Sparkles, Upload } from '@lucide/vue'
+import { Boxes, Check, CheckCircle2, CircleAlert, Download, FileSpreadsheet, Layers3, LoaderCircle, Play, RefreshCw, ShieldCheck, Upload } from '@lucide/vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { showToast } from '@/utils'
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import BusinessBatchRunConsole from '@/features/business/BusinessBatchRunConsole.vue'
+import BusinessHelpDrawer from '@/features/business/BusinessHelpDrawer.vue'
+import type { BusinessTool } from '@/features/business/model'
+import { PRODUCT_TASKS, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable } from '@/features/tools/presentation'
+import { licensePlanCode, readStoredLicense } from '@/features/user/model'
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import { downloadDesktopInstaller } from '@/runtime/desktop-download'
 
 const store = useBusinessWorkspaceStore()
 const router = useRouter()
 const runtime = getRuntimeCapabilities()
+const helpOpen = ref(false)
+const importError = ref('')
+const search = ref('')
+const taskFilter = ref('')
+const stateFilter = ref('')
+const profileVersion = ref(0)
+function refreshPreparation(): void { profileVersion.value += 1; store.reconcileToolSelection() }
+const customerTools = computed(() => store.tools.filter(isCustomerTool))
+const filteredTools = computed(() => customerTools.value.filter(tool => {
+  const taskIds = getToolTaskIds(tool)
+  const text = [tool.name, tool.description, tool.business_description, ...PRODUCT_TASKS.filter(task => taskIds.includes(task.id)).map(task => task.title)].join(' ').toLowerCase()
+  return (!search.value.trim() || text.includes(search.value.trim().toLowerCase())) && (!taskFilter.value || taskIds.some(id => id === taskFilter.value)) && (!stateFilter.value || getToolPresentation(tool).action === stateFilter.value)
+}))
+const canPrepare = (tool: BusinessTool): boolean => {
+  void profileVersion.value
+  const license = readStoredLicense()
+  if (store.entitlements.batch_execution === false || store.entitlements.multi_account_workspace === false
+    || license.entitlements?.batch_execution === false || license.entitlements?.multi_account_workspace === false
+    || license.business_workspace_enabled === false || license.product_type === 'consumer') return false
+  return isToolCurrentlyUsable(tool, { planCode: licensePlanCode(license), platformScope: license.platform_scope, platformKey: tool.platform_key || tool.platformKey, runtimeAvailable: true, mode: 'batch' })
+}
+const selectedTool = computed(() => {
+  const latest = customerTools.value.find(tool => tool.id === store.selectedTool?.id)
+  return latest && canPrepare(latest) ? latest : null
+})
+const selectedTasks = computed(() => PRODUCT_TASKS.filter(task => selectedTool.value && getToolTaskIds(selectedTool.value).includes(task.id)))
+const inputFields = computed(() => (selectedTool.value?.batch_input_schema || []).map(field => ({ key: String(field.key || ''), label: String(field.label || field.key || '字段'), required: field.required !== false })))
+function selectTool(tool: BusinessTool): void { if (canPrepare(tool)) { importError.value = ''; store.chooseTool(tool) } }
 
 const errorMessage = (error: unknown, fallback: string): string => error instanceof Error && error.message ? error.message : fallback
-const setupIsDemo = computed(() => store.selectedTool?.availability !== 'live' && store.selectedTool?.availability !== 'live_beta')
-const webLiveSelected = computed(() => !setupIsDemo.value && !runtime.batchLive)
-const setupStageIndex = computed(() => store.isActive || store.snapshot.status === 'completed' ? 3 : store.importPreview ? 2 : store.selectedTool ? 1 : 0)
-async function chooseFile() { try { await store.selectImportFile() } catch (error) { showToast(errorMessage(error, '导入失败'), 'error') } }
-async function loadSample() { try { await store.loadSampleImport(); showToast('已载入当前工具的 8 条测试数据', 'success') } catch (error) { showToast(errorMessage(error, '样例载入失败'), 'error') } }
-async function downloadSample() { try { const result = await store.saveSampleTemplate(); if (result) showToast('测试模板已保存', 'success') } catch (error) { showToast(errorMessage(error, '模板保存失败'), 'error') } }
+const webLiveSelected = computed(() => Boolean(selectedTool.value) && !runtime.batchLive)
+const setupStageIndex = computed(() => store.isActive || store.snapshot.status === 'completed' ? 3 : store.importPreview && selectedTool.value ? 2 : selectedTool.value ? 1 : 0)
+async function chooseFile() { if (!selectedTool.value) return; importError.value = ''; try { await store.selectImportFile() } catch (error) { importError.value = errorMessage(error, '导入失败'); showToast(importError.value, 'error') } }
 async function refreshTools() {
   try {
     await store.refreshBootstrap()
-    showToast(store.tools.length ? '已发现可用工具' : '暂时没有新开放的批量工具', store.tools.length ? 'success' : 'info')
+    showToast(customerTools.value.length ? '工具目录已刷新，请查看各项开放状态' : '暂时没有新开放的批量工具', customerTools.value.length ? 'success' : 'info')
   } catch (error) {
     showToast(errorMessage(error, '刷新失败'), 'error')
   }
 }
 async function exportErrors() { try { const result = await store.exportImportErrors(); if (result) showToast('问题清单已导出', 'success') } catch (error) { showToast(errorMessage(error, '导出失败'), 'error') } }
-async function beginBatch() { try { await store.startBatch() } catch (error) { showToast(errorMessage(error, '无法开始批次'), 'error') } }
+async function beginBatch() { if (!selectedTool.value || !runtime.batchLive) return; try { await store.startBatch() } catch (error) { showToast(errorMessage(error, '无法开始批次'), 'error') } }
 async function downloadDesktop() { try { await downloadDesktopInstaller() } catch (error) { showToast(errorMessage(error, '桌面安装包暂时无法下载'), 'error') } }
 async function endBatch() {
   try {
@@ -177,7 +214,8 @@ async function endBatch() {
   }
 }
 async function newBatch() { try { await store.resetWorkspace() } catch (error) { showToast(errorMessage(error, '暂时不能新建批次'), 'error') } }
-onMounted(() => { void store.init().catch(() => undefined) })
+onMounted(() => { void store.init().catch(() => undefined); window.addEventListener('toolbox:user-updated', refreshPreparation) })
+onUnmounted(() => { window.removeEventListener('toolbox:user-updated', refreshPreparation) })
 onBeforeRouteLeave(async () => {
   if (!store.isActive) return true
   try {
@@ -193,6 +231,8 @@ onBeforeRouteLeave(async () => {
 </script>
 
 <style scoped>
+.preparation-notice{margin:0 0 12px;padding:12px 14px;border:1px solid var(--color-border);border-radius:10px;color:var(--color-text-secondary);background:var(--color-surface-soft);font-size:var(--type-meta);line-height:1.6}
+.help-entry{min-height:40px;padding:8px 14px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface);color:var(--color-primary);font:inherit;cursor:pointer}.catalog-filters{grid-column:2/-1;display:flex;gap:12px;flex-wrap:wrap;width:100%}.catalog-filters label{display:grid;gap:5px;flex:1;min-width:160px;color:var(--color-text-secondary);font-size:var(--type-meta)}.catalog-filters input,.catalog-filters select{min-height:38px;padding:7px 10px;border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);background:var(--color-surface);font:inherit}.task-preparation{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:24px;text-align:left;width:100%}.task-preparation article,.input-preparation{padding:13px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface-soft)}.task-preparation strong,.input-preparation strong{color:var(--color-text);font-size:var(--type-control)}.task-preparation p,.input-preparation p,.input-preparation li{margin:5px 0;color:var(--color-text-secondary);font-size:var(--type-meta);line-height:1.6}.input-preparation{margin-top:14px}.input-preparation ul{padding-left:20px;margin:8px 0}.import-failure{padding:13px;border:1px solid var(--color-border);border-radius:10px;color:var(--color-danger);overflow-wrap:anywhere}.import-failure button{margin-left:10px;padding:6px 10px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-primary);cursor:pointer}.business-tools button:disabled{cursor:not-allowed;opacity:.72}@media(max-width:720px){.catalog-filters{grid-column:1/-1}.task-preparation{grid-template-columns:1fr}}
 .desktop-required-callout{min-height:116px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:18px;border:1px solid rgba(45,95,202,.18);border-radius:14px;background:var(--color-primary-soft)}
 .desktop-required-callout>span{width:44px;height:44px;display:grid;place-items:center;border-radius:13px;color:var(--color-primary);background:var(--color-surface)}
 .desktop-required-callout>div{display:grid;gap:5px}.desktop-required-callout strong{color:var(--color-text);font-size:var(--type-control)}.desktop-required-callout small{max-width:520px;color:var(--color-text-secondary);font-size:var(--type-meta);line-height:1.55}.desktop-required-callout button{min-height:40px;padding:0 14px;border:0;border-radius:10px;color:#fff;background:var(--color-primary);font-size:var(--type-control);font-weight:700;cursor:pointer}.desktop-footer{background:linear-gradient(90deg,var(--color-surface-soft),var(--color-primary-soft))}
@@ -215,4 +255,16 @@ onBeforeRouteLeave(async () => {
 @media(max-width:899px){.import-actions{grid-template-columns:1fr}.import-choice{min-height:62px}}
 @media(max-width:760px){.setup-stage-rail{grid-template-columns:1fr 1fr;gap:8px;padding:12px 20px}.setup-stage-rail>div::after{display:none}}
 .batch-webview{visibility:hidden}.batch-webview.active{visibility:visible}
+.help-entry{flex-shrink:0;white-space:nowrap}
+.workspace-privacy{width:min(1060px,100%);display:flex;align-items:flex-start;gap:7px;margin:0 auto 12px;color:var(--color-success);font-size:var(--type-meta);line-height:1.5}
+.workspace-privacy>svg{flex-shrink:0;margin-top:2px}
+.setup-section{grid-template-columns:38px 190px minmax(0,1fr)}
+.catalog-filters{min-width:0}
+.catalog-filters label{flex:1 1 160px;min-width:0}
+.catalog-filters input,.catalog-filters select{width:100%;min-width:0;box-sizing:border-box}
+.business-tools{grid-column:2/-1;min-width:0}
+.business-tools button{min-width:0;grid-template-columns:auto minmax(0,1fr) auto}
+.business-tools button>span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+.import-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:899px){.setup-section{grid-template-columns:32px minmax(0,1fr)}.setup-section>.catalog-filters,.setup-section>.business-tools{grid-column:1/-1}.import-actions{grid-template-columns:1fr}}
 </style>

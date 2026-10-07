@@ -9,6 +9,14 @@ import {
 } from './desktop-contract.js'
 
 describe('desktop IPC contract', () => {
+  it('only accepts local evidence task IDs and kinds, never a renderer file path', () => {
+    expect(parseDesktopIpcArgs('artifacts:read', [{ runId: 'local_run_123_abcd', kind: 'screenshot' }]))
+      .toEqual([{ runId: 'local_run_123_abcd', kind: 'screenshot' }])
+    expect(parseDesktopIpcArgs('artifacts:clear', [])).toEqual([])
+    expect(() => parseDesktopIpcArgs('artifacts:read', [{ runId: 'run_1', kind: 'screenshot', path: 'C:\\private.png' }])).toThrow()
+    expect(() => parseDesktopIpcArgs('artifacts:read', [{ runId: '../run_1', kind: 'diagnostic' }])).toThrow()
+    expect(() => parseDesktopIpcArgs('artifacts:read', [{ runId: 'run_1', kind: 'file' }])).toThrow()
+  })
   it('accepts the existing credential, activity and external-link calls', () => {
     expect(parseDesktopIpcArgs('credential-save-user-code', [' KST-Y999 '])).toEqual(['KST-Y999'])
     expect(parseDesktopIpcArgs('credential-load-user-code', [])).toEqual([])

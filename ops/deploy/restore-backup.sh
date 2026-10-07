@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_ROOT="/opt/amazon-toolbox"
+canonical_deployment_root() {
+  local legacy="$1" current="$2" source="$1" resolved
+  # Resolve the compatibility link once, before deriving any guarded paths.
+  # An unexpected/dangling legacy link must fail, not fall back to another tree.
+  if [[ ! -e "${legacy}" && ! -L "${legacy}" ]]; then source="${current}"; fi
+  resolved="$(readlink -e -- "${source}")" || return 1
+  [[ "${resolved}" == "${legacy}" || "${resolved}" == "${current}" ]] || {
+    echo "Invalid deployment root: ${resolved}" >&2
+    return 1
+  }
+  test -d "${resolved}" || return 1
+  printf '%s\n' "${resolved}"
+}
+
+APP_ROOT="$(canonical_deployment_root /opt/amazon-toolbox /opt/kesaitong-platform)"
 BACKUP_ROOT="${APP_ROOT}/backups"
-BACKUP_DIR="$(readlink -f "${1:?backup directory is required}")"
+BACKUP_DIR="${1:?backup directory is required}"
 BACKEND_DIR="${APP_ROOT}/backend"
-DATA_ROOT="/var/lib/amazon-toolbox"
+DATA_ROOT="$(canonical_deployment_root /var/lib/amazon-toolbox /var/lib/kesaitong-platform)"
 ATTACHMENT_DIR="${DATA_ROOT}/expense-attachments"
 VENV_ROOT="${APP_ROOT}/venvs"
 CURRENT_VENV="${APP_ROOT}/current-venv"
@@ -40,7 +54,8 @@ require_commands() {
 }
 
 validate_venv_target() {
-  local target="$1"
+  local target
+  target="$(readlink -e -- "$1")" || return 1
   [[ "${target}" == "${VENV_ROOT}/"* || "${target}" == "${LEGACY_VENV}" ]] || {
     echo "Invalid backend venv target: ${target}" >&2
     return 1
@@ -48,8 +63,20 @@ validate_venv_target() {
   test -x "${target}/bin/python"
 }
 
+validate_backup_target() {
+  local target
+  target="$(readlink -e -- "$1")" || return 1
+  [[ "${target}" == "${BACKUP_ROOT}/"* ]] || {
+    echo "Backup must be inside ${BACKUP_ROOT}" >&2
+    return 1
+  }
+  test -d "${target}" || return 1
+  BACKUP_DIR="${target}"
+}
+
 atomic_switch_current_venv() {
-  local target="$1"
+  local target
+  target="$(readlink -e -- "$1")" || return 1
   validate_venv_target "${target}"
   [[ ! -e "${CURRENT_VENV}" || -L "${CURRENT_VENV}" ]] || {
     echo "${CURRENT_VENV} must be absent or a symbolic link" >&2
@@ -77,10 +104,7 @@ restore_failure() {
   exit "${exit_code}"
 }
 
-[[ "${BACKUP_DIR}" == "${BACKUP_ROOT}/"* ]] || {
-  echo "Backup must be inside ${BACKUP_ROOT}" >&2
-  exit 1
-}
+validate_backup_target "${BACKUP_DIR}"
 test -d "${BACKUP_DIR}/backend"
 test -f "${BACKUP_DIR}/package.json"
 test -f "${BACKUP_DIR}/database.sql.gz"
@@ -96,11 +120,15 @@ elif [[ -f "${BACKUP_DIR}/current-venv.target.missing" ]]; then
   RESTORE_VENV_DIR="${LEGACY_VENV}"
   VENV_POINTER_ACTION="remove"
 elif [[ -f "${BACKUP_DIR}/toolbox-backend.service" ]]; then
-  if grep -Fq 'ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python' \
+  if grep -Fxq 'ExecStart=/opt/amazon-toolbox/backend/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1' \
+    "${BACKUP_DIR}/toolbox-backend.service" \
+    || grep -Fxq 'ExecStart=/opt/kesaitong-platform/backend/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1' \
     "${BACKUP_DIR}/toolbox-backend.service"; then
     RESTORE_VENV_DIR="${LEGACY_VENV}"
     VENV_POINTER_ACTION="remove"
-  elif grep -Fq 'ExecStart=/opt/amazon-toolbox/current-venv/bin/python' \
+  elif grep -Fxq 'ExecStart=/opt/amazon-toolbox/current-venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1' \
+    "${BACKUP_DIR}/toolbox-backend.service" \
+    || grep -Fxq 'ExecStart=/opt/kesaitong-platform/current-venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1' \
     "${BACKUP_DIR}/toolbox-backend.service"; then
     echo "Backup is missing its current-venv target metadata" >&2
     exit 1

@@ -31,8 +31,17 @@ import { WorkspaceImportCoordinator } from '@/features/business/workspace-import
 import { createClientBatchId, errorMessage, statusText } from '@/features/business/workspace-helpers'
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import { readSourceRows, saveSourceRows } from '@/features/business/source-rows'
+import { licensePlanCode, readStoredLicense } from '@/features/user/model'
+import { isToolCurrentlyUsable } from '@/features/tools/presentation'
 
 const historySchema = z.array(serverBatchHistorySchema)
+const preparationFields = [
+  'id', 'capability_key', 'platform_key', 'platformKey', 'script_key', 'target_url', 'targetUrl',
+  'availability', 'script_status', 'release_status', 'status', 'supports_live_batch', 'available_plans',
+  'batch_input_schema', 'tool_version', 'runner_api_version', 'schema_version', 'template_version',
+  'requires_signature', 'tool_kind',
+] as const
+const preparationEntitlements = ['plan_code', 'batch_execution', 'multi_account_workspace', 'max_batch_rows', 'max_open_sessions'] as const
 
 export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => {
   const bootstrap = ref<BusinessBootstrap | null>(null)
@@ -45,12 +54,15 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   const historyPageSize = 20
   const importPreview = ref<ImportPreview | null>(null)
   const selectedTool = ref<BusinessTool | null>(null)
+  const preparationNotice = ref<string | null>(null)
+  let selectedPreparationContract: string | null = null
   const snapshot = ref<BusinessBatchSnapshot>(emptyBatchSnapshot())
   const selectedItemId = ref<string | null>(null)
   const loading = ref(false)
   const syncState = ref<'synced' | 'syncing' | 'offline'>('synced')
   const error = ref<string | null>(null)
   const bootstrapStale = ref(false)
+  const bootstrapRefreshing = ref(false)
   const historyLoading = ref(false)
   const historyError = ref<string | null>(null)
   const recoveryPending = ref(0)
@@ -81,10 +93,51 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       ? 50
       : entitlements.value.max_batch_rows || 50,
     getPreview: () => importPreview.value,
-    setPreview: value => { importPreview.value = value },
+    setPreview: value => { importPreview.value = value; if (value) preparationNotice.value = null },
     setLoading: value => { loading.value = value },
     setError: value => { error.value = value },
   })
+  function canPrepareTool(tool: BusinessTool): boolean {
+    // Internal demo tests retain their existing facade; customer preparation
+    // uses the same server-owned catalog facts as the directory.
+    if (tool.availability === 'demo_only') return true
+    const license = readStoredLicense()
+    if (bootstrap.value?.entitlements.batch_execution === false || bootstrap.value?.entitlements.multi_account_workspace === false
+      || license.entitlements?.batch_execution === false || license.entitlements?.multi_account_workspace === false
+      || license.business_workspace_enabled === false || license.product_type === 'consumer') return false
+    return isToolCurrentlyUsable(tool, {
+      planCode: licensePlanCode(license), platformScope: license.platform_scope,
+      platformKey: tool.platform_key || tool.platformKey, runtimeAvailable: true, mode: 'batch',
+    })
+  }
+  function preparationContract(tool: BusinessTool, source: BusinessBootstrap): string {
+    const license = readStoredLicense()
+    return JSON.stringify([
+      preparationFields.map(field => tool[field] ?? null),
+      preparationEntitlements.map(field => source.entitlements[field] ?? null),
+      licensePlanCode(license), license.platform_scope ?? null,
+      preparationEntitlements.map(field => license.entitlements?.[field] ?? null),
+      license.product_type ?? null, license.business_workspace_enabled ?? null,
+    ])
+  }
+  function reconcileToolSelection(): void {
+    // A running or starting batch owns its original tool and input snapshot.
+    // Directory refresh only changes preparation for a future batch.
+    if (isActive.value || pendingStartMode || !selectedTool.value || !bootstrap.value) return
+    const latest = tools.value.find(tool => tool.id === selectedTool.value?.id) || null
+    const nextContract = latest ? preparationContract(latest, bootstrap.value) : null
+    const changed = selectedPreparationContract !== nextContract
+    const unavailable = !latest || !canPrepareTool(latest)
+    if (changed || unavailable) {
+      imports.invalidate()
+      importPreview.value = null
+      preparationNotice.value = unavailable
+        ? '所选工具已撤回或当前授权不支持批量准备，旧导入已清除；请查看工具状态或使用帮助。'
+        : '工具开放条件、版本或导入要求已更新，旧导入已清除；请按最新要求重新导入。'
+    }
+    selectedTool.value = latest
+    selectedPreparationContract = nextContract
+  }
   function getOwnerScope(): string | null {
     const user = authService.getUser()
     const owner = user?.user_id ?? user?.id
@@ -143,6 +196,8 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       liveHistoryOffset = 0
       importPreview.value = null
       selectedTool.value = null
+      selectedPreparationContract = null
+      preparationNotice.value = null
       selectedItemId.value = null
       snapshot.value = emptyBatchSnapshot()
       loading.value = false
@@ -150,6 +205,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       error.value = null
       historyError.value = null
       bootstrapStale.value = false
+      bootstrapRefreshing.value = false
       liveStorageUnavailable.value = false
     }
     initializedOwnerScope = owner
@@ -187,6 +243,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   async function refreshBootstrap(): Promise<BusinessBootstrap> {
     const owner = getOwnerScope()
     const requestSequence = ++bootstrapRequestSequence
+    bootstrapRefreshing.value = true
     loading.value = true
     error.value = null
     bootstrapStale.value = false
@@ -196,10 +253,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
         throw new Error('工作台状态已刷新，请使用最新状态')
       }
       bootstrap.value = nextBootstrap
-      if (selectedTool.value && !bootstrap.value.tools.some(tool => tool.id === selectedTool.value?.id)) {
-        selectedTool.value = null
-        importPreview.value = null
-      }
+      reconcileToolSelection()
       return bootstrap.value
     } catch (cause) {
       if (owner === getOwnerScope() && requestSequence === bootstrapRequestSequence) {
@@ -208,7 +262,10 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       }
       throw cause
     } finally {
-      if (owner === getOwnerScope() && requestSequence === bootstrapRequestSequence) loading.value = false
+      if (owner === getOwnerScope() && requestSequence === bootstrapRequestSequence) {
+        bootstrapRefreshing.value = false
+        loading.value = false
+      }
     }
   }
 
@@ -259,11 +316,14 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     if (isActive.value || pendingStartMode) return
     imports.invalidate()
     selectedTool.value = tool
+    selectedPreparationContract = bootstrap.value ? preparationContract(tool, bootstrap.value) : null
+    preparationNotice.value = null
     importPreview.value = null
     error.value = null
   }
 
   function loadSampleImport(): Promise<ImportPreview> {
+    if (bootstrapRefreshing.value) return Promise.reject(new Error('正在刷新工具目录，请完成后再导入'))
     return imports.loadSample()
   }
 
@@ -272,6 +332,9 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   }
 
   function selectImportFile(): Promise<ImportPreview> {
+    if (bootstrapRefreshing.value) return Promise.reject(new Error('正在刷新工具目录，请完成后再导入'))
+    reconcileToolSelection()
+    if (selectedTool.value && !canPrepareTool(selectedTool.value)) return Promise.reject(new Error('当前工具或授权不支持批量准备，请刷新目录后重试'))
     return imports.selectFile()
   }
 
@@ -280,9 +343,13 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   }
 
   async function startBatch(): Promise<BusinessBatchSnapshot> {
+    if (bootstrapRefreshing.value) throw new Error('正在刷新工具目录，请完成后再开始批次')
+    if (isActive.value || pendingStartMode) throw new Error('当前批次仍在启动或执行，请先处理当前批次')
+    reconcileToolSelection()
     const tool = selectedTool.value
     const preview = importPreview.value
     if (!tool || !preview?.validCount) throw new Error('请先导入有效数据')
+    if (!canPrepareTool(tool)) throw new Error('当前工具或授权不支持批量执行，请刷新目录后重试')
     if (tool.availability !== 'demo_only' && !getRuntimeCapabilities().batchLive) {
       throw new Error('真实批量执行仅支持课赛通 KST 桌面端')
     }
@@ -307,6 +374,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       if (requestSequence === startRequestSequence) {
         pendingStartMode = null
         loading.value = false
+        reconcileToolSelection()
       }
     }
   }
@@ -351,6 +419,8 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     snapshot.value = emptyBatchSnapshot()
     selectedItemId.value = null
     selectedTool.value = null
+    selectedPreparationContract = null
+    preparationNotice.value = null
     importPreview.value = null
   }
 
@@ -373,6 +443,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   function dispose(): void {
     startRequestSequence += 1
     bootstrapRequestSequence += 1
+    bootstrapRefreshing.value = false
     bootstrapInitialization = null
     pendingStartMode = null
     loading.value = false
@@ -387,9 +458,9 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   }
 
   return {
-    bootstrap, history, demoHistory, demoHistoryTotal, liveHistoryHasMore, importPreview, selectedTool, snapshot, selectedItemId, selectedItem, loading, syncState, error, bootstrapStale, historyLoading, historyError,
+    bootstrap, history, demoHistory, demoHistoryTotal, liveHistoryHasMore, importPreview, selectedTool, preparationNotice, snapshot, selectedItemId, selectedItem, loading, syncState, error, bootstrapStale, bootstrapRefreshing, historyLoading, historyError,
     entitlements, tools, items, openItems, isActive, isDemoBatch, recoveryPending, recoveryStorageUnavailable, liveStorageUnavailable, retryRecovery,
-    init, refreshBootstrap, loadHistory, loadDemoHistory, chooseTool, loadSampleImport, saveSampleTemplate, selectImportFile, exportImportErrors, startBatch, registerBrowser, selectItem,
+    init, refreshBootstrap, reconcileToolSelection, loadHistory, loadDemoHistory, chooseTool, loadSampleImport, saveSampleTemplate, selectImportFile, exportImportErrors, startBatch, registerBrowser, selectItem,
     completeUserAction, restartItem, cancelBatch, resetWorkspace, statusText, flushOutboxWithin, dispose, getSourceRows,
   }
 })

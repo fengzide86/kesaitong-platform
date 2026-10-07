@@ -11,73 +11,20 @@
         <LayoutDashboard :size="14" class="menu-icon" />
         <span class="menu-label">行动中心</span>
       </router-link>
-      <router-link to="/admin/authcodes" class="menu-nav-item" active-class="is-active">
-        <Key :size="14" class="menu-icon" />
-        <span class="menu-label">授权码管理</span>
-      </router-link>
-      <router-link v-if="role !== 'support'" to="/admin/business-access" class="menu-nav-item" active-class="is-active">
-        <BriefcaseBusiness :size="14" class="menu-icon" />
-        <span class="menu-label">专业工作台</span>
-      </router-link>
-      <router-link to="/admin/orders" class="menu-nav-item" active-class="is-active">
-        <Receipt :size="14" class="menu-icon" />
-        <span class="menu-label">订单与套餐</span>
-      </router-link>
-      <router-link v-if="can('profit.read')" to="/admin/profit" class="menu-nav-item" active-class="is-active">
-        <Percent :size="14" class="menu-icon" />
-        <span class="menu-label">分润管理</span>
-      </router-link>
-      <router-link v-if="can('expenses.read')" to="/admin/expenses" class="menu-nav-item" active-class="is-active">
-        <WalletCards :size="14" class="menu-icon" />
-        <span class="menu-label">公账支出</span>
-      </router-link>
-      <router-link to="/admin/users" class="menu-nav-item" active-class="is-active">
-        <Users :size="14" class="menu-icon" />
-        <span class="menu-label">用户管理</span>
-      </router-link>
-      <router-link to="/admin/feedback" class="menu-nav-item" active-class="is-active">
-        <Wrench :size="14" class="menu-icon" />
-        <span class="menu-label">工单管理</span>
-      </router-link>
-      <router-link to="/admin/knowledge" class="menu-nav-item" active-class="is-active">
-        <BookOpen :size="14" class="menu-icon" />
-        <span class="menu-label">知识库管理</span>
-      </router-link>
-      <router-link v-if="can('rules.write')" to="/admin/ai-chat" class="menu-nav-item" active-class="is-active">
-        <MessageSquare :size="14" class="menu-icon" />
-        <span class="menu-label">客服规则管理</span>
-      </router-link>
-      <router-link to="/admin/announcements" class="menu-nav-item" active-class="is-active">
-        <Megaphone :size="14" class="menu-icon" />
-        <span class="menu-label">公告管理</span>
-      </router-link>
-      <router-link v-if="can('updates.manage')" to="/admin/updates" class="menu-nav-item" active-class="is-active">
-        <PackageCheck :size="14" class="menu-icon" />
-        <span class="menu-label">应用更新</span>
-      </router-link>
-      <router-link v-if="can('settings.manage')" to="/admin/freight-rates" class="menu-nav-item" active-class="is-active">
-        <Truck :size="14" class="menu-icon" />
-        <span class="menu-label">物流费率中心</span>
-      </router-link>
-      <router-link v-if="can('settings.manage')" to="/admin/settings" class="menu-nav-item" active-class="is-active">
-        <Settings :size="14" class="menu-icon" />
-        <span class="menu-label">系统设置</span>
-      </router-link>
-      <router-link v-if="can('staff.manage')" to="/admin/staff-accounts" class="menu-nav-item" active-class="is-active">
-        <ShieldUser :size="14" class="menu-icon" />
-        <span class="menu-label">后台账号管理</span>
-      </router-link>
-      <router-link v-if="can('agency.manage')" to="/admin/agency" class="menu-nav-item" active-class="is-active">
-        <BriefcaseBusiness :size="14" class="menu-icon" />
-        <span class="menu-label">代理与交付</span>
-      </router-link>
+      <section v-for="group in navigationGroups" :key="group.id" class="menu-group" :aria-labelledby="`admin-nav-${group.id}`">
+        <h2 :id="`admin-nav-${group.id}`" class="menu-group-title">{{ group.title }}</h2>
+        <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="menu-nav-item" active-class="is-active">
+          <component :is="item.icon" :size="14" class="menu-icon" />
+          <span class="menu-label">{{ item.label }}</span>
+        </router-link>
+      </section>
     </nav>
 
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type Component } from 'vue'
 import { authService } from '@/utils/auth'
 import { hasStaffPermission, type StaffPermission } from '@/features/auth/permissions'
 import BrandLockup from '@/components/brand/BrandLockup.vue'
@@ -88,6 +35,43 @@ import {
 
 const role = computed(() => authService.getRole())
 const can = (permission: StaffPermission): boolean => hasStaffPermission(role.value, permission)
+
+interface NavigationItem {
+  path: string
+  label: string
+  icon: Component
+  visible?: boolean
+}
+
+const navigationGroups = computed(() => {
+  const groups: { id: string; title: string; items: NavigationItem[] }[] = [
+    { id: 'delivery', title: '客户交付', items: [
+      { path: '/admin/authcodes', label: '授权码管理', icon: Key },
+      { path: '/admin/business-access', label: '专业工作台', icon: BriefcaseBusiness, visible: role.value !== 'support' },
+      { path: '/admin/orders', label: '订单与套餐', icon: Receipt },
+      { path: '/admin/users', label: '用户管理', icon: Users },
+      { path: '/admin/agency', label: '代理与交付', icon: BriefcaseBusiness, visible: can('agency.manage') },
+    ] },
+    { id: 'support', title: '客户支持', items: [
+      { path: '/admin/feedback', label: '工单管理', icon: Wrench },
+      { path: '/admin/knowledge', label: '知识库管理', icon: BookOpen },
+      { path: '/admin/ai-chat', label: '客服规则管理', icon: MessageSquare, visible: can('rules.write') },
+      { path: '/admin/announcements', label: '公告管理', icon: Megaphone },
+    ] },
+    { id: 'finance', title: '经营结算', items: [
+      { path: '/admin/profit', label: '分润管理', icon: Percent, visible: can('profit.read') },
+      { path: '/admin/expenses', label: '公账支出', icon: WalletCards, visible: can('expenses.read') },
+    ] },
+    { id: 'configuration', title: '平台配置', items: [
+      { path: '/admin/updates', label: '应用更新', icon: PackageCheck, visible: can('updates.manage') },
+      { path: '/admin/freight-rates', label: '物流费率中心', icon: Truck, visible: can('settings.manage') },
+      { path: '/admin/settings', label: '系统设置', icon: Settings, visible: can('settings.manage') },
+      { path: '/admin/staff-accounts', label: '后台账号管理', icon: ShieldUser, visible: can('staff.manage') },
+    ] },
+  ]
+  return groups.map(group => ({ ...group, items: group.items.filter(item => item.visible !== false) }))
+    .filter(group => group.items.length > 0)
+})
 </script>
 
 <style scoped>
@@ -142,6 +126,9 @@ const can = (permission: StaffPermission): boolean => hasStaffPermission(role.va
   width: 100%;
   box-sizing: border-box;
 }
+
+.menu-group { display: grid; gap: 3px; }
+.menu-group-title { margin: 14px 12px 5px; color: var(--color-text-secondary); font-size: var(--type-meta); font-weight: 700; line-height: 1.5; }
 
 .menu-icon { width: 15px; height: 15px; color: var(--color-text-tertiary); stroke-width: 1.8px; transition: color var(--motion-fast); flex-shrink: 0; }
 

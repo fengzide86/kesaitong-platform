@@ -113,7 +113,10 @@ ipc.handle('open-external', async (_event: IpcMainInvokeEvent, url: unknown) => 
   return { success: false, message: '无效的 URL' }
 })
 
-const credentialManager = new CredentialManager({ ipcMain, getWindow: () => mainWindow })
+const credentialManager = new CredentialManager({
+  ipcMain, getWindow: () => mainWindow,
+  onSessionChanged: ownerId => automationController.resetArtifactsForOwner(ownerId),
+})
 const notificationManager = new NotificationManager({
   getWindow: () => mainWindow,
   getSelectedBatchItemId: () => automationController.selectedItemId(),

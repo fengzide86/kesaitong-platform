@@ -254,13 +254,14 @@ onBeforeUnmount(() => window.removeEventListener('toolbox:user-updated', refresh
 
 .header-tools {
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 12px;
 }
 
 .shell-page-actions {
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .shell-page-actions :deep(button),

@@ -44,39 +44,92 @@ async function api(page: Page, path: string): Promise<unknown> {
   return response.json()
 }
 
-async function importWorkbook(page: Page): Promise<void> {
-  // Every import journey starts at the rendered overview, including after a
-  // reload. Changing the hash before Vue Router mounts races its initial
-  // navigation; enter through the same ready sidebar that a user clicks.
+interface DemoBatch {
+  id: string; status: string; record_kind: 'demo'; row_count: number; event_seq: number
+  items: Array<{ item_ref: string; status: string; event_seq: number; simulated_outcome: string | null }>
+}
+
+const acceptedDemoPayloads = new WeakMap<Page, string[]>()
+
+async function demoMutation<T>(page: Page, path: string, method: 'POST' | 'PATCH' | 'PUT', data: Record<string, unknown>, status = 200, idempotencyKey?: string): Promise<T> {
+  // This is test-owned historical data in the fixture's SQLite database,
+  // authenticated by the real UI login. It does not launch a product tool.
+  expect(path).toMatch(/^\/api\/demo\//)
+  const token = await page.evaluate(() => sessionStorage.getItem('toolbox_token'))
+  expect(token).toBeTruthy()
+  const response = await page.request.fetch(path, {
+    method, data,
+    headers: { Authorization: `Bearer ${token}`, ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
+  })
+  expect(response.status(), `${method} ${path} should use the real isolated API`).toBe(status)
+  if (response.ok()) {
+    const payloads = acceptedDemoPayloads.get(page) || []
+    payloads.push(JSON.stringify(data))
+    acceptedDemoPayloads.set(page, payloads)
+  }
+  return response.json() as Promise<T>
+}
+
+function expectMetadataOnly(page: Page, value: unknown): void {
+  const serialized = `${JSON.stringify(value)}\n${(acceptedDemoPayloads.get(page) || []).join('\n')}`
+  expect(serialized).not.toMatch(/模板演示账号|password|cookie|@example|account_label|import_rows/)
+  for (const secret of Object.values(credentials).filter((value): value is string => typeof value === 'string')) {
+    expect(serialized).not.toContain(secret)
+  }
+  expect(database().live_run_count).toBe(0)
+  expect(database().live_batch_count).toBe(0)
+}
+
+async function expectNoPublicDemo(page: Page, scope: 'consumer' | 'business'): Promise<void> {
+  if (scope === 'consumer') {
+    await expect(page.getByTestId('tools-page')).toBeVisible()
+    const tools = await api(page, '/api/tools') as Array<{ name: string; availability: string }>
+    const demos = tools.filter(tool => tool.availability === 'demo_only')
+    expect(demos.length).toBeGreaterThan(0)
+    for (const tool of demos) await expect(page.getByTestId(`tool-card-${tool.name}`)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /开始.*演示|重新.*演示/ })).toHaveCount(0)
+    return
+  }
   await expect(page.locator('.business-overview')).toBeVisible()
   await page.getByRole('complementary', { name: '专业批量工作台导航' })
     .getByRole('link', { name: '批量工作台', exact: true }).click()
   await expect(page).toHaveURL(/#\/business\/workspace/)
   await expect(page.getByTestId('business-workspace-page')).toBeVisible()
-  await page.getByRole('button', { name: /自动上广告脚本/ }).click()
-  const chooser = page.waitForEvent('filechooser')
-  const worker = page.waitForEvent('worker')
-  await page.getByTestId('business-file-upload').click()
-  await (await chooser).setFiles(resolve('resources/templates/B端批量自动化测试数据.xlsx'))
-  expect((await worker).url()).toContain('spreadsheet.worker-')
-  await expect(page.locator('.import-result')).toHaveText('8 个演示项')
-  await expect(page.locator('.selected-import')).toContainText('已匹配工作表')
+  await expect(page.getByRole('heading', { name: '当前还没有开放的批量工具' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始批量演示', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /自动上广告脚本/ })).toHaveCount(0)
+  await expect(page.getByTestId('business-file-upload')).toHaveCount(0)
 }
 
-async function startBatch(page: Page): Promise<string> {
-  const created = page.waitForResponse(r => new URL(r.url()).pathname === '/api/demo/batches' && r.request().method() === 'POST')
-  const started = page.waitForResponse(response => {
-    const request = response.request()
-    return /^\/api\/demo\/batches\/[^/]+$/.test(new URL(response.url()).pathname)
-      && request.method() === 'PATCH' && (request.postDataJSON() as { status?: string }).status === 'running'
-  })
-  await page.getByRole('button', { name: '开始批量演示', exact: true }).click()
-  const response = await created
-  expect(response.status()).toBe(201)
-  const body = await response.json() as { id: string; items: unknown[] }
-  expect(body.items).toHaveLength(8)
-  expect((await started).status()).toBe(200)
-  return body.id
+async function createHistoryBatch(page: Page, key: string): Promise<DemoBatch> {
+  const data = { tool_id: 'tool_ad_script', tool_name: '自动上广告脚本', platform_key: 'amazon', scenario_id: 'ad_script_walkthrough_v1', row_count: 8 }
+  const batch = await demoMutation<DemoBatch>(page, '/api/demo/batches', 'POST', data, 201, key)
+  expect(batch).toMatchObject({ status: 'created', record_kind: 'demo', row_count: 8 })
+  expect(batch.items).toHaveLength(8)
+  const repeated = await demoMutation<DemoBatch>(page, '/api/demo/batches', 'POST', data, 201, key)
+  expect(repeated.id).toBe(batch.id)
+  expect(repeated.items.map(item => item.item_ref)).toEqual(batch.items.map(item => item.item_ref))
+  return demoMutation<DemoBatch>(page, `/api/demo/batches/${batch.id}`, 'PATCH', { event_seq: 1, status: 'running' })
+}
+
+async function finishHistoryBatch(page: Page, batch: DemoBatch): Promise<DemoBatch> {
+  for (const [index, item] of batch.items.entries()) {
+    await demoMutation(page, `/api/demo/batches/${batch.id}/items/${item.item_ref}`, 'PUT', { event_seq: 1, status: 'playing' })
+    const outcome = (['completed_example', 'attention_example', 'failure_example'] as const)[index % 3]!
+    await demoMutation(page, `/api/demo/batches/${batch.id}/items/${item.item_ref}`, 'PUT', {
+      event_seq: 2, status: outcome === 'failure_example' ? 'error' : 'played', simulated_outcome: outcome,
+    })
+  }
+  return demoMutation<DemoBatch>(page, `/api/demo/batches/${batch.id}/finish`, 'POST', { event_seq: 2 })
+}
+
+async function openDemoHistory(page: Page): Promise<void> {
+  await page.goto('/#/business/records')
+  await expect(page.getByRole('tab', { name: '真实批次', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('还没有真实批次记录', { exact: true })).toBeVisible()
+  await expect(page.locator('.records-list article')).toHaveCount(0)
+  await page.getByRole('tab', { name: '历史演示', exact: true }).click()
+  await expect(page.locator('.demo-note')).toContainText('不代表真实账号处理成功')
 }
 
 const browserErrors = new WeakMap<Page, string[]>()
@@ -98,7 +151,7 @@ test.afterAll(() => {
   writeFileSync(join(runtime, 'database-evidence.json'), JSON.stringify(snapshot, null, 2))
 })
 
-test('C 端真实授权激活、工具演示与结果留档，不越权进入 B 端', async ({ page }) => {
+test('C 端真实授权激活、历史演示 API 留档与普通入口隐藏，不越权进入 B 端', async ({ page }) => {
   await authorize(page, 'consumer')
   expect(database().authorizations.filter(row => row.status === 'active')).toHaveLength(1)
   expect(database().device_count).toBe(1)
@@ -112,36 +165,34 @@ test('C 端真实授权激活、工具演示与结果留档，不越权进入 B 
   expect(forbiddenBatch.status()).toBe(403)
   expect((await page.request.get('/api/demo/batches', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(403)
   expect(database().batches).toHaveLength(0)
-  await page.getByTestId('tool-card-物流模板标准版').click()
-  await expect(page.getByTestId('tool-workspace').or(page.locator('.drawer-primary'))).toBeVisible()
-  if (await page.locator('.drawer-primary').isVisible()) await page.locator('.drawer-primary').click()
-  await expect(page.getByTestId('tool-workspace')).toBeVisible()
-  await expect(page.getByTestId('execution-scope-note')).toContainText('不启动 Runner')
-  // Browser product's lightweight Demo adapter is real shipped code. This is
-  // NOT evidence of an Electron Runner or an external seller account action.
-  await expect(page.locator('.result-card.success')).toBeVisible({ timeout: 45_000 })
-  await expect(page.locator('.result-proof-grid')).toHaveCount(0)
-  await expect.poll(() => database().runs.filter(row => row.status === 'completed').length).toBe(1)
+  await expectNoPublicDemo(page, 'consumer')
+  // The fixture retains internal demo APIs for historical records. Neither
+  // this setup nor the customer UI is evidence of a business Live execution.
+  const data = { tool_id: 'tool_logistics_standard', tool_name: '物流模板标准版', platform_key: 'amazon', scenario_id: 'logistics_standard_walkthrough_v1', total_step_count: 3 }
+  const created = await demoMutation<{ id: string; record_kind: string }>(page, '/api/demo/runs', 'POST', data, 201, 'consumer-historical-run')
+  expect(created.record_kind).toBe('demo')
+  const repeated = await demoMutation<{ id: string }>(page, '/api/demo/runs', 'POST', data, 201, 'consumer-historical-run')
+  expect(repeated.id).toBe(created.id)
+  await demoMutation(page, `/api/demo/runs/${created.id}`, 'PATCH', { event_seq: 1, status: 'running', completed_step_count: 1 })
+  const finished = await demoMutation(page, `/api/demo/runs/${created.id}/finish`, 'POST', { event_seq: 2, completed_step_count: 3, simulated_outcome: 'completed_example' })
+  expectMetadataOnly(page, finished)
+  expect(database().runs.filter(row => row.status === 'completed')).toHaveLength(1)
   const run = database().runs[0]!
   expect(run.completed_step_count).toBe(run.total_step_count)
-  expect(database().live_run_count).toBe(0)
-  await page.screenshot({ path: join(runtime, 'consumer-demo-completed.png'), fullPage: true })
-  await page.getByRole('button', { name: '返回工具箱', exact: true }).last().click()
   await page.reload()
-  await expect(page.getByTestId('tools-page')).toBeVisible()
-  const runs = await api(page, '/api/demo/runs') as { items?: unknown[]; data?: unknown[] }
-  expect(runs.items || runs.data).toHaveLength(1)
+  await expectNoPublicDemo(page, 'consumer')
+  const runs = await api(page, '/api/demo/runs') as { data: Array<{ id: string; status: string }> }
+  expect(runs.data).toHaveLength(1)
+  expect(runs.data[0]).toMatchObject({ id: created.id, status: 'completed' })
+  await page.screenshot({ path: join(runtime, 'consumer-demo-hidden.png'), fullPage: true })
 })
 
-test('B 端原生 Excel Worker 导入、八项并发演示及父子结果真实落库', async ({ page }) => {
+test('B 端真实 API 建立八项历史演示，父子落库、隔离展示与脱敏导出', async ({ page }) => {
   await authorize(page, 'business')
-  await importWorkbook(page)
-  const payloads: string[] = []
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/api/demo/')) payloads.push(request.postData() || '')
-  })
-  const batchId = await startBatch(page)
-  await expect.poll(() => database().batches.find(batch => batch.id === batchId)?.status).toBe('completed')
+  await expectNoPublicDemo(page, 'business')
+  const history = await finishHistoryBatch(page, await createHistoryBatch(page, 'business-completed-history'))
+  const batchId = history.id
+  expect(history.status).toBe('completed')
   const batch = database().batches.find(row => row.id === batchId)!
   expect(batch.row_count).toBe(8)
   expect(batch.queued_count + batch.playing_count).toBe(0)
@@ -150,73 +201,116 @@ test('B 端原生 Excel Worker 导入、八项并发演示及父子结果真实�
   expect(items).toHaveLength(8)
   expect(new Set(items.map(row => row.simulated_outcome))).toEqual(new Set(['completed_example', 'attention_example', 'failure_example']))
   expect(items.every(row => ['played', 'error', 'skipped'].includes(row.status))).toBe(true)
-  expect(database().live_batch_count).toBe(0)
-  expect(payloads.join('\n')).not.toMatch(/模板演示账号|password|cookie|@example|account_label|import_rows/)
-  await page.screenshot({ path: join(runtime, 'business-demo-completed.png'), fullPage: true })
+  expectMetadataOnly(page, history)
   await page.goto('/#/business/overview')
+  await expect(page.locator('.business-overview')).toBeVisible()
   await expect(page.locator('.attention-card')).toHaveCount(0)
-  await expect(page.locator('.batch-count').first()).toHaveText('8/8 已结束')
+  await expect(page.locator('.batch-count')).toHaveCount(0)
+  await expect(page.getByText('还没有真实批次记录', { exact: true })).toBeVisible()
   await page.goto('/#/business/license')
   await expect(page.locator('.limits-grid')).toContainText('已授权')
   await expect(page.locator('.limits-grid')).toContainText('1 / 5 台设备')
   await page.getByRole('button', { name: '刷新授权', exact: true }).click()
   await expect(page.locator('.limits-grid')).toContainText('1 / 5 台设备')
-  await page.goto('/#/business/records')
+  await openDemoHistory(page)
   await expect(page.locator('.records-list article').first()).toContainText('演示完成')
+  await page.locator('.records-list article').first().getByRole('button', { name: /查看.*批次详情/ }).click()
+  const drawer = page.locator('.el-drawer:visible').last()
+  await expect(drawer.locator('.detail-table tbody tr')).toHaveCount(8)
+  await expect(drawer).toContainText('人工操作案例（无待办）')
+  await expect(drawer).toContainText('异常案例')
+  await expect(drawer).toContainText('不代表真实平台结果')
+  const downloaded = page.waitForEvent('download')
+  await drawer.getByRole('button', { name: '导出脱敏结果', exact: true }).click()
+  const download = await downloaded
+  expect(download.suggestedFilename()).toBe('KST-demo-批次结果.csv')
+  const exportedPath = join(runtime, 'historical-demo-results.csv')
+  await download.saveAs(exportedPath)
+  const exported = readFileSync(exportedPath, 'utf8')
+  expect(exported.trim().split('\r\n')).toHaveLength(9)
+  expect(exported).toContain('模拟演示')
+  expect(exported).not.toMatch(/demo_batch_|demo_item_|password|cookie|account_label|@example/)
+  for (const item of history.items) expect(exported).not.toContain(item.item_ref)
+  await drawer.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.screenshot({ path: join(runtime, 'business-demo-history.png'), fullPage: true })
   await page.reload()
+  // Reload defaults to real records; old examples never become live results.
+  await expect(page.getByRole('tab', { name: '真实批次', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('还没有真实批次记录', { exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: '历史演示', exact: true }).click()
   await expect(page.locator('.records-list article').first()).toContainText('演示完成')
   const persisted = await api(page, `/api/demo/batches/${batchId}`) as { status: string; items: unknown[] }
   expect(persisted.status).toBe('completed')
   expect(persisted.items).toHaveLength(8)
 })
 
-test('B 端真实取消保存终态，刷新后可再次导入并启动新批次', async ({ page }) => {
+test('B 端历史取消终态与新记录独立，事件重传不重建批次且跨授权不可读', async ({ page, context }) => {
   await authorize(page, 'business_cancel')
-  await importWorkbook(page)
-  const first = await startBatch(page)
-  await page.getByRole('button', { name: '退出演示', exact: true }).click()
-  await page.locator('.el-message-box').getByRole('button', { name: '退出演示', exact: true }).click()
-  await expect.poll(() => database().batches.find(row => row.id === first)?.status).toBe('cancelled')
-  const cancelled = database().batches.find(row => row.id === first)!
+  await expectNoPublicDemo(page, 'business')
+  const previous = database().batches.find(row => row.status === 'completed')!
+  expect(previous).toBeTruthy()
+  const token = await page.evaluate(() => sessionStorage.getItem('toolbox_token'))
+  expect((await page.request.get(`/api/demo/batches/${previous.id}`, { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(404)
+  const first = await createHistoryBatch(page, 'business-cancelled-history')
+  await demoMutation(page, `/api/demo/batches/${first.id}/items/${first.items[0]!.item_ref}`, 'PUT', { event_seq: 1, status: 'playing' })
+  const before = database().batches.length
+  const cancelledHistory = await demoMutation<DemoBatch>(page, `/api/demo/batches/${first.id}`, 'PATCH', { event_seq: 2, status: 'cancelled' })
+  const repeated = await demoMutation<DemoBatch>(page, `/api/demo/batches/${first.id}`, 'PATCH', { event_seq: 2, status: 'cancelled' })
+  expect(repeated).toEqual(cancelledHistory)
+  expect(database().batches).toHaveLength(before)
+  const cancelled = database().batches.find(row => row.id === first.id)!
   expect(cancelled.queued_count + cancelled.playing_count).toBe(0)
   expect(cancelled.skipped_count).toBeGreaterThan(0)
-  await expect(page).toHaveURL(/#\/business\/overview/)
   await page.reload()
-  await importWorkbook(page)
-  const second = await startBatch(page)
-  expect(second).not.toBe(first)
-  await expect.poll(() => database().batches.find(row => row.id === second)?.status).toBe('completed')
-  await page.goto('/#/business/records')
+  await expect(page.getByTestId('business-workspace-page')).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始批量演示', exact: true })).toHaveCount(0)
+  const second = await finishHistoryBatch(page, await createHistoryBatch(page, 'business-new-history'))
+  expect(second.id).not.toBe(first.id)
+  expectMetadataOnly(page, second)
+  await openDemoHistory(page)
   await expect(page.locator('.records-list')).toContainText('已退出')
   await expect(page.locator('.records-list')).toContainText('演示完成')
+  const own = await api(page, '/api/demo/batches') as { data: Array<{ id: string }>; total: number }
+  expect(own.total).toBe(2)
+  expect(new Set(own.data.map(row => row.id))).toEqual(new Set([first.id, second.id]))
+  const other = await context.newPage()
+  try {
+    await authorize(other, 'business')
+    const otherToken = await other.evaluate(() => sessionStorage.getItem('toolbox_token'))
+    expect(otherToken).not.toBe(token)
+    expect((await other.request.get(`/api/demo/batches/${first.id}`, { headers: { Authorization: `Bearer ${otherToken}` } })).status()).toBe(404)
+    expect((await api(other, '/api/demo/batches') as { total: number }).total).toBe(1)
+    expect((await api(page, '/api/demo/batches') as { total: number }).total).toBe(2)
+  } finally {
+    await other.close()
+  }
 })
 
-test('B 端断网退出后重新打开页面，以同授权恢复取消意图并完成落库', async ({ page, context }) => {
+test('B 端离线历史读取不伪称自动恢复，联网重读保留取消终态且不重跑', async ({ page, context }) => {
   await authorize(page, 'business_cancel')
-  await importWorkbook(page)
-  const batchId = await startBatch(page)
-  await expect.poll(() => database().batches.find(row => row.id === batchId)?.playing_count || 0).toBe(8)
-  await page.getByRole('button', { name: '退出演示', exact: true }).click()
-  await expect(page.locator('.el-message-box')).toBeVisible()
+  await expectNoPublicDemo(page, 'business')
+  await openDemoHistory(page)
+  await expect(page.locator('.records-list')).toContainText('已退出')
+  const before = database()
   await context.setOffline(true)
   try {
-    await page.locator('.el-message-box').getByRole('button', { name: '退出演示', exact: true }).click()
-    await expect(page).toHaveURL(/#\/business\/overview/)
-    expect(database().batches.find(row => row.id === batchId)?.status).toBe('running')
-    // Destroy the old application while still offline: the new instance must
-    // recover the persisted intent, not just finish an in-memory pending fetch.
+    await page.getByRole('button', { name: '刷新', exact: true }).click()
+    await expect(page.getByRole('button', { name: '重新加载', exact: true })).toBeVisible()
+    await expect(page.locator('.records-page')).not.toContainText('自动恢复')
+    expect(database().batches).toEqual(before.batches)
+    expect(database().items).toEqual(before.items)
+    // Destroy the app while offline, then load the same persisted history.
+    // This is a read retry, not queued cancellation replay or Runner recovery.
     await page.goto('about:blank')
   } finally {
     await context.setOffline(false)
   }
-  await page.goto('/#/business/workspace')
-  await expect(page.getByTestId('business-workspace-page')).toBeVisible()
-  await expect.poll(() => database().batches.find(row => row.id === batchId)?.status, { timeout: 30_000 }).toBe('cancelled')
-  const batch = database().batches.find(row => row.id === batchId)!
-  expect(batch.queued_count + batch.playing_count).toBe(0)
-  expect(batch.played_count + batch.error_count + batch.skipped_count).toBe(8)
-  await page.goto('/#/business/records')
-  await expect(page.locator('.records-list article').first()).toContainText('已退出')
+  await openDemoHistory(page)
+  await expect(page.locator('.records-list')).toContainText('已退出')
+  await expect(page.locator('.records-list')).toContainText('演示完成')
+  expect(database().batches).toEqual(before.batches)
+  expect(database().items).toEqual(before.items)
+  expectMetadataOnly(page, await api(page, '/api/demo/batches'))
 })
 
 test('后台真实登录、支出记账、创建续费及确认入账，汇总与数据库一致', async ({ page }) => {

@@ -25,6 +25,9 @@ describe('business authoritative license', () => {
     expect(wrapper.text()).toContain('权威专业套餐')
     expect(wrapper.text()).toContain('已授权')
     expect(wrapper.text()).toContain('2 / 3')
+    expect(wrapper.text()).toContain('1 个活动任务')
+    expect(wrapper.text()).toContain('套餐授权不等于工具已开放')
+    expect(wrapper.text()).not.toMatch(/并发演示|演示模式边界/)
     wrapper.unmount()
   })
   it('does not authorize this machine simply because other devices are bound', async () => {

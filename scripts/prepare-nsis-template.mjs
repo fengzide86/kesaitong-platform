@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import process from 'node:process'
+import console from 'node:console'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const SUPPORTED_BUILDER_VERSION = '26.8.1'
 export const ORIGINAL_TEMPLATE_SHA256 = '401ed51f541f6bfdbf8f855b026ff6708f20ed2c67569f7b89e5f6942e1e8558'
+export const SAFE_UPSTREAM_BUILDER_VERSION = '26.15.3'
+export const SAFE_UPSTREAM_TEMPLATE_SHA256 = '9aca256695c289ec8a875143101fae8c6236bc8c6a7cf369bbe8b4986e09c9cb'
 
 export const ORIGINAL_KNOWN_FOLDER_BLOCK = String.raw`      StrCpy $0 "$LocalAppData\Programs"
       System::Store S
@@ -50,8 +55,17 @@ export const PATCHED_KNOWN_FOLDER_BLOCK = String.raw`      StrCpy $0 "$LocalAppD
 const normalizedHash = source => createHash('sha256').update(source.replaceAll('\r\n', '\n')).digest('hex')
 
 export function patchNsisTemplate(source, version) {
-  if (version !== SUPPORTED_BUILDER_VERSION) throw new Error(`NSIS template patch only supports app-builder-lib ${SUPPORTED_BUILDER_VERSION}; review ${version} before packaging`)
   const normalized = source.replaceAll('\r\n', '\n')
+  if (version === SAFE_UPSTREAM_BUILDER_VERSION) {
+    // This exact upstream template already uses bounded Unicode copying, native
+    // register preservation and a non-null free outside the success branch.
+    // Do not extend the legacy patch to newer templates or accept local edits.
+    if (normalizedHash(normalized) !== SAFE_UPSTREAM_TEMPLATE_SHA256) {
+      throw new Error('Unrecognized safe upstream NSIS multiUser.nsh; refusing an unreviewed packaging template')
+    }
+    return { source, changed: false }
+  }
+  if (version !== SUPPORTED_BUILDER_VERSION) throw new Error(`NSIS template patch only supports reviewed app-builder-lib ${SUPPORTED_BUILDER_VERSION} and ${SAFE_UPSTREAM_BUILDER_VERSION}; review ${version} before packaging`)
   if (normalized.split(PATCHED_KNOWN_FOLDER_BLOCK).length === 2) {
     const restored = normalized.replace(PATCHED_KNOWN_FOLDER_BLOCK, ORIGINAL_KNOWN_FOLDER_BLOCK)
     if (normalizedHash(restored) !== ORIGINAL_TEMPLATE_SHA256) throw new Error('Patched NSIS template differs from its reviewed upstream template')
@@ -66,8 +80,13 @@ export function patchNsisTemplate(source, version) {
 }
 
 export function prepareNsisTemplate(root) {
-  const library = path.join(root, 'node_modules', 'app-builder-lib')
-  const { version } = JSON.parse(readFileSync(path.join(library, 'package.json'), 'utf8'))
+  // Resolve from the builder's dependency context: pnpm's isolated layout need
+  // not expose app-builder-lib at the application node_modules root.
+  const projectRequire = createRequire(path.resolve(root, 'package.json'))
+  const builderMetadata = projectRequire.resolve('electron-builder/package.json')
+  const libraryMetadata = createRequire(builderMetadata).resolve('app-builder-lib/package.json')
+  const library = path.dirname(libraryMetadata)
+  const { version } = JSON.parse(readFileSync(libraryMetadata, 'utf8'))
   const filename = path.join(library, 'templates', 'nsis', 'multiUser.nsh')
   const result = patchNsisTemplate(readFileSync(filename, 'utf8'), version)
   if (result.changed) writeFileSync(filename, result.source, 'utf8')

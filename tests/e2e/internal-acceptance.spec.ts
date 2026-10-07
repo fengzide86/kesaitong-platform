@@ -118,11 +118,12 @@ async function installApi(page: Page, responder?: ApiResponder): Promise<void> {
 
 async function installBatchDesktopBridge(page: Page): Promise<void> {
   await page.addInitScript(() => {
+    const observation = window as typeof window & { __batchCreatePayloads: Record<string, unknown>[] }
+    observation.__batchCreatePayloads = []
     const maskedRows = [
       { itemId: 'local-alpha', preview: { account_label: 'se***@example.com' } },
       { itemId: 'local-beta', preview: { account_label: 'se***@example.com' } },
     ]
-    let remappedRows = maskedRows
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
       value: {
@@ -131,42 +132,30 @@ async function installBatchDesktopBridge(page: Page): Promise<void> {
           getSnapshot: async () => null,
           selectImportFile: async () => ({
             importId: 'desktop-import-1',
-            fileName: 'internal-demo.xlsx',
+            fileName: 'internal-accounts.xlsx',
             validCount: 2,
             errorCount: 0,
-            worksheetName: 'demo',
+            worksheetName: 'accounts',
             rows: maskedRows,
             errors: [],
           }),
-          remapImportItems: async (payload: { itemIds?: string[] }) => {
-            remappedRows = (payload.itemIds || []).map((itemId, index) => ({
-              itemId,
-              preview: maskedRows[index]?.preview || { account_label: '' },
-            }))
+          create: async (payload: Record<string, unknown>) => {
+            observation.__batchCreatePayloads.push(payload)
             return {
-              importId: 'desktop-import-1-remapped',
-              fileName: 'internal-demo.xlsx',
-              validCount: remappedRows.length,
-              errorCount: 0,
-              worksheetName: 'demo',
-              rows: remappedRows,
-              errors: [],
+              batchId: payload.batchId,
+              serverBatchId: payload.serverBatchId,
+              tool: payload.tool,
+              status: 'running',
+              recordKind: payload.recordKind,
+              counts: { total: maskedRows.length, pending: maskedRows.length, running: 0, waiting: 0, completed: 0, failed: 0 },
+              items: maskedRows.map(row => ({
+                itemId: row.itemId,
+                accountLabelMasked: String(row.preview.account_label || ''),
+                status: 'pending',
+                browserReady: false,
+              })),
             }
           },
-          create: async (payload: Record<string, unknown>) => ({
-            batchId: payload.batchId,
-            serverBatchId: payload.serverBatchId,
-            tool: payload.tool,
-            status: 'running',
-            recordKind: payload.recordKind,
-            counts: { total: remappedRows.length, pending: remappedRows.length, running: 0, waiting: 0, completed: 0, failed: 0 },
-            items: remappedRows.map(row => ({
-              itemId: row.itemId,
-              accountLabelMasked: String(row.preview.account_label || ''),
-              status: 'pending',
-              browserReady: false,
-            })),
-          }),
         },
       },
     })
@@ -181,9 +170,14 @@ function parseJsonBody(request: PlaywrightRequest): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
-test('C 端单工具即使记录接口失败也进入 Demo，并且不会写真实执行接口或显示真实成功结论', async ({ page }) => {
+test('C 端目录隐藏内部 Demo，网页版已开放工具只引导下载桌面端，不写执行记录', async ({ page }) => {
   await installSession(page, 'user')
   const requestedPaths: string[] = []
+  let manifestRequests = 0
+  await page.route('**/updates/latest.yml*', async route => {
+    manifestRequests += 1
+    await route.fulfill({ status: 503, body: 'installer temporarily unavailable' })
+  })
   await installApi(page, (request, path) => {
     requestedPaths.push(path)
     if (path === '/api/tools') {
@@ -198,6 +192,18 @@ test('C 端单工具即使记录接口失败也进入 Demo，并且不会写真�
         demo_scenario_id: 'register-example',
         supports_demo_single: true,
         supports_live_single: false,
+      }, {
+        id: 'live-register',
+        name: '公司登记工具',
+        description: '按用户自己的公司资料处理登记任务',
+        category: 'automation',
+        platform_key: 'amazon',
+        release_status: 'available',
+        availability: 'live',
+        script_status: 'script_ready',
+        supports_demo_single: true,
+        supports_live_single: true,
+        capability_tags: ['公司登记'],
       }])
     }
     if (path === '/api/demo/runs' && request.method() === 'POST') {
@@ -208,19 +214,24 @@ test('C 端单工具即使记录接口失败也进入 Demo，并且不会写真�
 
   await page.goto('/#/user/tools')
   await expect(page.getByTestId('tools-page')).toBeVisible()
-  await page.getByTestId('tool-card-注册流程演示').click()
+  await expect(page.getByTestId('tool-card-注册流程演示')).toHaveCount(0)
+  const liveCard = page.getByTestId('tool-card-公司登记工具')
+  await expect(liveCard).toContainText('下载桌面端')
+  await liveCard.click()
+  await expect(page.locator('.drawer-assurance')).toContainText('本网页不会启动外部平台操作')
+  await page.getByRole('button', { name: '下载桌面端', exact: true }).click()
+  await expect.poll(() => manifestRequests).toBe(1)
+  await expect(page.getByText('桌面安装包清单暂时无法读取', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('tool-workspace')).toHaveCount(0)
+  await expect(page.locator('webview')).toHaveCount(0)
+  await expect(page.locator('.result-card.success')).toHaveCount(0)
+  await expect(page.locator('.result-proof-grid')).toHaveCount(0)
+  await expect(page.locator('.execution-evidence')).toHaveCount(0)
+  await page.getByRole('checkbox', { name: '当前可用', exact: true }).check()
+  await expect(liveCard).toHaveCount(0)
+  await expect(page.getByText('没有符合条件的工具', { exact: true })).toBeVisible()
 
-  const workspace = page.getByTestId('tool-workspace')
-  await expect(workspace).toBeVisible()
-  await expect(workspace.getByTestId('execution-scope-note')).toContainText('不启动 Runner，不操作外部平台')
-  await expect(workspace.getByTestId('result-boundary')).toHaveText('预览完成不代表真实任务成功')
-  await expect(workspace.locator('webview')).toHaveCount(0)
-  await expect(workspace.getByText('成功率')).toHaveCount(0)
-  await expect(workspace.getByText(/预计.*时间/)).toHaveCount(0)
-  await expect(workspace.locator('.result-card.success')).toContainText('流程预览已完成', { timeout: 20_000 })
-  await expect(workspace.locator('.result-proof-grid')).toHaveCount(0)
-  await expect(workspace.locator('.execution-evidence')).toHaveCount(0)
-
+  expect(requestedPaths.some(path => path.startsWith('/api/demo/'))).toBe(false)
   expect(requestedPaths.some(path => path.startsWith('/api/logs'))).toBe(false)
   expect(requestedPaths.some(path => path.includes('launch-grant'))).toBe(false)
   expect(requestedPaths.some(path => path.startsWith('/api/business/batches'))).toBe(false)
@@ -232,22 +243,26 @@ test('消息中心抽屉位于页面根层，不会被工具卡片覆盖', async
     if (path === '/api/tools') {
       return wrapped([
         {
-          id: 'demo-register',
-          name: '注册流程演示',
-          description: '展示模拟注册流程',
+          id: 'live-register',
+          name: '公司登记工具',
+          description: '查看公司登记任务与使用条件',
           category: 'automation',
           platform_key: 'amazon',
           release_status: 'available',
-          supports_demo_single: true,
+          availability: 'live',
+          script_status: 'script_ready',
+          supports_live_single: true,
         },
         {
-          id: 'demo-listing',
-          name: '上品流程演示',
-          description: '展示模拟上品流程',
+          id: 'live-listing',
+          name: '商品发布工具',
+          description: '查看商品发布任务与使用条件',
           category: 'automation',
           platform_key: 'amazon',
           release_status: 'available',
-          supports_demo_single: true,
+          availability: 'live',
+          script_status: 'script_ready',
+          supports_live_single: true,
         },
       ])
     }
@@ -275,6 +290,8 @@ test('消息中心抽屉位于页面根层，不会被工具卡片覆盖', async
 
   await page.setViewportSize({ width: 1365, height: 900 })
   await page.goto('/#/user/tools')
+  await expect(page.getByTestId('tool-card-公司登记工具')).toBeVisible()
+  await expect(page.getByTestId('tool-card-商品发布工具')).toBeVisible()
   await page.getByRole('button', { name: /消息中心/ }).click()
 
   const layer = page.locator('body > .drawer-layer')
@@ -292,7 +309,60 @@ test('消息中心抽屉位于页面根层，不会被工具卡片覆盖', async
   expect(topElementIsDrawer).toBe(true)
 })
 
-test('B 端接收桌面端脱敏预览，只发送行数和工具元数据，原文账号与 Cookie 不离开渲染进程', async ({ page }) => {
+test('B 端网页版隐藏内部 Demo，Live 目录只引导下载；仅内部工具时不提供导入或启动', async ({ page }) => {
+  await installSession(page, 'user', {
+    product_type: 'business',
+    business_workspace_enabled: true,
+    entitlements: { batch_execution: true, multi_account_workspace: true, max_batch_rows: 50, max_open_sessions: 4 },
+  })
+  const writes: string[] = []
+  let includeLiveTool = true
+  let manifestRequests = 0
+  await page.route('**/updates/latest.yml*', async route => {
+    manifestRequests += 1
+    await route.fulfill({ status: 503, body: 'installer temporarily unavailable' })
+  })
+  await installApi(page, (request, path) => {
+    if (request.method() !== 'GET') writes.push(path)
+    if (path !== '/api/business/bootstrap') return undefined
+    const internalTool = {
+      id: 'batch-internal', name: '内部批量登记流程', platform_key: 'amazon',
+      availability: 'demo_only', supports_demo_batch: true,
+    }
+    const liveTool = {
+      id: 'batch-live', name: '批量公司登记工具', platform_key: 'amazon',
+      availability: 'live', release_status: 'available', script_status: 'script_ready', supports_live_batch: true,
+    }
+    return wrapped({
+      entitlements: { max_batch_rows: 50, max_open_sessions: 4 },
+      tools: includeLiveTool ? [internalTool, liveTool] : [internalTool],
+    })
+  })
+
+  await page.goto('/#/business/workspace')
+  await expect(page.getByTestId('business-workspace-page')).toBeVisible()
+  await expect(page.getByRole('button', { name: /内部批量登记流程/ })).toHaveCount(0)
+  await page.getByRole('button', { name: /批量公司登记工具/ }).click()
+  await expect(page.getByText('真实批量执行需要 KST 桌面端', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('business-file-upload')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '开始批量执行', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '开始批量演示', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '下载桌面端', exact: true }).click()
+  await expect.poll(() => manifestRequests).toBe(1)
+  await expect(page.getByText('桌面安装包清单暂时无法读取', { exact: true })).toBeVisible()
+
+  includeLiveTool = false
+  await page.reload()
+  await expect(page.getByRole('heading', { name: '当前还没有开放的批量工具', exact: true })).toBeVisible()
+  await expect(page.getByText(/内部测试工具不会替代真实功能/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /内部批量登记流程/ })).toHaveCount(0)
+  await expect(page.getByTestId('business-file-upload')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /开始批量/ })).toHaveCount(0)
+  await expect(page.locator('webview')).toHaveCount(0)
+  expect(writes).toEqual([])
+})
+
+test('B 端桌面桥接契约接收脱敏预览，Live 批次只向业务 API 发送行数和工具元数据', async ({ page }) => {
   await installSession(page, 'user', {
     product_type: 'business',
     business_workspace_enabled: true,
@@ -305,95 +375,57 @@ test('B 端接收桌面端脱敏预览，只发送行数和工具元数据，原
   })
   await installBatchDesktopBridge(page)
 
-  const demoBatchRequests: PlaywrightRequest[] = []
-  const itemRefs = ['item_ref_alpha', 'item_ref_beta']
+  const apiWrites: PlaywrightRequest[] = []
   await installApi(page, (request, path) => {
+    if (request.method() !== 'GET') apiWrites.push(request)
     if (path === '/api/business/bootstrap') {
       return wrapped({
         entitlements: { max_batch_rows: 50, max_open_sessions: 4 },
         tools: [{
-          id: 'batch-demo',
-          name: '批量注册流程演示',
+          id: 'batch-live',
+          name: '批量公司登记工具',
           platform_key: 'amazon',
-          availability: 'demo_only',
-          demo_scenario_id: 'batch-register-example',
-          supports_demo_batch: true,
-          supports_live_batch: false,
+          availability: 'live',
+          release_status: 'available',
+          script_status: 'script_ready',
+          supports_demo_batch: false,
+          supports_live_batch: true,
           batch_input_schema: [{ key: 'account_label', label: '客户简称', type: 'text', required: true, sensitive: true }],
         }],
       })
     }
-    if (path.startsWith('/api/demo/batches')) {
-      demoBatchRequests.push(request)
-      if (path === '/api/demo/batches' && request.method() === 'POST') {
-        return wrapped({
-          id: 'demo-batch-1',
-          record_kind: 'demo',
-          execution_scope: 'batch',
-          tool_id: 'batch-demo',
-          tool_name_snapshot: '批量注册流程演示',
-          scenario_id: 'batch-register-example',
-          status: 'created',
-          row_count: 2,
-          queued_count: 2,
-          playing_count: 0,
-          played_count: 0,
-          skipped_count: 0,
-          error_count: 0,
-          items: itemRefs.map(item_ref => ({ item_ref, status: 'queued', event_seq: 0 })),
-          created_at: now,
-        })
-      }
-      if (path === '/api/demo/batches/demo-batch-1/finish') {
-        return wrapped({
-          id: 'demo-batch-1',
-          record_kind: 'demo',
-          execution_scope: 'batch',
-          tool_id: 'batch-demo',
-          tool_name_snapshot: '批量注册流程演示',
-          scenario_id: 'batch-register-example',
-          status: 'completed',
-          row_count: 2,
-          queued_count: 0,
-          playing_count: 0,
-          played_count: 2,
-          skipped_count: 0,
-          error_count: 0,
-          items: itemRefs.map(item_ref => ({ item_ref, status: 'played', simulated_outcome: 'completed_example', event_seq: 2 })),
-          created_at: now,
-          finished_at: now,
-        })
-      }
-      return wrapped({})
-    }
+    if (path === '/api/business/batches' && request.method() === 'POST') return wrapped({ id: 'live-batch-1' })
     return undefined
   })
 
   await page.goto('/#/business/workspace')
   await expect(page.getByTestId('business-workspace-page')).toBeVisible()
-  await page.getByRole('button', { name: /批量注册流程演示/ }).click()
+  await page.getByRole('button', { name: /批量公司登记工具/ }).click()
 
   await page.getByTestId('business-file-upload').click()
 
   await expect(page.getByText('se***@example.com').first()).toBeVisible()
   await expect(page.getByText('secret.account@example.com')).toHaveCount(0)
   await expect(page.getByText('原始单元格、账号和 Cookie 均不会上传')).toBeVisible()
-  await page.getByRole('button', { name: '开始批量演示' }).click()
-  await expect.poll(() => demoBatchRequests.length).toBeGreaterThan(0)
+  await page.getByRole('button', { name: '开始批量执行', exact: true }).click()
+  await expect(page.getByTestId('business-run-console')).toBeVisible()
 
-  const createRequest = demoBatchRequests.find(request => new URL(request.url()).pathname === '/api/demo/batches' && request.method() === 'POST')
-  expect(createRequest, '应创建独立 Demo 批次').toBeTruthy()
+  const createRequest = apiWrites.find(request => new URL(request.url()).pathname === '/api/business/batches' && request.method() === 'POST')
+  expect(createRequest, '应创建独立 Live 批次；桥接 fixture 不代表实际 Runner 已执行').toBeTruthy()
   const createBody = parseJsonBody(createRequest!)
-  expect(Object.keys(createBody).sort()).toEqual(['platform_key', 'row_count', 'scenario_id', 'tool_id', 'tool_name'])
+  expect(Object.keys(createBody).sort()).toEqual(['client_batch_id', 'tool_id', 'tool_name', 'total_count'])
   expect(createBody).toEqual({
-    tool_id: 'batch-demo',
-    tool_name: '批量注册流程演示',
-    platform_key: 'amazon',
-    scenario_id: 'batch-register-example',
-    row_count: 2,
+    client_batch_id: expect.any(String),
+    tool_id: 'batch-live',
+    tool_name: '批量公司登记工具',
+    total_count: 2,
   })
 
-  const serializedRequests = demoBatchRequests.map(request => request.postData() || '').join('\n')
+  const localCreates = await page.evaluate(() => (window as typeof window & { __batchCreatePayloads: Record<string, unknown>[] }).__batchCreatePayloads)
+  expect(localCreates).toHaveLength(1)
+  expect(Object.keys(localCreates[0]!).sort()).toEqual(['batchId', 'importId', 'maxOpenSessions', 'recordKind', 'serverBatchId', 'tool'])
+  expect(localCreates[0]).toMatchObject({ importId: 'desktop-import-1', recordKind: 'live', serverBatchId: 'live-batch-1', maxOpenSessions: 4 })
+  const serializedRequests = apiWrites.map(request => request.postData() || '').join('\n')
   for (const secret of [
     'secret.account@example.com',
     'second.internal@example.com',
@@ -401,9 +433,14 @@ test('B 端接收桌面端脱敏预览，只发送行数和工具元数据，原
     'SECOND_PASSWORD_PRIVATE',
     'COOKIE_SHOULD_NEVER_LEAVE',
     'SECOND_COOKIE_PRIVATE',
-  ]) expect(serializedRequests).not.toContain(secret)
-  expect(demoBatchRequests.some(request => new URL(request.url()).pathname.startsWith('/api/business/batches'))).toBe(false)
-  await expect(page.getByText(/演示工具模拟批量流程，已发布工具由桌面端执行/)).toBeVisible()
+  ]) {
+    expect(serializedRequests).not.toContain(secret)
+    expect(JSON.stringify(localCreates)).not.toContain(secret)
+  }
+  expect(serializedRequests).not.toMatch(/account_label|password|cookie|import_rows|se\*\*\*@example/)
+  expect(apiWrites.some(request => new URL(request.url()).pathname.startsWith('/api/demo/'))).toBe(false)
+  await expect(page.getByRole('button', { name: '开始批量演示', exact: true })).toHaveCount(0)
+  await expect(page.locator('.result-card.success')).toHaveCount(0)
 })
 
 const roleExpectations: Array<{

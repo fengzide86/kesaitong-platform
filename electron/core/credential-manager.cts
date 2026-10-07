@@ -9,21 +9,25 @@ import { assertTrustedSender } from '../ipc/sender-guard.js'
 interface CredentialManagerOptions {
   ipcMain: IpcMain
   getWindow: () => BrowserWindow | null | undefined
+  onSessionChanged?: (ownerId: number) => void
 }
 
 export class CredentialManager {
   private readonly ipcMain: IpcMain
   private readonly getWindow: () => BrowserWindow | null | undefined
+  private readonly onSessionChanged: (ownerId: number) => void
 
   constructor(options: CredentialManagerOptions) {
     this.ipcMain = options.ipcMain
     this.getWindow = options.getWindow
+    this.onSessionChanged = options.onSessionChanged ?? (() => undefined)
   }
 
   register(): void {
     this.ipcMain.handle('credential-save-user-code', (event, ...args: unknown[]) => {
       assertTrustedSender(event, this.getWindow, !app.isPackaged)
       const [code] = parseDesktopIpcArgs('credential-save-user-code', args)
+      this.onSessionChanged(event.sender.id)
       return this.save(code)
     })
     this.ipcMain.handle('credential-load-user-code', (event, ...args: unknown[]) => {
@@ -34,6 +38,7 @@ export class CredentialManager {
     this.ipcMain.handle('credential-clear-user-code', (event, ...args: unknown[]) => {
       assertTrustedSender(event, this.getWindow, !app.isPackaged)
       parseDesktopIpcArgs('credential-clear-user-code', args)
+      this.onSessionChanged(event.sender.id)
       return this.clear()
     })
   }

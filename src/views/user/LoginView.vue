@@ -113,12 +113,12 @@
           </div>
 
           <button type="submit" class="btn-login" :disabled="isLoading" :aria-busy="isLoading">
-            <span class="btn-content" :class="{ hidden: isLoading && !loginSucceeded }">
+            <span class="btn-content" :class="{ hidden: isLoading && !loginSucceeded }" :aria-hidden="isLoading && !loginSucceeded">
               <Check v-if="loginSucceeded" :size="20" />
               <LogIn v-else :size="20" />
               {{ loginSucceeded ? '验证通过，正在进入' : '验证并登录' }}
             </span>
-            <span class="btn-loading" :class="{ visible: isLoading && !loginSucceeded }">
+            <span class="btn-loading" :class="{ visible: isLoading && !loginSucceeded }" :aria-hidden="!isLoading || loginSucceeded">
               <Loader :size="20" class="spinner" />
               验证中...
             </span>

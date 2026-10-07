@@ -76,7 +76,7 @@ onUnmounted(() => {
 .business-layout{--shell-header-height:88px;min-height:100vh;background:var(--color-canvas);overflow:hidden}.business-layout :deep(.studio-header){width:calc(100% - var(--sidebar-width));margin-left:var(--sidebar-width);box-sizing:border-box}
 .business-content{width:calc(100% - var(--sidebar-width));min-width:0;min-height:calc(100vh - var(--shell-header-height));margin-left:var(--sidebar-width);padding:24px clamp(24px,3vw,42px) 48px;box-sizing:border-box;overflow-x:hidden}.business-content:not(.is-workspace)>:deep(*){width:min(1180px,100%);margin-inline:auto}.business-content.is-workspace{height:calc(100vh - var(--shell-header-height));padding:16px 18px 18px;overflow:hidden}
 .business-content:focus{outline:none}
-.sidebar-overlay{position:fixed;inset:0;z-index:998;background:var(--color-overlay);backdrop-filter:blur(4px)}
+.sidebar-overlay{position:fixed;inset:0;z-index:calc(var(--z-sidebar) - 1);background:var(--color-overlay);backdrop-filter:blur(4px)}
 @media(max-width:1024px){.business-layout{--shell-header-height:72px}.business-layout :deep(.studio-header),.business-content{width:100%;margin-left:0}.business-content{padding:18px 16px 36px}.business-content.is-workspace{padding:10px;height:calc(100vh - var(--shell-header-height))}}
 @media(max-width:767px){.business-layout{--shell-header-height:64px}}
 </style>
