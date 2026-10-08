@@ -77,7 +77,7 @@ export class RecoveryStore {
     return recoveryRecordSchema.parse({ ...rest, retryAllowed: retryable(row) })
   }
   private assertAvailable(): void { if (this.unavailable) throw error('RECOVERY_UNAVAILABLE', this.unavailable) }
-  list(owner: string, batchId?: string): RecoveryRecord[] { this.assertAvailable(); return this.records.filter(row => row.owner === owner && (!batchId || row.batchId === batchId)).map(row => this.public(row)) }
+  list(owner: string, batchId?: string): RecoveryRecord[] { this.assertAvailable(); return this.records.filter(row => row.owner === owner && !row.consumedBy && (!batchId || row.batchId === batchId)).map(row => this.public(row)) }
   queue(owner: string, tool: Input, inputs: Array<{ input: Input; batchId: string; itemId: string; originalRow?: number; retryOf?: string }>): RecoveryRecord[] {
     this.assertAvailable()
     const toolId = String(tool.id)

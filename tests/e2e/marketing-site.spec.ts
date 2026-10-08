@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
   page.on('console', message => { if (message.type() === 'error') observed.consoleErrors.push({ text: message.text(), url: message.location().url }) })
   page.on('response', response => {
     if (response.status() === 404 && response.request().resourceType() === 'document'
-      && ['/not-a-page', '/user/login'].includes(new URL(response.url()).pathname)) observed.document404.push(response.url())
+      && ['/not-a-page', '/not-a-page.foo', '/user/login'].includes(new URL(response.url()).pathname)) observed.document404.push(response.url())
   })
   // Never contact a production or external download host during acceptance.
   await page.route('https://**', route => route.abort())
@@ -38,12 +38,13 @@ test.afterEach(async ({ page }) => {
 for (const viewport of viewports) {
   test(`all public routes fit without horizontal overflow at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)
-    for (const route of ['/', '/competition', '/course', '/tools', '/terms', '/not-a-page']) {
-      expect((await page.goto(route))?.status()).toBe(route === '/not-a-page' ? 404 : 200)
-      expect((await page.reload())?.status()).toBe(route === '/not-a-page' ? 404 : 200)
+    for (const route of ['/', '/competition', '/course', '/tools', '/terms', '/not-a-page', '/not-a-page.foo']) {
+      expect((await page.goto(route))?.status()).toBe(route.startsWith('/not-a-page') ? 404 : 200)
+      expect((await page.reload())?.status()).toBe(route.startsWith('/not-a-page') ? 404 : 200)
       await expect(page.locator('body')).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
     }
+    expect((await page.request.get('/assets/missing.js')).status()).toBe(404)
   })
 }
 

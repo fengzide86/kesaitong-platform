@@ -143,13 +143,14 @@ describe('local artifact actual IPC wiring', () => {
     const tool = { id: 'tool_1', executionContext: { input: { sku: 'one' } } }
     await invoke('automation:start', tool)
     start.mock.calls[0]![0].onEvent({ protocolVersion: 1, eventId: 'failed', type: 'run.failed', runId: 'run_1', error: { code: 'RUNNER_PROCESS_INTERRUPTED' } })
-    const records = await invoke('recovery:list', {}) as Array<{ id: string; revision: number }>
+    const records = await invoke('recovery:list', {}) as Array<{ id: string; revision: number; attemptId: string }>
     await invoke('recovery:review', { id: records[0]!.id, revision: records[0]!.revision, conclusion: 'not_completed' })
     await invoke('automation:start', tool)
     expect(start).toHaveBeenCalledTimes(2)
     await expect(invoke('recovery:review', { id: records[0]!.id, revision: records[0]!.revision, conclusion: 'not_completed' })).rejects.toThrow(/变化/)
     const next = await invoke('recovery:list', {}) as Array<{ attemptId: string }>
-    expect(next[0]!.attemptId).not.toBe(next[1]!.attemptId)
+    expect(next).toHaveLength(1)
+    expect(next[0]!.attemptId).not.toBe(records[0]!.attemptId)
   })
   it('packaged IPC rejects legacy demo and untyped starts, even without a customer UI', async () => {
     const { handlers, event, start } = setup()

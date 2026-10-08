@@ -221,8 +221,13 @@ test('packaged local recovery survives restart and manual review stays separate 
     })
     page.on('pageerror', error => evidence.rendererErrors.push(error.message))
     await page.waitForFunction(() => !document.querySelector('.startup-loading') && Boolean(window.electronAPI?.runtime?.deviceId), undefined, { polling: 100 })
-    await page.getByLabel('授权码', { exact: true }).fill(credentials.consumer)
-    await page.getByRole('button', { name: '验证并登录' }).click({ force: true })
+    await expect(page).toHaveURL(/#\/user\/(login|tools)$/)
+    // Reusing this isolated profile also tests native authorization restoration.
+    // A restored session is not supposed to display the login form again.
+    if (new URL(page.url()).hash === '#/user/login') {
+      await page.getByLabel('授权码', { exact: true }).fill(credentials.consumer)
+      await page.getByRole('button', { name: '验证并登录' }).click({ force: true })
+    }
     await expect(page).toHaveURL(/#\/user\/tools$/)
   }
   try {

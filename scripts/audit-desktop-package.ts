@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { extractFile } from '@electron/asar'
+import { auditRuntimeDependencies } from './package-runtime-dependencies.js'
 
 const root = process.cwd()
 const packageRoot = process.env.TOOLBOX_DESKTOP_PACKAGE_DIR || path.join(root, 'release', 'win-unpacked')
@@ -45,6 +46,16 @@ if (forbidden.length) {
 
 function packagedSource(filename: string): string {
   return extractFile(asarPath, filename).toString('utf8')
+}
+
+const runtimeDependencies = auditRuntimeDependencies(filename => {
+  try { return extractFile(asarPath, path.join(...filename.split('/'))).toString('utf8') }
+  catch { return undefined }
+})
+if (runtimeDependencies.issues.length) {
+  throw new Error(`Incomplete packaged runtime dependencies:\n${runtimeDependencies.issues.map(issue => (
+    `${issue.code}: ${issue.chain.join(' -> ')} (${issue.manifestPath}): ${issue.message}`
+  )).join('\n')}`)
 }
 
 const desktopApplicationSource = packagedSource(
@@ -114,3 +125,6 @@ if (internalPolicyFailures.length) {
 console.log(`package_entries=${entries.length}`)
 console.log('package_forbidden_entries=0')
 console.log('package_internal_runtime_policy=verified')
+console.log(`package_runtime_root_dependencies=${runtimeDependencies.rootDependencyCount}`)
+console.log(`package_runtime_resolved_packages=${runtimeDependencies.resolvedPackageCount}`)
+console.log('package_runtime_dependencies=verified')

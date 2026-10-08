@@ -89,6 +89,17 @@ describe('durable recovery ledger', () => {
     writeFileSync(path, JSON.stringify(ledger))
     expect(() => new RecoveryStore(directory).list(owner)).toThrow(/账本损坏/)
   })
+  it('keeps consumed queue history private and excludes a successful row from failure exports', () => {
+    const directory = root(); const store = new RecoveryStore(directory)
+    const queued = store.queue(owner, tool, [{ input: { fixture: 'row' }, batchId: 'batch', itemId: 'row', originalRow: 2 }])[0]!
+    const attempt = store.begin(owner, tool, { fixture: 'row' }, { batchId: 'batch', itemId: 'row', originalRow: 2, retryOf: queued.id })
+    store.observe(owner, attempt.id, { type: 'run.completed' })
+    expect(store.list(owner)).toHaveLength(1)
+    expect(store.list(owner)[0]).toMatchObject({ classification: 'verified' })
+    expect(store.csv(owner, 'batch').count).toBe(0)
+    expect(new RecoveryStore(directory).csv(owner, 'batch').count).toBe(0)
+    expect(readFileSync(join(directory, 'ledger-v1.json'), 'utf8')).toContain(queued.id)
+  })
   it('atomically registers never-dispatched rows and preserves their proof through a process restart', () => {
     const directory = root()
     const store = new RecoveryStore(directory)
