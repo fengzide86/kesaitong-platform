@@ -235,6 +235,24 @@ export class LocalArtifactService {
     }
   }
 
+  /** Called only with a run ID from an owner-verified recovery ledger entry.
+   * No arbitrary path, globbing, current-session registration or directory listing.
+   */
+  async readRecoveredScreenshot(runId: string, authorized: () => Promise<boolean>): Promise<LocalArtifactReadResult> {
+    try {
+      localArtifactReadRequestSchema.parse({ runId, kind: 'screenshot' })
+      if (!await authorized()) return unavailable('screenshot', 'SESSION_CHANGED')
+      const bytes = await this.readControlledFile(path.join(this.directory, `${runId}.png`), runId, 'screenshot', this.maxScreenshotBytes)
+      if (!await authorized()) return unavailable('screenshot', 'SESSION_CHANGED')
+      if (!validPng(bytes)) return unavailable('screenshot', 'INVALID_CONTENT')
+      return { status: 'available', kind: 'screenshot', dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }
+    } catch (cause) {
+      if (object(cause).code === 'ENOENT') return unavailable('screenshot', 'MISSING')
+      const code = cause instanceof Error && 'code' in cause && typeof cause.code === 'string' && Object.hasOwn(messages, cause.code) ? cause.code as LocalArtifactUnavailableCode : 'READ_FAILED'
+      return unavailable('screenshot', code)
+    }
+  }
+
   private async readControlledFile(target: string, runId: string, type: EvidenceType, limit: number): Promise<Buffer> {
     const resolved = path.resolve(target)
     const relative = path.relative(this.directory, resolved)

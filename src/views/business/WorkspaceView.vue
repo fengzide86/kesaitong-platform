@@ -12,13 +12,6 @@
     <AsyncStateNotice v-if="store.bootstrapStale" state="stale" :message="store.error || ''" @retry="refreshTools" />
     <p v-if="store.bootstrapRefreshing && !store.isActive" class="preparation-notice" role="status">正在更新工具目录，暂不能导入或开始新的批次；当前执行不受影响。</p>
     <p v-if="store.preparationNotice && !store.isActive" class="preparation-notice" role="status">{{ store.preparationNotice }}</p>
-    <AsyncStateNotice
-      v-if="!store.isActive && (store.recoveryPending || store.recoveryStorageUnavailable)"
-      state="stale"
-      stale-title="演示退出记录待核对"
-      :message="store.recoveryStorageUnavailable ? '本机未能完整保存待同步状态，请保持页面打开，联网后核对执行记录。' : `有 ${store.recoveryPending} 个演示批次待同步；使用同一授权联网后会自动核对，不会重新启动任务。`"
-      @retry="store.retryRecovery()"
-    />
     <template v-if="!store.isActive && store.snapshot.status !== 'completed'">
       <p class="workspace-privacy"><ShieldCheck :size="16" /><span>Excel 原文和登录凭据仅留在本机</span></p>
       <section v-if="!store.bootstrap" class="workspace-loading-state">

@@ -27,7 +27,7 @@ function deferred() {
 
 function render() {
   return mount(RecordsView, {
-    global: { stubs: { BusinessHelpDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" data-testid="help">帮助</section>' }, ElDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" role="dialog"><slot /><slot name="footer" /></section>' }, RouterLink: { template: '<a><slot /></a>' } } },
+    global: { stubs: { RecoveryPanel: true, BusinessHelpDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" data-testid="help">帮助</section>' }, ElDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" role="dialog"><slot /><slot name="footer" /></section>' }, RouterLink: { template: '<a><slot /></a>' } } },
   })
 }
 
@@ -55,21 +55,19 @@ describe('business record request ordering', () => {
 
   it('opens a read-only result drawer and requests more records', async () => {
     const store = mocks.useStore()
-    store.demoHistory = [{ id: 'one', tool_id: 'tool', tool_name_snapshot: '批量演示', row_count: 1, played_count: 1, skipped_count: 0, error_count: 0, status: 'completed' }]
-    store.demoHistoryTotal = 21
-    mocks.loadDemoHistory.mockResolvedValue(undefined)
-    mocks.getDemoBatch.mockResolvedValue({ ...store.demoHistory[0], items: [{ item_ref: 'private', status: 'played', simulated_outcome: 'attention_example' }] })
+    store.history = [{ id: 'one', tool_name: '真实批次', total_count: 1, completed_count: 1, failed_count: 0, waiting_count: 0, detail_accessible: true, status: 'completed' }]
+    store.liveHistoryHasMore = true
+    mocks.loadHistory.mockResolvedValue(undefined)
+    mocks.getBusinessBatch.mockResolvedValue({ ...store.history[0], items: [{ client_item_id: 'private', status: 'completed' }] })
     const wrapper = render()
     wrappers.push(wrapper)
     await flushPromises()
-    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '历史演示')!.trigger('click')
-    await flushPromises()
     await wrapper.get('.pagination button').trigger('click')
-    expect(mocks.loadDemoHistory).toHaveBeenLastCalledWith(true)
+    expect(mocks.loadHistory).toHaveBeenLastCalledWith(true)
     await wrapper.get('.detail-link').trigger('click')
     await flushPromises()
-    expect(mocks.getDemoBatch).toHaveBeenCalledWith('one')
-    expect(wrapper.get('[role="dialog"]').text()).toContain('人工操作案例（无待办）')
+    expect(mocks.getBusinessBatch).toHaveBeenCalledWith('one')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('已完成')
     expect(wrapper.get('[role="dialog"]').text()).not.toContain('private')
     expect(wrapper.text()).not.toContain('重新准备演示')
     expect(store.resetWorkspace).not.toHaveBeenCalled()
@@ -77,13 +75,11 @@ describe('business record request ordering', () => {
 
   it('retries failed batch details without discarding the history list', async () => {
     const store = mocks.useStore()
-    store.demoHistory = [{ id: 'one', tool_id: 'tool', tool_name_snapshot: '批量演示', row_count: 1, played_count: 1, skipped_count: 0, error_count: 0, status: 'completed' }]
-    mocks.loadDemoHistory.mockResolvedValue(undefined)
-    mocks.getDemoBatch.mockRejectedValueOnce(new Error('详情网络失败')).mockResolvedValueOnce({ ...store.demoHistory[0], items: [] })
+    store.history = [{ id: 'one', tool_name: '真实批次', total_count: 1, completed_count: 1, failed_count: 0, waiting_count: 0, detail_accessible: true, status: 'completed' }]
+    mocks.loadHistory.mockResolvedValue(undefined)
+    mocks.getBusinessBatch.mockRejectedValueOnce(new Error('详情网络失败')).mockResolvedValueOnce({ ...store.history[0], items: [] })
     const wrapper = render()
     wrappers.push(wrapper)
-    await flushPromises()
-    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '历史演示')!.trigger('click')
     await flushPromises()
     await wrapper.get('.detail-link').trigger('click')
     await flushPromises()
@@ -94,14 +90,12 @@ describe('business record request ordering', () => {
     expect(wrapper.findAll('.records-list article')).toHaveLength(1)
   })
 
-  it('does not let a stale demo failure replace a successfully loaded live tab', async () => {
+  it('does not let a stale refresh failure replace a current success', async () => {
     const oldDemo = deferred()
-    mocks.loadDemoHistory.mockReturnValue(oldDemo.promise)
-    mocks.loadHistory.mockResolvedValue(undefined)
+    mocks.loadHistory.mockReturnValueOnce(oldDemo.promise).mockResolvedValue(undefined)
     const wrapper = render()
     wrappers.push(wrapper)
-    await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
-    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('还没有真实批次记录')
 
@@ -115,12 +109,10 @@ describe('business record request ordering', () => {
   it('keeps the current tab loading while an older tab request completes', async () => {
     const oldDemo = deferred()
     const currentLive = deferred()
-    mocks.loadDemoHistory.mockReturnValue(oldDemo.promise)
-    mocks.loadHistory.mockReturnValue(currentLive.promise)
+    mocks.loadHistory.mockReturnValueOnce(oldDemo.promise).mockReturnValue(currentLive.promise)
     const wrapper = render()
     wrappers.push(wrapper)
-    await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
-    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click')
 
     oldDemo.resolve()
     await flushPromises()
@@ -132,12 +124,10 @@ describe('business record request ordering', () => {
 
   it('retains a current error when an older refresh succeeds later', async () => {
     const oldDemo = deferred()
-    mocks.loadDemoHistory.mockReturnValue(oldDemo.promise)
-    mocks.loadHistory.mockRejectedValue(new Error('当前真实批次请求失败'))
+    mocks.loadHistory.mockReturnValueOnce(oldDemo.promise).mockRejectedValue(new Error('当前真实批次请求失败'))
     const wrapper = render()
     wrappers.push(wrapper)
-    await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
-    await wrapper.findAll('[role="tab"]').find(tab => tab.text() === '真实批次')!.trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '刷新')!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('当前真实批次请求失败')
 
@@ -153,7 +143,8 @@ describe('business record request ordering', () => {
     await flushPromises()
     expect(mocks.loadHistory).toHaveBeenCalledWith(false)
     expect(mocks.loadDemoHistory).not.toHaveBeenCalled()
-    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('真实批次')
+    expect(wrapper.find('[role="tab"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('历史演示')
     expect(wrapper.text()).not.toContain('开始批量演示')
     await wrapper.findAll('button').find(button => button.text() === '记录核对 / 使用帮助')!.trigger('click')
     expect(wrapper.find('[data-testid="help"]').exists()).toBe(true)

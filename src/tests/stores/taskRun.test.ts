@@ -145,7 +145,7 @@ describe('taskRun store', () => {
     window.electronAPI = { automation }
     const store = useTaskRunStore()
 
-    await store.start(tool)
+    await store.start(tool, { allowInternalDemo: true })
 
     expect(automation.start).toHaveBeenCalledWith(tool)
     expect(store.status).toBe('preparing')

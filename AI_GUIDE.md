@@ -5,7 +5,7 @@
 这是以亚马逊赛训为主的效率工具箱。C 端核心用户是参赛学生，B 端核心用户是代打团队；课程学员、指导教师与院校、培训机构是次级用户。它不是课程平台、模拟亚马逊网站或通用卖家 SaaS。
 
 - C 端：选择工具并启动，脚本自动处理；仅在登录、验证码或二次验证时要求用户介入。
-- B 端：代打团队使用批量工作台；Live 使用单 Runner 顺序执行，多浏览器现场互相隔离；Demo 最多 50 个账号逻辑并发，不代表真实账号并发。
+- B 端：代打团队使用批量工作台；Live 使用单 Runner 顺序执行，多浏览器现场互相隔离。旧 Demo 仅保留兼容接口与内部测试，不再通过客户界面启动或进入真实记录。
 - 管理端：处理授权、设备、公告、更新、工单和需要人工介入的批次。
 
 用户端不展示成功率、预计时间、线程、内部步骤、任务 ID 或虚假进度。
@@ -17,6 +17,7 @@
 - FastAPI、SQLAlchemy、领域服务：`backend/`
 - 编译后的桌面主进程：`dist-electron/`
 - Electron 使用受控 `app://` 协议加载界面；主进程和 preload 不依赖源码路径。
+- 官网的 `/demo` 是独立静态模拟体验，只使用版本化浏览器样例数据；它不导入业务 API、授权、Runner 或遥测，不恢复线上业务网页版，不代表真实工具验收。本轮不在 Windows 添加新模拟入口。
 
 后端领域入口位于 `backend/domains/`。Router 只处理鉴权、参数和响应，业务规则进入领域 Service。
 
@@ -32,6 +33,8 @@
 8. 旧公告、旧更新上传和旧 launch-token 协议保留到 1.9.0；新版请求发送 `X-Toolbox-Version`。
 9. 只保留右上角账号菜单中的退出入口。
 10. 生产部署脚本使用 `toolbox-backend.service` systemd 服务运行 Uvicorn；仓库中的 Docker Compose 用于本地一致性和集成测试，不是默认生产部署方式。除非用户明确授权，不主动部署、停止或重启生产服务。
+11. 潜在提交前必须得到本机原子恢复标记的确认；超时、崩溃与无充分证据的旧任务默认待核对。人工核对不能伪装为 Runner 成功，成功项不能从恢复批次重复执行。
+12. 文件路径仅来自用户实际选择的受信任本机文件，不上传完整路径或内容；取消保留原值，提交前重新检查存在与可读性。
 
 ## 开发和验证
 
@@ -52,7 +55,7 @@
 - 当前 `internal` 安装包只包含前端产物、编译后的 Electron CJS、必要生产依赖和模板、费率、品牌资源，不包含 Python 后端；`npm run package:audit` 会拒绝内嵌后端文件。
 - 生产发布使用 `node scripts/toolbox-cli.mjs release --publish --version=x.y.z`，同一提交依次发布后端与桌面更新，并验证业务网页版持续下线。要求干净工作区、HEAD 等于已推送的最新 `origin/main`、七项必需 CI（含真实后端旅程）通过且版本高于线上和远端标签。生产不生成或上传业务 Web；`build:web` 仅保留本地预览和隔离界面测试。
 - 生产发布禁止 `--skip-verify` 和 `--skip-build`。新版发布状态为 schemaVersion=2，阶段为 `prepared → backend_deployed → desktop_published → verified`；中断后使用匹配的 `--resume=release-id`。历史 schemaVersion=1 只保留记录，禁止自动迁移或续跑；先核对原发布和租约，再建立新版本发布。后端回滚不得重新开放业务网页。
-- 系统与宣传官网一起发布使用 `node scripts/toolbox-cli.mjs joint-release --version=x.y.z` 或 `联合发布.bat`：先只读核验官网账号及已有项目，再执行原系统完整发布，最后发布 Cloudflare Pages 官网。`--resume` 传递给系统发布器，`--dry-run` 仅做本地官网配置检查，不连接网络。两个通道不是全局原子事务；官网失败但系统成功时只运行 `官网发布.bat` 恢复，不重复发布系统，也不声称整体已完成。
+- 系统与宣传官网一起发布使用 `node scripts/toolbox-cli.mjs joint-release --version=x.y.z` 或 `联合发布.bat`：先只读核验官网账号及已有项目，再执行原系统完整发布，最后按官网配置发布独立静态站点。正式官网 `https://kesaitong.top` 使用 GitHub Pages；必须显式配置 `KST_MARKETING_PROVIDER=github-pages` 和已核验仓库，不能默认按旧 Cloudflare 项目发布。`--resume` 传递给系统发布器，`--dry-run` 仅做本地官网配置检查，不连接网络。两个通道不是全局原子事务；官网失败但系统成功时只运行 `官网发布.bat` 恢复，不重复发布系统，也不声称整体已完成。
 - 桌面更新经服务器私有暂存区和 `publish_update.py` 校验后原子发布；管理端“应用更新”仍用于查看记录和处理已暂存版本。
 - 生产部署 SSH 的目标、私钥和端口只读取当前忽略提交的 `.env.deploy`；未设置 `DEPLOY_SSH_PORT` 时脚本默认 22。不要照搬旧电脑的端口转发假设，也不要修改服务器认证或网络规则。
 - Token、私钥、数据库密码和远程地址只放环境变量；提交前运行 `npm run security:audit`。

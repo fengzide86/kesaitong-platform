@@ -140,10 +140,19 @@
         <el-form-item v-for="field in pendingTool.single_input_schema || []" :key="field.key" :label="field.label" :required="field.required">
           <el-input-number v-if="field.type === 'number'" :model-value="numberInput(field.key)" :controls="false" @update:model-value="value => setNumberInput(field.key, value)" />
           <el-select v-else-if="field.type === 'select'" v-model="runInput[field.key]" placeholder="请选择"><el-option v-for="option in field.options || []" :key="option" :label="option" :value="option" /></el-select>
-          <el-input v-else v-model="runInput[field.key]" :placeholder="field.type === 'file' ? '输入本机文件完整路径' : `请输入${field.label}`" />
+          <div v-else-if="field.type === 'file'" class="file-input" :data-testid="`file-input-${field.key}`">
+            <span class="file-name">{{ selectedFileNames[field.key] || '尚未选择文件' }}</span>
+            <div class="file-actions">
+              <button type="button" :disabled="Boolean(selectingFile) || Boolean(launchingToolId) || !canSelectFile" @click="selectInputFile(field.key, field.label)">{{ selectingFile === field.key ? '正在选择…' : selectedFileNames[field.key] ? '更换文件' : '选择文件' }}</button>
+              <button v-if="selectedFileNames[field.key]" type="button" :disabled="Boolean(launchingToolId)" @click="clearInputFile(field.key)">清除</button>
+            </div>
+            <small>{{ canSelectFile ? '文件仅在本机使用，不上传文件内容或完整路径。' : '请使用支持文件选择的 Windows 客户端。' }}</small>
+            <p v-if="fileInputErrors[field.key]" class="file-error" role="alert">{{ fileInputErrors[field.key] }}</p>
+          </div>
+          <el-input v-else v-model="runInput[field.key]" :placeholder="`请输入${field.label}`" />
         </el-form-item>
       </el-form>
-      <template #footer><div class="run-dialog-actions"><el-button :disabled="Boolean(launchingToolId)" @click="runDialogVisible=false">取消</el-button><el-button type="primary" :loading="Boolean(launchingToolId)" @click="confirmRun">启动自动处理</el-button></div></template>
+      <template #footer><div class="run-dialog-actions"><el-button :disabled="Boolean(launchingToolId)" @click="runDialogVisible=false">取消</el-button><el-button type="primary" :disabled="Boolean(selectingFile)" :loading="Boolean(launchingToolId)" @click="confirmRun">启动自动处理</el-button></div></template>
     </el-dialog>
   </div>
 </template>
@@ -203,6 +212,10 @@ const detailsTool = ref<ToolCatalogItem | null>(null)
 const runDialogVisible = ref(false)
 const pendingTool = ref<ToolCatalogItem | null>(null)
 const runInput = ref<Record<string, string | number | undefined>>({})
+const selectedFileNames = ref<Record<string, string>>({})
+const fileInputErrors = ref<Record<string, string>>({})
+const selectingFile = ref('')
+const canSelectFile = computed(() => typeof window.electronAPI?.files?.select === 'function')
 const runtime = getRuntimeCapabilities()
 const profileVersion = ref(0)
 const refreshProfile = () => { profileVersion.value += 1 }
@@ -235,6 +248,29 @@ function numberInput(key: string): number | undefined {
 
 function setNumberInput(key: string, value: number | null | undefined): void {
   runInput.value[key] = value ?? undefined
+}
+
+function clearInputFile(key: string): void {
+  runInput.value[key] = undefined
+  delete selectedFileNames.value[key]
+  delete fileInputErrors.value[key]
+}
+
+async function selectInputFile(key: string, label: string): Promise<void> {
+  const api = window.electronAPI?.files
+  if (!api || selectingFile.value) return
+  const tool = pendingTool.value
+  selectingFile.value = key
+  try {
+    const selection = await api.select({ label })
+    // Cancellation preserves the previous value. Late dialogs cannot mutate another tool.
+    if (!selection || pendingTool.value !== tool || !runDialogVisible.value) return
+    runInput.value[key] = selection.filePath
+    selectedFileNames.value[key] = selection.fileName
+    delete fileInputErrors.value[key]
+  } catch (error) {
+    if (pendingTool.value === tool) fileInputErrors.value[key] = errorMessage(error, '文件选择失败，请重试')
+  } finally { selectingFile.value = '' }
 }
 
 const userInfo = computed(() => {
@@ -383,6 +419,8 @@ function handleToolClick(rawTool: unknown) {
   if (isLiveTool(tool) && tool.single_input_schema?.length) {
     pendingTool.value = tool
     runInput.value = Object.fromEntries(tool.single_input_schema.map(field => [field.key, undefined]))
+    selectedFileNames.value = {}
+    fileInputErrors.value = {}
     runDialogVisible.value = true
     return
   }
@@ -413,10 +451,28 @@ async function loadData() {
 }
 
 async function confirmRun() {
+  if (selectingFile.value) return
   const tool = pendingTool.value
   if (!tool) return
   const validation = validateSingleToolInput(tool.single_input_schema || [], runInput.value)
-  if (validation) { showToast(validation, 'warning'); return }
+  if (validation) {
+    for (const field of tool.single_input_schema || []) if (field.type === 'file' && field.required && !runInput.value[field.key]) fileInputErrors.value[field.key] = `请选择${field.label}`
+    showToast(validation, 'warning'); return
+  }
+  const fileFields = (tool.single_input_schema || []).filter(field => field.type === 'file' && typeof runInput.value[field.key] === 'string' && runInput.value[field.key])
+  if (fileFields.length) {
+    const api = window.electronAPI?.files
+    if (!api) { showToast('请使用支持文件选择的 Windows 客户端', 'warning'); return }
+    try {
+      const result = await api.validate({ paths: fileFields.map(field => String(runInput.value[field.key])) })
+      if (pendingTool.value !== tool || !runDialogVisible.value) return
+      fileInputErrors.value = {}
+      for (const issue of result.issues) {
+        for (const field of fileFields) if (runInput.value[field.key] === issue.filePath) fileInputErrors.value[field.key] = issue.message
+      }
+      if (!result.valid) return
+    } catch { showToast('本机文件暂时无法核对，请重新选择后重试', 'error'); return }
+  }
   await runTool(tool, { ...runInput.value })
   if (appStore.toolVisible) runDialogVisible.value = false
 }
@@ -434,6 +490,7 @@ async function runTool(tool: ToolCatalogItem, input: Record<string, unknown> = {
     const launchTool = scriptPreflightRequired(tool)
       ? buildPreflightLaunch(tool, platformKey, input)
       : await buildLiveLaunch(tool, platformKey, input)
+    launchTool.executionContext = { ...launchTool.executionContext, fileInputKeys: (tool.single_input_schema || []).filter(field => field.type === 'file').map(field => field.key) }
     if (sequence === launchSequence && platformKey === platformStore.currentPlatform) appStore.openTool(launchTool)
   } catch (error) {
     if (sequence === launchSequence) showToast(errorMessage(error, '工具启动失败，请稍后重试'), 'error')
@@ -450,6 +507,8 @@ watch(() => platformStore.currentPlatform, () => {
   runDialogVisible.value = false
   pendingTool.value = null
   runInput.value = {}
+  selectedFileNames.value = {}
+  fileInputErrors.value = {}
   tools.value = []
   void loadData()
 })
@@ -458,6 +517,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 </script>
 
 <style scoped>
+.file-input{display:grid;gap:8px;width:100%;padding:12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface-soft)}.file-name{overflow-wrap:anywhere;color:var(--color-text)}.file-actions{display:flex;gap:8px;flex-wrap:wrap}.file-actions button{border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);color:var(--color-primary);padding:7px 12px;cursor:pointer}.file-actions button:disabled{opacity:.5;cursor:not-allowed}.file-input small{line-height:1.6;color:var(--color-text-secondary)}.file-input .file-error{margin:0;color:var(--color-danger);line-height:1.5}
 .directory-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 22px}.search-box{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.search-box input{width:100%;min-width:0;border:0;background:transparent;color:var(--color-text);font:inherit;outline:none}.search-box:focus-within{outline:2px solid var(--color-focus-ring)}.available-filter{display:flex;align-items:center;gap:6px;font-size:13px}.directory-filters>button{padding:9px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-text);cursor:pointer}.directory-filters>button[aria-pressed=true]{border-color:var(--color-primary);color:var(--color-primary)}.task-groups{display:grid;gap:16px;margin-bottom:20px}.task-group h3{margin:0 0 10px;font-size:14px;color:var(--color-text-secondary)}.task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.task-grid button{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}.task-grid button[aria-pressed=true]{border-color:var(--color-primary);background:var(--color-primary-soft)}.task-grid span{font-size:12px;line-height:1.6;color:var(--color-text-secondary)}.task-grid small{font-size:11px;color:var(--color-text-tertiary)}.directory-summary{font-size:13px;color:var(--color-text-secondary)}@media(max-width:760px){.task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.task-grid{grid-template-columns:1fr}}
 .toolbox-page {
   width: min(1120px, 100%);

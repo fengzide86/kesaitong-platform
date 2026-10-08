@@ -58,6 +58,7 @@ export async function buildLiveLaunch(
     platformKey,
     deviceId: window.electronAPI?.runtime?.deviceId,
     executionMode: 'single',
+    idempotencyKey: randomId('single_attempt'),
   })
   const parsed = toolLaunchResponseSchema.parse(raw)
   const grant = parsed.launch_data || parsed.grant
@@ -91,7 +92,7 @@ export async function buildLiveLaunch(
 
 export async function refreshLiveLaunch(tool: ActiveTool): Promise<ActiveTool> {
   if (!tool.id) throw new Error('当前工具信息不完整')
-  return buildLiveLaunch({
+  const next = await buildLiveLaunch({
     id: tool.id,
     name: tool.name || '自动化工具',
     module: tool.module,
@@ -99,4 +100,6 @@ export async function refreshLiveLaunch(tool: ActiveTool): Promise<ActiveTool> {
     platform_key: tool.platformKey,
     capability_key: tool.capabilityKey,
   }, tool.platformKey || 'amazon', tool.executionContext?.input || {})
+  if (next.executionContext) next.executionContext.fileInputKeys = tool.executionContext?.fileInputKeys
+  return next
 }

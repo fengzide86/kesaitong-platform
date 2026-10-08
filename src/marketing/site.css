@@ -1,13 +1,53 @@
-html { scroll-behavior: smooth; }
-body { margin: 0; background: #fff; }
+/* This stylesheet is loaded only by the public marketing entry. */
+:root {
+  --m-width: 1160px;
+  --m-gutter: 32px;
+  --m-section: 72px;
+  --m-h1: 56px;
+  --m-h2: 36px;
+  --m-body: 16px;
+  --m-ink: #142b47;
+  --m-text: #46556a;
+  --m-muted: #627084;
+  --m-blue: #245eea;
+  --m-blue-hover: #164ac4;
+  --m-orange: #b34f0b;
+  --m-border: #dce3ed;
+  --m-surface: #f5f7fa;
+  --m-blue-soft: #eff4ff;
+  --m-radius: 16px;
+  --m-duration: 180ms;
+  --m-ease: cubic-bezier(.2, .8, .2, 1);
+}
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body { margin: 0; background: #fff; color: var(--m-ink); font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; font-size: var(--m-body); }
+*, *::before, *::after { box-sizing: border-box; }
 #app { min-height: 100vh; }
-.marketing-document { width: min(880px, calc(100% - 40px)); margin: 56px auto; color: #243047; }
+/* The public site is intentionally self-contained: no business API calls or
+   platform credentials are needed to understand a course/competition scene. */
+.marketing-shell, .landing { min-width: 0; }
+.marketing-shell button, .marketing-shell a, .landing button, .landing a { -webkit-tap-highlight-color: transparent; }
+.marketing-shell button:active:not(:disabled), .marketing-shell a:active { filter: brightness(.96); }
+.marketing-shell :focus-visible, .landing :focus-visible, .marketing-document :focus-visible { outline: 3px solid var(--m-blue); outline-offset: 4px; }
+/* Route focus announces the page to assistive technology, not a page-sized control. */
+[data-route-focus][tabindex="-1"]:focus { outline: none; }
+.marketing-shell h1, .marketing-shell h2, .marketing-shell h3, .landing h1, .landing h2, .landing h3 { letter-spacing: 0; }
+.marketing-shell p { text-wrap: pretty; }
+/* The shared lockup is also used by the application. Enlarge its public-site
+   footer subtitle here without changing the desktop or business interfaces. */
+.landing-footer .kst-brand-lockup .kst-lockup-subtitle { font-size: 13px; line-height: 1.6; }
+.marketing-document { width: min(880px, calc(100% - 2 * var(--m-gutter))); margin: var(--m-section) auto; color: var(--m-ink); }
 .marketing-document > header { padding-bottom: 26px; border-bottom: 1px solid #e2e9f3; }
 .marketing-document h1 { margin: 28px 0 12px; font-size: clamp(28px, 5vw, 40px); font-weight: 600; }
 .marketing-document h2 { margin: 28px 0 12px; font-size: 18px; }
-.marketing-document p { margin: 10px 0; line-height: 1.9; color: #617087; font-size: 14px; }
+.marketing-document p { margin: 10px 0; line-height: 1.9; color: var(--m-text); font-size: var(--m-body); }
 .marketing-document a { color: #1565ff; text-underline-offset: 4px; }
 .marketing-document footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e9f3; }
 .marketing-empty { min-height: 75vh; display: grid; align-content: center; }
-@media (max-width: 640px) { .marketing-document { margin-block: 32px; }.marketing-document p { font-size: 13px; } }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (max-width: 1100px) { :root { --m-gutter: 24px; --m-section: 60px; --m-h1: 44px; --m-h2: 32px; } }
+@media (max-width: 600px) { :root { --m-gutter: 20px; --m-section: 48px; --m-h1: 36px; --m-h2: 28px; --m-body: 15px; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .marketing-shell *, .marketing-shell *::before, .marketing-shell *::after,
+  .landing *, .landing *::before, .landing *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

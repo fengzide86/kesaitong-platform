@@ -16,14 +16,13 @@
       <div><strong>{{ waitingCount }} 个账号等待你操作</strong><p>批次仍在运行，请进入工作台查看需要处理的账号。</p></div>
       <router-link to="/business/workspace">去处理</router-link>
     </section>
-    <section v-else-if="store.snapshot.recordKind === 'demo' && store.snapshot.status === 'completed'" class="completion-note" role="status">最近一次批量演示已结束。人工操作与异常案例是演示结果，不是待处理任务；可到记录中复盘。</section>
     <section class="capability-grid">
       <article><FileSpreadsheet :size="20" /><div><span>真实工具目录</span><strong>{{ customerToolCount }} 项目录能力</strong></div><small>本机当前 {{ usableToolCount }} 个可用批量工具；按脚本、授权和桌面能力判断</small></article>
       <article><PanelsTopLeft :size="20" /><div><span>批次与结果</span><strong>真实批次单独记录</strong></div><small>原表行号帮助核对；未完成不等于可直接重试</small></article>
       <article><ShieldCheck :size="20" /><div><span>随时求助</span><strong>导入前也能联系支持</strong></div><small>无工具、导入问题和执行记录均可从使用帮助提交工单</small></article>
     </section>
     <section class="surface recent">
-      <header><div><span>最近真实批次</span><small>历史演示保留在记录页，不计入真实执行统计</small></div><router-link to="/business/records">全部记录</router-link></header>
+      <header><div><span>最近真实批次</span><small>仅展示真实工具执行结果</small></div><router-link to="/business/records">全部记录</router-link></header>
       <AsyncStateNotice :state="historyState" :message="store.historyError || ''" loading-text="正在加载真实批次..." @retry="loadHistory" />
       <div v-if="(historyState === 'data' || historyState === 'stale') && store.history.length" class="batch-list">
         <article v-for="batch in store.history.slice(0, 5)" :key="batch.id">
@@ -35,7 +34,7 @@
       <div v-else-if="historyState === 'empty'" class="empty">
         <span class="empty-icon"><Layers3 :size="24" /></span>
         <strong>还没有真实批次记录</strong>
-        <p>开放工具完成真实批次后，结果会显示在这里；历史演示仍可在记录页查看。</p>
+        <p>开放工具完成真实批次后，结果会显示在这里。</p>
       </div>
     </section>
     <BusinessHelpDrawer v-model="helpOpen" entry-point="专业概览" />

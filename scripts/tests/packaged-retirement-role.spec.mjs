@@ -96,6 +96,8 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
       await page.waitForFunction(() => !document.querySelector('.startup-loading') && Boolean(window.electronAPI?.runtime?.deviceId), undefined, { polling: 100 })
       expect(page.url()).toMatch(/^app:\/\/toolbox\/index\.html/)
       expect(await page.evaluate(() => window.electronAPI.runtime.controlApiBase)).toBe(api)
+      expect(await page.evaluate(() => ['select', 'validate', 'clear'].every(method => typeof window.electronAPI.files?.[method] === 'function'))).toBe(true)
+      expect(await page.evaluate(() => ['list', 'review', 'prepare', 'export'].every(method => typeof window.electronAPI.recovery?.[method] === 'function'))).toBe(true)
       await expect(page).toHaveURL(/#\/user\/login$/)
       await expect(page.getByLabel('授权码', { exact: true })).toBeVisible()
 
@@ -108,15 +110,37 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
         expect(authenticated.status()).toBe(200)
         await expect(page).toHaveURL(role === 'consumer' ? /#\/user\/tools$/ : /#\/business\/overview$/)
         if (role === 'consumer') {
+          expect(await page.evaluate(() => window.electronAPI.recovery.list())).toEqual([])
+          const fixtureFile = join(runtime, '商品 资料.txt')
+          writeFileSync(fixtureFile, 'Isolated local-file bridge fixture; not customer contents')
+          // Stub only the OS choice in this isolated process. The packaged
+          // trusted IPC, local readability/selection ownership remain real.
+          await application.evaluate(({ dialog }, selected) => {
+            globalThis.__kstOriginalOpenDialog = dialog.showOpenDialog
+            dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] })
+          }, fixtureFile)
+          const chosen = await page.evaluate(() => window.electronAPI.files.select({ label: '本地验收资料' }))
+          expect(chosen.fileName).toBe('商品 资料.txt')
+          expect((await page.evaluate(filePath => window.electronAPI.files.validate({ paths: [filePath] }), fixtureFile)).valid).toBe(true)
+          await application.evaluate(({ dialog }) => { dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] }) })
+          expect(await page.evaluate(() => window.electronAPI.files.select({ label: '取消选择' }))).toBeNull()
+          expect((await page.evaluate(filePath => window.electronAPI.files.validate({ paths: [filePath] }), fixtureFile)).valid).toBe(true)
+          await application.evaluate(({ dialog }, selected) => {
+            process.mainModule.require('node:fs').unlinkSync(selected)
+            dialog.showOpenDialog = globalThis.__kstOriginalOpenDialog
+          }, fixtureFile)
+          expect((await page.evaluate(filePath => window.electronAPI.files.validate({ paths: [filePath] }), fixtureFile)).valid).toBe(false)
+          evidence.fileBridge = ['Chinese and spaces', 'cancel retained choice', 'deleted file rejected', 'no control-plane file upload']
           await navigate(page, '/user/plans')
           await expect(page.getByRole('region', { name: '当前授权摘要' })).toBeVisible()
           await expect(page.locator('.license-summary')).toContainText('5 台')
           evidence.screenshots.push(await capture(application, page, 'consumer-license'))
           await navigate(page, '/user/logs')
-          await page.getByRole('tab', { name: '真实执行', exact: true }).click({ force: true })
+          await expect(page.getByRole('tab', { name: '历史演示', exact: true })).toHaveCount(0)
           await expect(page.getByText('还没有真实执行记录', { exact: true })).toBeVisible()
           evidence.screenshots.push(await capture(application, page, 'consumer-records'))
         } else {
+          expect(await page.evaluate(() => window.electronAPI.recovery.list())).toEqual([])
           await navigate(page, '/business/license')
           await expect(page.locator('.limits-grid')).toContainText('已授权')
           evidence.screenshots.push(await capture(application, page, 'business-license'))
@@ -175,3 +199,71 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
     }
   })
 }
+
+test('packaged local recovery survives restart and manual review stays separate from Runner success', async () => {
+  const environment = { ...process.env, NODE_ENV: 'production', TOOLBOX_RUNTIME_DIR: join(runtime, 'packaged-recovery-profile'), TOOLBOX_CONTROL_API_URL: api, TOOLBOX_USE_BUNDLED_BACKEND: 'false' }
+  delete environment.ELECTRON_RUN_AS_NODE
+  let application
+  let page
+  const evidence = { status: 'running', fixture: 'synthetic local ledger only; no Runner or real platform submission', screenshots: [], rendererErrors: [] }
+  async function open() {
+    application = await electron.launch({ executablePath: executable, args: ['--disable-backgrounding-occluded-windows'], env: environment, timeout: 30_000 })
+    await application.evaluate(({ session }, feed) => {
+      const updater = process.mainModule.require('electron-updater').autoUpdater
+      updater.setFeedURL({ provider: 'generic', url: `${feed}/updates/` }); updater.autoDownload = false
+      session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => callback({ cancel: !['localhost', '127.0.0.1'].includes(new URL(details.url).hostname) }))
+    }, api)
+    page = await application.firstWindow()
+    await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      window.webContents.setBackgroundThrottling(false); window.setContentSize(1440, 1000); window.hide()
+      globalThis.__kstRetirementHideWindow = () => window.hide(); window.on('show', globalThis.__kstRetirementHideWindow)
+    })
+    page.on('pageerror', error => evidence.rendererErrors.push(error.message))
+    await page.waitForFunction(() => !document.querySelector('.startup-loading') && Boolean(window.electronAPI?.runtime?.deviceId), undefined, { polling: 100 })
+    await page.getByLabel('授权码', { exact: true }).fill(credentials.consumer)
+    await page.getByRole('button', { name: '验证并登录' }).click({ force: true })
+    await expect(page).toHaveURL(/#\/user\/tools$/)
+  }
+  try {
+    await open()
+    await application.evaluate(async ({ app, BrowserWindow, net }, origin) => {
+      const path = process.mainModule.require('node:path')
+      const { RecoveryStore, recoveryOwnerHash } = process.mainModule.require(path.join(app.getAppPath(), 'dist-electron/electron/automation/recovery-store.cjs'))
+      const token = await BrowserWindow.getAllWindows()[0].webContents.executeJavaScript('sessionStorage.getItem("toolbox_token")')
+      const response = await net.fetch(`${origin}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      const user = (await response.json()).data
+      if (!response.ok || user.role !== 'user') throw new Error('Isolated fixture owner not verified')
+      const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'))
+      const owner = recoveryOwnerHash([origin, user.user_id, claims.auth_code_id || null, claims.device_id || user.device_id || null])
+      const store = new RecoveryStore(path.join(app.getPath('userData'), 'recovery-metadata'))
+      const tool = { id: 'isolated-ui-fixture', launchGrant: { toolVersion: '1.0.0' } }
+      const unknown = store.begin(owner, tool, { fixture: 'unknown' }, { batchId: 'isolated-ui-batch', itemId: 'row2', originalRow: 2 })
+      store.mutation(owner, unknown.id)
+      store.observe(owner, unknown.id, { type: 'run.failed', error: { code: 'TIMEOUT' } })
+      const safe = store.begin(owner, tool, { fixture: 'safe' }, { batchId: 'isolated-ui-batch', itemId: 'row3', originalRow: 3 })
+      store.observe(owner, safe.id, { type: 'run.failed', error: { code: 'BROWSER_NOT_FOUND' } })
+    }, api)
+    await application.close()
+    await open()
+    await navigate(page, '/user/logs')
+    await expect(page.getByTestId('recovery-panel')).toContainText('原表第 2 行 · 结果待核对')
+    await expect(page.getByTestId('recovery-panel')).toContainText('原表第 3 行 · 确定未提交')
+    const records = await page.evaluate(() => window.electronAPI.recovery.list())
+    expect(records.find(row => row.originalRow === 2)).toMatchObject({ classification: 'needs_review', executionStatus: 'failed', retryAllowed: false })
+    evidence.screenshots.push(await capture(application, page, 'recovery-review-needed'))
+    await page.locator('.recovery-row').filter({ hasText: '原表第 2 行' }).getByRole('button', { name: '记录核对结论' }).click({ force: true })
+    await expect(page.getByRole('button', { name: '确认未完成', exact: true })).toBeDisabled()
+    await page.getByText('我已在平台查看同一业务对象的当前状态', { exact: true }).click({ force: true })
+    evidence.screenshots.push(await capture(application, page, 'recovery-conclusion-dialog'))
+    await page.getByRole('button', { name: '确认未完成', exact: true }).click({ force: true })
+    await expect(page.getByTestId('recovery-panel')).toContainText('原表第 2 行 · 人工核对未完成')
+    expect((await page.evaluate(() => window.electronAPI.recovery.list())).find(row => row.originalRow === 2)).toMatchObject({ classification: 'manual_not_completed', executionStatus: 'failed', retryAllowed: true })
+    evidence.screenshots.push(await capture(application, page, 'recovery-manual-not-completed'))
+    expect(evidence.rendererErrors).toEqual([])
+    evidence.status = 'passed'
+  } finally {
+    await application?.close().catch(() => application.process().kill())
+    writeFileSync(join(runtime, 'packaged-recovery-evidence.json'), JSON.stringify(evidence, null, 2))
+  }
+})

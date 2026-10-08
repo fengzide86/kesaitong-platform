@@ -16,6 +16,7 @@ const {
   detectPlaywrightInterruption,
   executePlaywrightAction,
   isTransientActionError,
+  resolveValue,
 } = require('./automation/action-engine.cjs');
 const { persistPageScan, scanPlaywrightPage } = require('./automation/page-scanner.cjs');
 const { CheckpointStore } = require('./automation/checkpoint-store.cjs');
@@ -185,6 +186,9 @@ class AutomationRuntime {
     this.tool = { ...tool };
     const resolvedAdapter = await this.resolveAdapter(tool);
     this.script = resolvedAdapter.adapter;
+    if (tool.executionMode === 'live' && this.script.sandbox && process.env.TOOLBOX_INTERNAL_DEMO !== '1') {
+      throw this.runnerError('LEGACY_DEMO_DISABLED', '真实执行入口不能使用旧演示适配器。');
+    }
     this.adapterSource = resolvedAdapter.source;
     if (this.scriptStatus(tool, this.script) !== 'ready') {
       throw this.runnerError('TOOL_SCRIPT_NOT_READY', '当前工具的自动化脚本尚未就绪，已禁止执行');
@@ -358,7 +362,8 @@ class AutomationRuntime {
         this.validateInput(input);
         fs.mkdirSync(PROFILE_ROOT, { recursive: true });
         fs.mkdirSync(ARTIFACT_ROOT, { recursive: true });
-        const checkpointKey = this.tool.executionContext?.sessionId || `${this.script.key}_${this.tool.id || 'tool'}`;
+        // A new attempt must never skip prior form-filling or click checkpoints.
+        const checkpointKey = this.runId || `${this.script.key}_${this.tool.id || 'tool'}`;
         this.checkpoint = new CheckpointStore(path.join(PROFILE_ROOT, 'checkpoints'), checkpointKey, String(this.script.key || ''), input);
 
         if (this.script.sandbox && !MOCK_MODE) {
@@ -502,13 +507,21 @@ class AutomationRuntime {
       this.checkpoint?.mark(action.id);
       return;
     }
-    const attempts = Math.min(Math.max(Number(action.retries) || 2, 1), 4);
+    // Unknown adapters may autosave on fill/select; conservatively mark all
+    // UI changes before dispatch. ACK is durable in the main-process ledger.
+    const potentialMutation = ['fill', 'select', 'click', 'check', 'upload'].includes(String(action.kind));
+    const guarded = potentialMutation && this.tool.executionMode === 'live' && !this.script.sandbox;
+    const attempts = guarded ? 1 : Math.min(Math.max(Number(action.retries) || 2, 1), 4);
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       await this.waitWhilePaused();
       this.ensureActive();
       await this.handleInterruptionIfNeeded();
       await this.throttle();
+      // Both embedded and Playwright uploads must prove that this exact path
+      // was picked in the owning desktop window and is still readable.
+      if (!MOCK_MODE && action.kind === 'upload') await this.hostRequest('files.validate-upload', { filePath: resolveValue(action, input) });
+      if (guarded) await this.hostRequest('recovery.before-mutation', { actionId: action.id });
       try {
         if (MOCK_MODE) await this.sleep(20);
         else if (this.tool.browserMode === 'embedded-cdp') await this.hostRequest('browser.action', { action, input }, Number(action.timeoutMs) || 15000);

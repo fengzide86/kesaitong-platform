@@ -31,6 +31,7 @@ import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
 import { BusinessDemoCoordinator } from '@/features/business/demo-coordinator'
 import { BusinessLiveCoordinator } from '@/features/business/live-coordinator'
 import type { BusinessBatchSnapshot } from '@/features/business/model'
+import { getApiBase } from '@/shared/api/base'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -50,6 +51,9 @@ describe('business workspace sync outbox', () => {
     sessionStorage.setItem('toolbox_auth', JSON.stringify({ token: 'isolated-store-test-token', role: 'user' }))
     localStorage.setItem('toolbox_user', JSON.stringify({ user_id: 123, device_id: 'test-device', product_type: 'business' }))
     setActivePinia(createPinia())
+    // Legacy compatibility cases are explicit internal fixtures, not the
+    // default customer store lifecycle.
+    useBusinessWorkspaceStore().enableInternalDemoFixtures()
     Object.values(apiMocks).forEach(mock => mock.mockReset())
     apiMocks.getBusinessBootstrap.mockResolvedValue({ entitlements: {}, tools: [] })
     apiMocks.getDemoBatches.mockResolvedValue([])
@@ -83,6 +87,40 @@ describe('business workspace sync outbox', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.useRealTimers()
+    vi.unstubAllEnvs()
+  })
+
+  it('customer initialization preserves old Demo receipts without recovery requests or visible snapshots', async () => {
+    setActivePinia(createPinia())
+    const store = useBusinessWorkspaceStore()
+    const scope = JSON.stringify([getApiBase(), 123, null, 'test-device'])
+    const key = `toolbox_demo_recovery_v1:${encodeURIComponent(scope)}:legacy-batch`
+    const receipt = JSON.stringify({ version: 1, batchId: 'legacy-batch', status: 'cancelled', eventSeq: 4, revision: 'old-revision' })
+    localStorage.setItem(key, receipt)
+    store.snapshot = { status: 'running', recordKind: 'demo', batchId: 'legacy-batch', items: [], counts: {} }
+    expect(store.isActive).toBe(false)
+    await store.init()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(store.snapshot).toMatchObject({ status: 'idle', recordKind: 'live', items: [] })
+    expect(store.recoveryPending).toBe(0)
+    expect(store.legacyDemoFixturesEnabled).toBe(false)
+    expect(localStorage.getItem(key)).toBe(receipt)
+    await expect(store.loadDemoHistory()).resolves.toEqual([])
+    store.retryRecovery()
+    expect(apiMocks.getDemoBatch).not.toHaveBeenCalled()
+    expect(apiMocks.updateDemoBatch).not.toHaveBeenCalled()
+    expect(apiMocks.getDemoBatches).not.toHaveBeenCalled()
+    store.dispose()
+  })
+
+  it('production ignores an explicit internal fixture enable request', () => {
+    vi.stubEnv('DEV', false)
+    vi.stubEnv('MODE', 'production')
+    setActivePinia(createPinia())
+    const store = useBusinessWorkspaceStore()
+    store.enableInternalDemoFixtures()
+    expect(store.legacyDemoFixturesEnabled).toBe(false)
+    store.dispose()
   })
 
   async function preparePendingDemo() {

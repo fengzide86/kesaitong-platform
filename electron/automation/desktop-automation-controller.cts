@@ -1,5 +1,6 @@
 import {
   app,
+  dialog,
   net,
   safeStorage,
   shell,
@@ -11,6 +12,9 @@ import {
   type WebContents,
 } from 'electron'
 import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
+import { RecoveryStore, recoveryOwnerHash } from './recovery-store.cjs'
+import type { RecoveryQuery, RecoveryReview, RecoveryPrepare } from '../../src/shared/ipc/recovery-contract.js'
 
 import {
   parseDesktopIpcEvent,
@@ -25,6 +29,7 @@ import { DesktopBatchController } from './desktop-batch-controller.cjs'
 import { RunnerClient } from './runner-client.cjs'
 import { ExecutionReportOutbox } from './execution-report-outbox.cjs'
 import { LocalArtifactService } from './local-artifact-service.cjs'
+import { FileInputController } from './file-input-controller.cjs'
 import type { LocalArtifactReadRequest, LocalArtifactReadResult } from '../../src/shared/ipc/artifact-contract.js'
 
 type UnknownRecord = Record<string, unknown>
@@ -102,10 +107,17 @@ export class DesktopAutomationController {
   private singleStartInFlight = false
   private readonly reportOutbox: ExecutionReportOutbox
   private readonly artifacts: LocalArtifactService
+  private readonly recovery: RecoveryStore
+  private singleRecovery: { owner: string; id: string; sender: WebContents } | null = null
+  private readonly fileInputs: FileInputController
   private pendingArtifactOwner: { owner: WebContents; generation: number } | null = null
+  private runnerEpoch = 0
+  private sessionRevocation: Promise<void> | null = null
 
   constructor(options: DesktopAutomationControllerOptions) {
     this.options = options
+    this.recovery = new RecoveryStore(join(app.getPath('userData'), 'recovery-metadata'))
+    this.fileInputs = new FileInputController(options.getWindow)
     this.artifacts = new LocalArtifactService({ directory: join(app.getPath('userData'), 'automation-artifacts') })
     this.reportOutbox = new ExecutionReportOutbox({
       directory: join(app.getPath('userData'), 'pending-records'),
@@ -119,6 +131,9 @@ export class DesktopAutomationController {
       registerAutomationHandle: options.registerAutomationHandle,
       onActivityChanged: options.onActivityChanged,
       showNotification: options.showNotification,
+      recoveryStore: this.recovery,
+      resolveOwner: (sender: WebContents) => this.resolveRecoveryOwner(sender),
+      validateUpload: (sender: WebContents, filePath: unknown) => this.fileInputs.validateUpload(sender, filePath),
     })
   }
 
@@ -126,6 +141,8 @@ export class DesktopAutomationController {
     if (this.options.automationEnabled) this.reportOutbox.start()
     this.registerToolLaunchIpc()
     this.registerSingleRunIpc()
+    this.registerRecoveryIpc()
+    this.fileInputs.register(this.options.registerAutomationHandle)
     this.options.registerAutomationHandle('artifacts:read', (event: IpcMainInvokeEvent, request: LocalArtifactReadRequest): LocalArtifactReadResult | Promise<LocalArtifactReadResult> => {
       if (this.pendingArtifactOwner?.owner === event.sender) {
         return { status: 'unavailable', kind: request.kind, code: 'NOT_AVAILABLE', message: '任务正在准备，请稍后查看本机证据。' }
@@ -161,6 +178,7 @@ export class DesktopAutomationController {
 
   resetArtifactsForOwner(ownerId: number): void {
     this.artifacts.reset(ownerId)
+    this.fileInputs.clear(ownerId)
     if (this.pendingArtifactOwner?.owner.id === ownerId) this.pendingArtifactOwner = null
   }
 
@@ -216,11 +234,20 @@ export class DesktopAutomationController {
 
   private getRunner(): RunnerLike {
     if (this.runner) return this.runner
+    const epoch = this.runnerEpoch
     this.runner = new RunnerClient({
       scriptPath: join(__dirname, '..', 'automation-runner.cjs'),
       env: { ...this.runnerEnvironment(), TOOLBOX_PERSIST_REPORTS: '1' },
       onEvent: (rawEvent: unknown) => {
-        const event = parseDesktopIpcEvent('automation:event', rawEvent)
+        if (epoch !== this.runnerEpoch) return
+        let event = parseDesktopIpcEvent('automation:event', rawEvent)
+        if (this.singleRecovery) {
+          try { this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, event) }
+          catch {
+            void this.runner?.stop().catch(() => undefined)
+            event = { ...event, type: 'run.failed', error: { code: 'RECOVERY_SAVE_FAILED', message: '本机恢复记录保存失败；执行结果待核对，请勿重复提交。' } }
+          }
+        }
         const pending = this.pendingArtifactOwner
         if (pending && event.type === 'run.started') {
           this.artifacts.registerRun(pending.owner, pending.generation, event.runId)
@@ -240,9 +267,27 @@ export class DesktopAutomationController {
           })
         }
       },
-      onHostRequest: (action: string, payload: UnknownRecord) => action === 'execution.report'
-        ? this.reportOutbox.submit(payload)
-        : this.embeddedBrowserHost.request(action, payload),
+      onHostRequest: async (action: string, payload: UnknownRecord) => {
+        if (epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 原授权现场已经退出，已禁止继续操作。')
+        if (action === 'files.validate-upload' || (action === 'browser.action' && asRecord(payload.action).kind === 'upload')) {
+          const record = this.singleRecovery
+          if (!record || await this.resolveRecoveryOwner(record.sender) !== record.owner || epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('授权已变化，已禁止上传本机文件。')
+          const upload = asRecord(payload.action)
+          const filePath = action === 'files.validate-upload' ? payload.filePath
+            : typeof upload.inputKey === 'string' ? asRecord(payload.input)[upload.inputKey] : upload.value
+          const result = await this.fileInputs.validateUpload(record.sender, filePath)
+          if (epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('SESSION_REVOKED: 原授权上传已经退出。')
+          if (action === 'files.validate-upload') return result
+        }
+        if (action === 'recovery.before-mutation') {
+          const record = this.singleRecovery
+          if (!record) throw new Error('缺少本机恢复记录，已禁止提交。')
+          if (await this.resolveRecoveryOwner(record.sender) !== record.owner || epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('授权已变化，已禁止继续提交。')
+          this.recovery.mutation(record.owner, record.id)
+          return { saved: true }
+        }
+        return action === 'execution.report' ? this.reportOutbox.submit(payload) : this.embeddedBrowserHost.request(action, payload)
+      },
     }) as RunnerLike
     return this.runner
   }
@@ -311,8 +356,15 @@ export class DesktopAutomationController {
   private registerSingleRunIpc(): void {
     const register = this.options.registerAutomationHandle
     register('automation:start', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
+      if (this.sessionRevocation) await this.sessionRevocation
+      const epoch = this.runnerEpoch
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
+      if (tool.executionMode !== 'live' && !(tool.executionMode === 'demo' && !app.isPackaged && process.env.TOOLBOX_INTERNAL_DEMO === '1')) {
+        throw new Error('LEGACY_DEMO_DISABLED: 客户执行入口不再提供旧演示或模拟回退')
+      }
+      const context = asRecord(tool.executionContext)
+      const input = asRecord(context.input)
       // Keep the original single-Runner boundary while binding evidence to one
       // launch request. Auth reset must not release a still-pending start.
       if (this.singleStartInFlight || this.singleRunActive) {
@@ -322,18 +374,38 @@ export class DesktopAutomationController {
       const pending = { owner: event.sender, generation: this.artifacts.begin(event.sender) }
       this.pendingArtifactOwner = pending
       try {
+        this.singleRecovery = null
+        // Renderer keys are display hints only. The verified control catalog is
+        // authoritative, including when the renderer omits or empties its list.
+        const session = tool.executionMode === 'live' ? await this.resolveRecoverySession(event.sender) : null
+        const paths = session ? await this.trustedFilePaths(event.sender, session.token, tool.id, input) : []
+        const validation = await this.fileInputs.validate(event.sender, paths)
+        if (epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 授权已经退出，请重新打开工具。')
+        if (!validation.valid) throw new Error(`LOCAL_FILE_UNREADABLE: ${validation.issues[0]?.message || '本机文件无法读取'}`)
+        if (session) {
+          if (event.sender.isDestroyed() || this.options.getWindow()?.webContents !== event.sender || await event.sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== session.token) throw new Error('授权在文件验证期间已变化，请重新打开工具。')
+          const owner = session.owner
+          const context = asRecord(tool.executionContext)
+          const record = this.recovery.begin(owner, tool, asRecord(context.input))
+          this.singleRecovery = { owner, id: record.id, sender: event.sender }
+        }
         const result = await this.getRunner().start({
           ...tool,
           browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',
         })
+        if (epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 原授权执行已退出，已保留待核对记录。')
         this.artifacts.registerRun(pending.owner, pending.generation, asRecord(result).runId)
         return result
+      } catch (cause) {
+        if (this.singleRecovery) this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, { type: 'run.failed', error: { code: 'START_FAILED' } })
+        throw cause
       } finally {
         this.singleStartInFlight = false
         if (this.pendingArtifactOwner === pending) this.pendingArtifactOwner = null
       }
     })
     register('automation:preflight', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
+      if (this.sessionRevocation) await this.sessionRevocation
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
       this.resetArtifactsForOwner(event.sender.id)
@@ -355,6 +427,106 @@ export class DesktopAutomationController {
       return this.embeddedBrowserHost.register(guest)
     })
     register('automation:unregister-browser', () => this.embeddedBrowserHost.release())
+  }
+
+  private async resolveRecoverySession(sender: WebContents): Promise<{ owner: string; token: string }> {
+    const token: unknown = await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false)
+    if (typeof token !== 'string' || !token) throw new Error('请先登录有效授权后查看本机恢复记录。')
+    const response = await net.fetch(`${this.options.controlApiBase}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}`, 'X-Toolbox-Version': app.getVersion() }, signal: AbortSignal.timeout(15000),
+    })
+    const envelope = asRecord(await response.json())
+    const user = asRecord(envelope.data)
+    if (!response.ok || envelope.success !== true || user.role !== 'user' || !user.user_id) throw new Error('恢复权限验证失败，请重新登录。')
+    if (await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== token) throw new Error('授权在验证期间已变化，请重新打开工具。')
+    // Read claims only after this exact token was accepted by the control API.
+    let claims: UnknownRecord = {}
+    try { claims = asRecord(JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'))) } catch { /* opaque tokens use verified profile */ }
+    return { owner: recoveryOwnerHash([this.options.controlApiBase, user.user_id, claims.auth_code_id || null, claims.device_id || user.device_id || null]), token }
+  }
+
+  private async resolveRecoveryOwner(sender: WebContents): Promise<string> {
+    return (await this.resolveRecoverySession(sender)).owner
+  }
+
+  private async trustedFilePaths(sender: WebContents, token: string, toolId: unknown, input: UnknownRecord): Promise<string[]> {
+    const response = await net.fetch(`${this.options.controlApiBase}/api/tools`, {
+      headers: { Authorization: `Bearer ${token}`, 'X-Toolbox-Version': app.getVersion() }, signal: AbortSignal.timeout(15000),
+    })
+    const catalog: unknown = await response.json()
+    if (!response.ok || !Array.isArray(catalog)) throw new Error('TOOL_SCHEMA_UNAVAILABLE: 工具参数配置不可用，请稍后重试')
+    const tool = catalog.map(asRecord).find(row => row.id === toolId)
+    if (!tool || !Array.isArray(tool.single_input_schema)) throw new Error('TOOL_SCHEMA_UNAVAILABLE: 未找到有效工具参数配置')
+    if (sender.isDestroyed() || this.options.getWindow()?.webContents !== sender || await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== token) throw new Error('授权在参数验证期间已变化，请重新打开工具。')
+    const paths: string[] = []
+    for (const rawField of tool.single_input_schema) {
+      const field = asRecord(rawField)
+      if (field.type !== 'file') continue
+      if (typeof field.key !== 'string' || !field.key) throw new Error('TOOL_SCHEMA_UNAVAILABLE: 文件参数配置无效')
+      const value = input[field.key]
+      if (value === undefined || value === null || value === '') {
+        if (field.required !== false) throw new Error('LOCAL_FILE_REQUIRED: 请先选择工具所需的本机文件')
+      } else if (typeof value !== 'string') throw new Error('LOCAL_FILE_REQUIRED: 文件参数必须来自本机文件选择')
+      else paths.push(value)
+    }
+    return paths
+  }
+
+  private registerRecoveryIpc(): void {
+    const register = this.options.registerAutomationHandle
+    register('recovery:revoke-session', async () => {
+      this.runnerEpoch += 1
+      const prior = this.singleRecovery
+      const runner = this.runner
+      this.runner = null
+      this.singleRecovery = null
+      this.singleRunActive = false
+      this.pendingArtifactOwner = null
+      const sender = this.options.getWindow()?.webContents
+      if (sender) this.resetArtifactsForOwner(sender.id)
+      this.embeddedBrowserHost.release()
+      if (prior) {
+        try { this.recovery.observe(prior.owner, prior.id, { type: 'run.interrupted', error: { code: 'SESSION_REVOKED' } }) }
+        catch { /* unavailable ledger keeps further execution fail-closed */ }
+      }
+      const previous = this.sessionRevocation
+      const current = (async () => {
+        await previous
+        await Promise.all([runner?.stop(), this.batchController.revokeSession()])
+        this.options.onActivityChanged()
+      })()
+      this.sessionRevocation = current
+      await current
+      if (this.sessionRevocation === current) this.sessionRevocation = null
+    })
+    register('recovery:list', async (event: IpcMainInvokeEvent, query: RecoveryQuery) => this.recovery.list(await this.resolveRecoveryOwner(event.sender), query.batchId))
+    register('recovery:review', async (event: IpcMainInvokeEvent, request: RecoveryReview) => this.recovery.review(await this.resolveRecoveryOwner(event.sender), request.id, request.revision, request.conclusion))
+    register('recovery:prepare', async (event: IpcMainInvokeEvent, request: RecoveryPrepare) => this.batchController.prepareRecovery(await this.resolveRecoveryOwner(event.sender), request))
+    register('recovery:read-evidence', async (event: IpcMainInvokeEvent, id: string) => {
+      const owner = await this.resolveRecoveryOwner(event.sender)
+      const record = this.recovery.list(owner).find(row => row.id === id)
+      if (!record?.runId) return { status: 'unavailable', kind: 'screenshot', code: 'NO_EVIDENCE', message: '这条记录没有可读取的本机证据。' }
+      return this.artifacts.readRecoveredScreenshot(record.runId, async () => {
+        try { return !event.sender.isDestroyed() && await this.resolveRecoveryOwner(event.sender) === owner } catch { return false }
+      })
+    })
+    register('recovery:open-platform', async (event: IpcMainInvokeEvent, id: string) => {
+      const origin = this.recovery.origin(await this.resolveRecoveryOwner(event.sender), id)
+      if (!origin || !this.options.mayOpenExternalUrl(origin)) throw new Error('记录未保存可安全打开的平台入口，请自行打开平台核对。')
+      await shell.openExternal(origin)
+    })
+    register('recovery:export', async (event: IpcMainInvokeEvent, query: RecoveryQuery) => {
+      const owner = await this.resolveRecoveryOwner(event.sender)
+      const csv = this.recovery.csv(owner, query.batchId)
+      const window = this.options.getWindow()
+      const options = { title: '导出失败及待核对行', defaultPath: 'KST-待处理行.csv', filters: [{ name: 'CSV', extensions: ['csv'] }] }
+      const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return null
+      // Revalidate the account after the asynchronous native dialog.
+      if (await this.resolveRecoveryOwner(event.sender) !== owner) throw new Error('授权已经切换，已取消导出。')
+      writeFileSync(result.filePath, this.recovery.csv(owner, query.batchId).content, { encoding: 'utf8', mode: 0o600 })
+      return { count: csv.count, fileName: 'KST-待处理行.csv' }
+    })
   }
 
   private registerDemoActivityIpc(): void {

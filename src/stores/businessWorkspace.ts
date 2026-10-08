@@ -33,6 +33,7 @@ import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import { readSourceRows, saveSourceRows } from '@/features/business/source-rows'
 import { licensePlanCode, readStoredLicense } from '@/features/user/model'
 import { isToolCurrentlyUsable } from '@/features/tools/presentation'
+import { allowLegacyDemoFixture } from '@/features/business/legacy-demo-policy'
 
 const historySchema = z.array(serverBatchHistorySchema)
 const preparationFields = [
@@ -68,6 +69,8 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   const recoveryPending = ref(0)
   const recoveryStorageUnavailable = ref(false)
   const liveStorageUnavailable = ref(false)
+  const internalDemoFixture = ref(false)
+  const legacyDemoFixturesEnabled = computed(() => allowLegacyDemoFixture(internalDemoFixture.value))
   let historyRequestSequence = 0
   let startRequestSequence = 0
   let pendingStartMode: 'demo' | 'live' | null = null
@@ -79,7 +82,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   const tools = computed(() => bootstrap.value?.tools || [])
   const items = computed(() => snapshot.value.items)
   const selectedItem = computed(() => items.value.find(item => item.itemId === selectedItemId.value) || null)
-  const isActive = computed(() => snapshot.value.status === 'running')
+  const isActive = computed(() => snapshot.value.status === 'running' && (snapshot.value.recordKind !== 'demo' || legacyDemoFixturesEnabled.value))
   const isDemoBatch = computed(() => snapshot.value.recordKind === 'demo')
   const openItems = computed(() => isDemoBatch.value ? [] : items.value.filter(item =>
     item.browserReady
@@ -100,7 +103,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   function canPrepareTool(tool: BusinessTool): boolean {
     // Internal demo tests retain their existing facade; customer preparation
     // uses the same server-owned catalog facts as the directory.
-    if (tool.availability === 'demo_only') return true
+    if (tool.availability === 'demo_only') return legacyDemoFixturesEnabled.value
     const license = readStoredLicense()
     if (bootstrap.value?.entitlements.batch_execution === false || bootstrap.value?.entitlements.multi_account_workspace === false
       || license.entitlements?.batch_execution === false || license.entitlements?.multi_account_workspace === false
@@ -209,7 +212,18 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
       liveStorageUnavailable.value = false
     }
     initializedOwnerScope = owner
-    recovery.initialize()
+    if (legacyDemoFixturesEnabled.value) recovery.initialize()
+    else {
+      // Retain old localStorage receipts untouched, without recovering or
+      // displaying customer demos through the real workspace.
+      recovery.dispose()
+      recoveryPending.value = 0
+      recoveryStorageUnavailable.value = false
+      if (snapshot.value.recordKind === 'demo') {
+        snapshot.value = emptyBatchSnapshot()
+        selectedItemId.value = null
+      }
+    }
     if (!bootstrap.value) {
       // The shell and workspace mount together. They must share initialization,
       // not invalidate each other's identical request as an authorization change.
@@ -292,6 +306,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   }
 
   async function loadDemoHistory(append = false): Promise<DemoBatch[]> {
+    if (!legacyDemoFixturesEnabled.value) return []
     const requestSequence = ++historyRequestSequence
     const owner = getOwnerScope()
     historyLoading.value = true
@@ -349,6 +364,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     const tool = selectedTool.value
     const preview = importPreview.value
     if (!tool || !preview?.validCount) throw new Error('请先导入有效数据')
+    if (tool.availability === 'demo_only' && !legacyDemoFixturesEnabled.value) throw new Error('旧演示入口已停用；当前未开放工具不会以模拟流程替代')
     if (!canPrepareTool(tool)) throw new Error('当前工具或授权不支持批量执行，请刷新目录后重试')
     if (tool.availability !== 'demo_only' && !getRuntimeCapabilities().batchLive) {
       throw new Error('真实批量执行仅支持课赛通 KST 桌面端')
@@ -404,7 +420,8 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     startRequestSequence += 1
     pendingStartMode = null
     loading.value = false
-    if (cancelDemo) await demo.cancel(status)
+    if (cancelDemo && legacyDemoFixturesEnabled.value) await demo.cancel(status)
+    else if (cancelDemo) { snapshot.value = emptyBatchSnapshot(); selectedItemId.value = null }
     else await live.cancel(status)
   }
 
@@ -414,7 +431,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     pendingStartMode = null
     loading.value = false
     imports.invalidate()
-    await demo.reset()
+    if (legacyDemoFixturesEnabled.value) await demo.reset()
     await live.cancelLocal(snapshot.value.status || 'completed')
     snapshot.value = emptyBatchSnapshot()
     selectedItemId.value = null
@@ -427,6 +444,7 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
   function applySnapshot(input: unknown): void {
     const parsed = businessBatchSnapshotSchema.safeParse(input)
     if (!parsed.success) return
+    if (parsed.data.recordKind === 'demo' && !legacyDemoFixturesEnabled.value) return
     snapshot.value = parsed.data
     if (!selectedItemId.value || !snapshot.value.items.some(item => item.itemId === selectedItemId.value)) {
       selectedItemId.value = snapshot.value.activeItemId
@@ -452,14 +470,15 @@ export const useBusinessWorkspaceStore = defineStore('businessWorkspace', () => 
     recovery.dispose()
   }
 
-  function retryRecovery(): void { recovery.retry() }
+  function retryRecovery(): void { if (legacyDemoFixturesEnabled.value) recovery.retry() }
+  function enableInternalDemoFixtures(): void { internalDemoFixture.value = allowLegacyDemoFixture(true) }
   function getSourceRows(kind: 'demo' | 'live', batchId: string | number): Record<string, number> {
     return readSourceRows(getOwnerScope(), kind, batchId)
   }
 
   return {
     bootstrap, history, demoHistory, demoHistoryTotal, liveHistoryHasMore, importPreview, selectedTool, preparationNotice, snapshot, selectedItemId, selectedItem, loading, syncState, error, bootstrapStale, bootstrapRefreshing, historyLoading, historyError,
-    entitlements, tools, items, openItems, isActive, isDemoBatch, recoveryPending, recoveryStorageUnavailable, liveStorageUnavailable, retryRecovery,
+    entitlements, tools, items, openItems, isActive, isDemoBatch, recoveryPending, recoveryStorageUnavailable, liveStorageUnavailable, retryRecovery, legacyDemoFixturesEnabled, enableInternalDemoFixtures,
     init, refreshBootstrap, reconcileToolSelection, loadHistory, loadDemoHistory, chooseTool, loadSampleImport, saveSampleTemplate, selectImportFile, exportImportErrors, startBatch, registerBrowser, selectItem,
     completeUserAction, restartItem, cancelBatch, resetWorkspace, statusText, flushOutboxWithin, dispose, getSourceRows,
   }

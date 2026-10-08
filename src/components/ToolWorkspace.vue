@@ -1,5 +1,7 @@
 <template>
   <section class="tool-workspace" data-testid="tool-workspace">
+    <div v-if="isDemo" class="legacy-demo-disabled" role="alert"><h2>旧演示入口已停用</h2><p>本客户端仅提供真实工具与只读检查，不以模拟流程替代平台结果。</p><button type="button" @click="closeWorkspace">返回工具箱</button></div>
+    <template v-else>
     <header class="workspace-topbar">
       <div class="workspace-heading">
         <button class="icon-button" type="button" aria-label="返回工具箱" :disabled="endingRun" @click="closeWorkspace">
@@ -22,13 +24,15 @@
         <button v-else-if="needsPlatformReview" class="control-button" type="button" @click="showProblemDetails">
           <CircleAlert :size="14" />查看问题详情
         </button>
-        <button v-else-if="isTerminal" class="control-button" type="button" :disabled="restarting || endingRun" @click="restartRun">
+        <button v-else-if="isTerminal && recoveryRetryAllowed" class="control-button" type="button" :disabled="restarting || endingRun" @click="restartRun">
           <LoaderCircle v-if="restarting" :size="14" class="spin" />
           <RotateCcw v-else :size="14" />
           {{ restarting ? '正在打开…' : (isDemo ? '重新演示' : '发起新任务') }}
         </button>
       </div>
     </header>
+
+    <RecoveryPanel v-if="isTerminal && !isPreflight" :run-id="currentRunId" />
 
     <div class="workspace-body">
       <main class="browser-stage">
@@ -56,7 +60,7 @@
               @dom-ready="registerWorkspaceBrowser"
             />
 
-            <DemoCasePreview v-else :tool-name="toolName" :platform="platformShortName" :stage-label="stageItems[currentStageIndex]?.label" :completed="runStatus === 'completed'" />
+            <div v-else class="runtime-unavailable" role="status">真实工具需要在 Windows 软件中运行；当前环境不会播放模拟流程。</div>
 
             <div v-if="interactionLocked && !browserLoading" class="interaction-shield">
               <div><LoaderCircle :size="16" class="spin" />{{ runningMessage }}</div>
@@ -71,7 +75,6 @@
         </div>
         <div v-if="isTerminal && (recordPending || recordSyncing)" class="demo-disclosure" role="status" data-testid="record-sync-status">
           {{ recordSyncing ? '正在同步记录…' : '任务结果不变，记录待同步。无需重新执行任务。' }}
-          <button v-if="isDemo && recordPending" type="button" class="secondary-action" :disabled="recordSyncing" @click="retryRecordSync">仅重试同步记录</button>
           <span v-if="!isDemo">记录补传与工具执行互相独立，不会为同步记录重新运行工具。请保持联网，稍后到工具记录核对；仍未同步时可联系支持。</span>
         </div>
         <section class="run-inspection" aria-label="执行诊断与本机证据" data-testid="run-inspection-actions">
@@ -151,7 +154,7 @@
           </section>
           <details v-if="!isBrowserPreview" class="execution-evidence"><summary>查看执行证据说明</summary><p>页面指纹：{{ evidenceSummary.fingerprint || '未提供' }} · 签名：{{ evidenceSummary.signatureVerified ? '已验证' : (isDemo ? '内置演示适配器' : '等待验证记录') }}</p><p v-if="evidenceSummary.screenshot">{{ canViewScreenshot ? '截图保存在本机，可通过上方入口查看本次运行已登记的证据。' : screenshotAvailabilityMessage }} 页面指纹不是截图，也不代表业务结果已核对。</p></details>
           <button class="primary-action" type="button" @click="closeWorkspace">返回工具箱</button>
-          <button class="secondary-action" type="button" :disabled="restarting || endingRun" @click="restartRun">{{ isBrowserPreview ? '重新预览' : isDemo ? '重新交互演示' : '作为新任务再次执行' }}</button>
+          <button v-if="isBrowserPreview || isDemo || recoveryRetryAllowed" class="secondary-action" type="button" :disabled="restarting || endingRun" @click="restartRun">{{ isBrowserPreview ? '重新预览' : isDemo ? '重新交互演示' : '作为新任务再次执行' }}</button>
         </div>
 
         <div v-else-if="runStatus === 'failed'" class="result-card failed">
@@ -171,7 +174,7 @@
             <p v-if="needsPlatformReview">客户端停止不等于平台操作未生效。请提供问题编号与核对情况，不要发送平台密码、Cookie 或完整客户资料。</p>
             <button type="button" @click="openSupport">携带问题信息联系客服</button>
           </details>
-          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun" @click="restartRun">作为新任务再次执行</button>
+          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun || !recoveryRetryAllowed" @click="restartRun">{{ recoveryRetryAllowed ? '建立新尝试重新执行' : '核对结论后才能重新执行' }}</button>
         </div>
 
         <div v-else class="result-card cancelled">
@@ -187,7 +190,7 @@
             <p>问题编号：{{ problemCode }}。客户端停止只表示本次处理结束，不能据此判断已提交的业务操作是否生效。</p>
             <button type="button" @click="openSupport">携带问题信息联系客服</button>
           </details>
-          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun" @click="restartRun">作为新任务再次执行</button>
+          <button v-if="!isDemo" class="secondary-action" type="button" data-testid="new-live-task" :disabled="restarting || endingRun || !recoveryRetryAllowed" @click="restartRun">{{ recoveryRetryAllowed ? '建立新尝试重新执行' : '核对结论后才能重新执行' }}</button>
         </div>
       </aside>
     </div>
@@ -208,30 +211,33 @@
       @reload="readRunEvidence"
       @image-error="screenshotImageFailed"
     />
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
+import RecoveryPanel from '@/features/recovery/RecoveryPanel.vue'
 import { ArrowLeft, Check, CircleAlert, Image, LoaderCircle, LockKeyhole, RotateCcw, Square, Zap } from '@lucide/vue'
 import { useSingleAutomationRun } from '@/features/automation/useSingleAutomationRun'
-import DemoCasePreview from '@/components/DemoCasePreview.vue'
 import RunEvidenceDrawer from '@/features/automation/RunEvidenceDrawer.vue'
 
 const {
+  currentRunId, recoveryRetryAllowed,
   browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
-  platformName, platformShortName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,
+  platformName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,
   preflightResult, preflightMessage,
-  freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing, retryRecordSync,
+  freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing,
   evidenceOpen, evidenceView, diagnosticRows, localDiagnosticRows, diagnosticState, diagnosticMessage,
   screenshotState, screenshotDataUrl, screenshotMessage, canReadDiagnostic, canViewScreenshot, screenshotAvailabilityMessage,
   showRunEvidence, readRunEvidence, screenshotImageFailed,
-  currentStageIndex, runningMessage, customerStatusText, problemCode, runStatus, userAction,
+  runningMessage, customerStatusText, problemCode, runStatus, userAction,
   failureTitle, failureDescription, technicalError, problemDetails, showProblemDetails,
   stageState, completeUserAction, stopRun, closeWorkspace, restartRun, startReadyScript, openSupport, registerWorkspaceBrowser,
 } = useSingleAutomationRun()
 </script>
 
 <style scoped>
+.legacy-demo-disabled{margin:auto;max-width:520px;padding:32px;text-align:center;color:var(--color-text)}.legacy-demo-disabled p{line-height:1.7;color:var(--color-text-secondary)}.legacy-demo-disabled button{padding:10px 18px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-primary);cursor:pointer}.runtime-unavailable{display:grid;place-content:center;height:100%;padding:28px;text-align:center;color:var(--color-text-secondary);line-height:1.8}
 .tool-workspace {
   position: relative;
   isolation: isolate;

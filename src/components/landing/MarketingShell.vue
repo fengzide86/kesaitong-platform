@@ -1,0 +1,131 @@
+<template>
+  <div class="marketing-shell" data-route-focus>
+    <header ref="menuHeader" class="marketing-shell-nav">
+      <div class="marketing-shell-inner">
+        <RouterLink class="marketing-shell-brand" to="/" aria-label="返回课赛通首页" @click="closeMenu">
+          <BrandLockup audience="login" decorative />
+        </RouterLink>
+        <nav ref="menuNavigation" id="marketing-main-navigation" class="marketing-shell-links" :class="{ 'is-open': menuOpen }" aria-label="官网导航">
+          <RouterLink to="/competition" :class="{ active: route.path === '/competition' }" @click="closeMenu">比赛备赛</RouterLink>
+          <RouterLink to="/course" :class="{ active: route.path === '/course' }" @click="closeMenu">课程实训</RouterLink>
+          <RouterLink to="/tools" :class="{ active: route.path === '/tools' }" @click="closeMenu">工具介绍</RouterLink>
+          <RouterLink to="/demo" :class="{ active: route.path === '/demo' }" @click="closeMenu">模拟体验</RouterLink>
+          <RouterLink class="marketing-shell-mobile-start" to="/tools#start" @click="closeMenu">怎么开始使用</RouterLink>
+        </nav>
+        <div class="marketing-shell-actions">
+          <RouterLink class="marketing-shell-login" to="/tools#start" @click="closeMenu">怎么开始</RouterLink>
+          <MarketingDownloadAction v-if="showDownload" compact />
+          <button
+            ref="menuToggle"
+            class="marketing-shell-toggle"
+            type="button"
+            :aria-expanded="menuOpen"
+            aria-controls="marketing-main-navigation"
+            :aria-label="menuOpen ? '关闭导航' : '打开导航'"
+            @click="menuOpen = !menuOpen"
+          >
+            <X v-if="menuOpen" :size="23" aria-hidden="true" />
+            <Menu v-else :size="23" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </header>
+    <slot />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import { Menu, X } from '@lucide/vue'
+import BrandLockup from '@/components/brand/BrandLockup.vue'
+import MarketingDownloadAction from '@/components/landing/MarketingDownloadAction.vue'
+
+withDefaults(defineProps<{ showDownload?: boolean }>(), { showDownload: false })
+const route = useRoute()
+const menuOpen = ref(false)
+const menuToggle = ref<HTMLButtonElement | null>(null)
+const menuHeader = ref<HTMLElement | null>(null)
+const menuNavigation = ref<HTMLElement | null>(null)
+
+function closeMenu(): void {
+  menuOpen.value = false
+}
+
+function handleMenuKey(event: KeyboardEvent): void {
+  if (!menuOpen.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeMenu()
+    menuToggle.value?.focus()
+    return
+  }
+  if (event.key !== 'Tab' || !menuToggle.value || !menuNavigation.value) return
+  // The desktop navigation precedes the toggle in the DOM. Bridge that order
+  // only while the mobile menu is visible, so opening it never skips its links.
+  if (getComputedStyle(menuToggle.value).display === 'none') return
+  const links = Array.from(menuNavigation.value.querySelectorAll<HTMLAnchorElement>('a'))
+  const first = links[0]
+  const last = links[links.length - 1]
+  if (document.activeElement === menuToggle.value) {
+    event.preventDefault()
+    ;(event.shiftKey ? last : first)?.focus()
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    menuToggle.value.focus()
+  }
+}
+
+function handleOutsideClick(event: PointerEvent): void {
+  if (menuOpen.value && event.target instanceof Node && !menuHeader.value?.contains(event.target)) closeMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleMenuKey)
+  document.addEventListener('pointerdown', handleOutsideClick)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleMenuKey)
+  document.removeEventListener('pointerdown', handleOutsideClick)
+})
+watch(() => route.fullPath, closeMenu)
+</script>
+
+<style scoped>
+.marketing-shell { min-height: 100vh; color: var(--m-ink); background: #fff; }
+.marketing-shell-nav { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--m-border); background: rgba(255, 255, 255, .96); backdrop-filter: blur(14px); }
+.marketing-shell-inner { display: flex; align-items: center; gap: 20px; width: min(var(--m-width), calc(100% - var(--m-gutter) * 2)); min-height: 76px; margin: 0 auto; }
+.marketing-shell-brand { display: inline-flex; flex: 0 0 auto; align-items: center; min-height: 44px; text-decoration: none; }
+.marketing-shell-brand :deep(.kst-lockup-logo) { width: 118px; height: 40px; }
+.marketing-shell-brand :deep(.kst-lockup-subtitle) { color: var(--m-muted); font-size: 13px; font-weight: 600; }
+.marketing-shell-links { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.marketing-shell-links a, .marketing-shell-login { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--m-text); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: color var(--m-duration), background var(--m-duration); }
+.marketing-shell-links a.active { color: var(--m-blue-hover); background: var(--m-blue-soft); }
+.marketing-shell-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.marketing-shell-links .marketing-shell-mobile-start { display: none; }
+.marketing-shell-toggle { display: none; flex: 0 0 auto; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; color: var(--m-ink); background: transparent; cursor: pointer; transition: background var(--m-duration); }
+.marketing-shell-brand:focus-visible, .marketing-shell-toggle:focus-visible, .marketing-shell-links a:focus-visible, .marketing-shell-login:focus-visible { outline: 3px solid var(--m-blue); outline-offset: 3px; border-radius: 6px; }
+@media (hover: hover) {
+  .marketing-shell-links a:hover, .marketing-shell-login:hover { color: var(--m-blue-hover); background: var(--m-blue-soft); }
+  .marketing-shell-toggle:hover { background: var(--m-surface); }
+}
+@media (max-width: 1100px) { .marketing-shell-brand :deep(.kst-lockup-subtitle) { display: none; } }
+@media (max-width: 960px) {
+  .marketing-shell-inner { min-height: 68px; gap: 12px; }
+  .marketing-shell-brand :deep(.kst-lockup-logo) { width: 106px; height: 36px; }
+  .marketing-shell-actions { margin-left: auto; gap: 8px; }
+  .marketing-shell-links { display: none; position: absolute; top: 68px; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 4px; margin: 0; padding: 12px var(--m-gutter) 20px; border-bottom: 1px solid var(--m-border); background: #fff; box-shadow: 0 12px 22px #142b470a; }
+  .marketing-shell-links.is-open { display: flex; animation: marketing-menu-enter var(--m-duration) var(--m-ease); }
+  .marketing-shell-links a { justify-content: flex-start; min-height: 48px; padding: 0 14px; font-size: 15px; }
+  .marketing-shell-links .marketing-shell-mobile-start { display: flex; }
+  .marketing-shell-login { display: none; }
+  .marketing-shell-toggle { display: inline-flex; }
+}
+@media (max-width: 400px) {
+  .marketing-shell-inner { gap: 8px; }
+  .marketing-shell-brand :deep(.kst-lockup-logo) { width: 96px; }
+  .marketing-shell-actions { gap: 4px; }
+}
+@keyframes marketing-menu-enter { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .marketing-shell-links.is-open { animation: none; } .marketing-shell-links a, .marketing-shell-login, .marketing-shell-toggle { transition: none; } }
+</style>

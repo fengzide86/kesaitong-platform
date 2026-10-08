@@ -5,6 +5,8 @@ import type { FreightQuoteRequest, FreightRatePack } from '../freight/types.js'
 import type { FreightWorkbookOptions } from '../freight/workbook-parser.js'
 import { runnerEventSchema } from './automation-contract.js'
 import { localArtifactReadRequestSchema } from './artifact-contract.js'
+import { recoveryQuerySchema, recoveryReviewSchema, recoveryPrepareSchema } from './recovery-contract.js'
+import { fileInputSelectionRequestSchema, fileInputValidationRequestSchema } from './file-input-contract.js'
 
 export const DESKTOP_IPC_PROTOCOL_VERSION = 1 as const
 export const DESKTOP_IPC_PAYLOAD_ERROR_CODE = 'IPC_PAYLOAD_INVALID' as const
@@ -142,8 +144,18 @@ export const notificationFocusSchema = z.object({
 })
 
 export const desktopIpcInvocationSchemas = {
+  'recovery:list': z.tuple([recoveryQuerySchema]),
+  'recovery:review': z.tuple([recoveryReviewSchema]),
+  'recovery:prepare': z.tuple([recoveryPrepareSchema]),
+  'recovery:open-platform': z.tuple([ipcIdSchema]),
+  'recovery:read-evidence': z.tuple([ipcIdSchema]),
+  'recovery:export': z.tuple([recoveryQuerySchema]),
+  'recovery:revoke-session': z.tuple([]),
   'artifacts:read': z.tuple([localArtifactReadRequestSchema]),
   'artifacts:clear': z.tuple([]),
+  'files:select-input': z.tuple([fileInputSelectionRequestSchema]),
+  'files:validate-input': z.tuple([fileInputValidationRequestSchema]),
+  'files:clear-input': z.tuple([]),
   'credential-save-user-code': z.tuple([nonEmptyTextSchema]),
   'credential-load-user-code': z.tuple([]),
   'credential-clear-user-code': z.tuple([]),

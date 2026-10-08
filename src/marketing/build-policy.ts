@@ -1,8 +1,9 @@
 const allowedSources = [
   /^src\/marketing\//,
   /^src\/components\/(?:brand|landing)\//,
-  /^src\/assets\/(?:brand|css\/base)\//,
+  /^src\/assets\/(?:brand|css\/base|website)\//,
   /^src\/views\/LandingView\.vue$/,
+  /^src\/views\/(?:ScenarioView|MarketingToolsView)\.vue$/,
   /^src\/composables\/useLandingMotion\.ts$/,
   /^src\/runtime\/desktop-download\.ts$/,
 ]
@@ -34,6 +35,8 @@ export const marketingHeaders = `/*
   Cache-Control: no-cache
 /terms
   Cache-Control: no-cache
+/demo
+  Cache-Control: no-cache
 /404.html
   Cache-Control: no-store
 /marketing-version.json
@@ -44,4 +47,20 @@ export const marketingHeaders = `/*
 
 // Only the real static route is rewritten. The generated 404.html preserves
 // actual HTTP 404s for unknown paths instead of turning API mistakes into 200s.
-export const marketingRedirects = '/terms /index.html 200\n/user/terms /terms 301\n'
+// Keep the SPA shell available on every known public route when hosted by
+// Cloudflare Pages. Unknown paths are intentionally not rewritten and are
+// served by the generated 404.html instead.
+export const marketingRedirects = [
+  '/terms /index.html 200',
+  '/terms/ /index.html 200',
+  '/user/terms /terms 301',
+  '/user/terms/ /terms 301',
+  '/competition /index.html 200',
+  '/competition/ /index.html 200',
+  '/course /index.html 200',
+  '/course/ /index.html 200',
+  '/tools /index.html 200',
+  '/tools/ /index.html 200',
+  '/demo /index.html 200',
+  '/demo/ /index.html 200',
+].join('\n') + '\n'

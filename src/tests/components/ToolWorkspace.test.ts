@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import ToolWorkspace from '@/components/ToolWorkspace.vue'
 import { useAppStore } from '@/stores/app'
 import { useTaskRunStore } from '@/stores/taskRun'
-import { AUTOMATION_EVENT } from '@/automation'
+import { AUTOMATION_EVENT, MockAutomationAdapter } from '@/automation'
 import * as runtimeCapabilities from '@/runtime/capabilities'
 
 const mocks = vi.hoisted(() => ({
@@ -44,13 +44,18 @@ describe('ToolWorkspace 极简运行工作台', () => {
     mocks.flushPendingDemoReceipts.mockResolvedValue(undefined)
     pinia = createPinia()
     setActivePinia(pinia)
-    useAppStore().openTool({
-      id: 'demo',
-      name: '自动上品演示',
+    vi.spyOn(runtimeCapabilities, 'getRuntimeCapabilities').mockReturnValue({ ...runtimeCapabilities.resolveRuntimeCapabilities(undefined), kind: 'desktop', isDesktop: true, singleLive: true })
+    const tool = {
+      id: 'live-test-fixture',
+      name: '平台工具',
       platformKey: 'amazon',
-      targetUrl: 'demo://amazon/demo',
-      executionMode: 'demo',
-    })
+      targetUrl: 'https://platform.invalid',
+      executionMode: 'live' as const,
+    }
+    useAppStore().openTool(tool)
+    // Explicit internal fixture events test the live customer presentation,
+    // never the removed production mock fallback.
+    void useTaskRunStore().start(tool, { mode: 'live', adapter: new MockAutomationAdapter({ stepDelay: 100_000 }) })
   })
 
   afterEach(() => {
@@ -65,6 +70,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
       global: {
         plugins: [pinia],
         stubs: {
+          RecoveryPanel: true,
           ElDrawer: {
             props: ['modelValue'], emits: ['update:modelValue'],
             template: '<section v-if="modelValue" role="dialog"><button data-testid="close-run-evidence" @click="$emit(\'update:modelValue\', false)">关闭查看</button><slot /></section>',
@@ -99,41 +105,45 @@ describe('ToolWorkspace 极简运行工作台', () => {
     expect(useTaskRunStore().steps).toHaveLength(6)
     expect(wrapper.findAll('.stage-list li')).toHaveLength(4)
     expect(wrapper.text()).toContain('准备')
-    expect(wrapper.text()).toContain('流程展示')
+    expect(wrapper.text()).toContain('自动处理')
     expect(wrapper.text()).not.toContain('初始化工具环境')
     expect(wrapper.text()).not.toMatch(/\d{2}:\d{2}/)
     wrapper.unmount()
   })
 
-  it('浏览器预览不把动画完成包装成真实填写、核验或证据截图', async () => {
+  it('旧演示入口明确停用，不启动工具、不生成模拟成功或旧回执', async () => {
+    useTaskRunStore().reset()
+    useAppStore().openTool({ id: 'old-demo', name: '旧演示', executionMode: 'demo' })
+    vi.spyOn(runtimeCapabilities, 'getRuntimeCapabilities').mockReturnValue(runtimeCapabilities.resolveRuntimeCapabilities(undefined))
+    const start = vi.spyOn(useTaskRunStore(), 'start')
     const wrapper = mountWorkspace()
     await flushPromises()
-    expect(wrapper.get('[data-testid="execution-scope-note"]').text()).toContain('不启动 Runner')
-    expect(wrapper.get('[data-testid="result-boundary"]').text()).toContain('不代表真实任务成功')
+    expect(wrapper.text()).toContain('旧演示入口已停用')
     await vi.advanceTimersByTimeAsync(14_000)
     await flushPromises()
-    expect(wrapper.get('.result-card.success').text()).toContain('流程预览已完成')
-    expect(wrapper.text()).not.toContain('本地浏览器已完成真实填写')
+    expect(wrapper.find('.result-card.success').exists()).toBe(false)
+    expect(start).not.toHaveBeenCalled()
+    expect(mocks.createDemoRun).not.toHaveBeenCalled(); expect(mocks.queueDemoReceipt).not.toHaveBeenCalled()
     expect(wrapper.find('.result-proof-grid').exists()).toBe(false)
     expect(wrapper.find('.execution-evidence').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('具备桌面执行器时仍明确显示本地交互沙盒，而非浏览器轻量预览', async () => {
+  it('具备桌面执行器时明确显示真实执行，不展示旧沙盒或浏览器预览', async () => {
     const capability = vi.spyOn(runtimeCapabilities, 'getRuntimeCapabilities').mockReturnValue({
       ...runtimeCapabilities.resolveRuntimeCapabilities(undefined),
       kind: 'desktop', isDesktop: true, singleLive: true,
     })
     const wrapper = mountWorkspace()
     await flushPromises()
-    expect(wrapper.get('[data-testid="execution-scope-note"]').text()).toContain('数据只存在本地沙盒')
+    expect(wrapper.get('[data-testid="execution-scope-note"]').text()).toContain('真实执行')
     expect(wrapper.text()).not.toContain('浏览器流程预览')
     expect(wrapper.find('webview').exists()).toBe(true)
     wrapper.unmount()
     capability.mockRestore()
   })
 
-  it('后台记录接口失败时仍正常启动本地演示', async () => {
+  it('客户工作区不调用旧后台演示记录接口', async () => {
     mocks.createDemoRun.mockRejectedValueOnce(new Error('network unavailable'))
     const wrapper = mountWorkspace()
     await flushPromises()
@@ -141,6 +151,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
     expect(useTaskRunStore().status).toBe('running')
     expect(useTaskRunStore().steps).toHaveLength(6)
     expect(wrapper.find('[data-testid="tool-workspace"]').exists()).toBe(true)
+    expect(mocks.createDemoRun).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -161,12 +172,12 @@ describe('ToolWorkspace 极简运行工作台', () => {
     wrapper.unmount()
   })
 
-  it('停止操作必须确认，并进入可重新执行的停止结果页', async () => {
+  it('停止操作必须确认，结果仅由执行器取消事件更新', async () => {
     mocks.confirmAction.mockResolvedValue(true)
     const wrapper = mountWorkspace()
     await flushPromises()
 
-    const stopButton = wrapper.findAll('button').find(button => button.text().includes('停止演示'))
+    const stopButton = wrapper.findAll('button').find(button => button.text().includes('停止执行'))
     await stopButton.trigger('click')
     await flushPromises()
 
@@ -175,8 +186,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
       danger: true,
     }))
     expect(useTaskRunStore().status).toBe('cancelled')
-    expect(wrapper.find('.result-card.cancelled').text()).toContain('已退出演示')
-    expect(wrapper.find('.result-card.cancelled').text()).toContain('重新演示')
+    expect(wrapper.find('.result-card.cancelled').text()).not.toContain('重新演示')
     expect(wrapper.find('.workspace-topbar').text()).not.toContain('返回工具箱')
     wrapper.unmount()
   })
@@ -239,7 +249,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
     wrapper.unmount()
   })
 
-  it('模拟页面加载异常时提供安全重试，不直接暴露技术错误', async () => {
+  it('平台页面加载异常时说明待核对，不暴露主文案技术错误或模拟回退', async () => {
     const wrapper = mountWorkspace()
     await flushPromises()
     const store = useTaskRunStore()
@@ -255,8 +265,8 @@ describe('ToolWorkspace 极简运行工作台', () => {
     await wrapper.vm.$nextTick()
 
     const result = wrapper.find('.result-card.failed')
-    expect(result.text()).toContain('模拟场景在准备阶段停止')
-    expect(result.text()).toContain('重新加载演示')
+    expect(result.text()).toContain('执行')
+    expect(result.text()).not.toContain('重新加载演示')
     expect(result.find('p').text()).not.toContain('net::ERR_TIMED_OUT')
     expect(wrapper.find('.technical-details').text()).toContain('net::ERR_TIMED_OUT')
     wrapper.unmount()
@@ -278,23 +288,25 @@ describe('ToolWorkspace 极简运行工作台', () => {
     wrapper.unmount()
   })
 
-  it('live 结果待核对时取消新任务确认，不刷新授权或启动工具', async () => {
+  it('live 结果缺少恢复证据时直接拒绝，不以确认弹窗代替核对', async () => {
     mocks.confirmAction.mockResolvedValue(false)
     const { wrapper, store, start } = mountStoppedLiveWorkspace()
+    expect(wrapper.get('[data-testid="new-live-task"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[data-testid="new-live-task"]').trigger('click')
     await flushPromises()
-    expect(mocks.confirmAction).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('不会恢复上次任务'), confirmText: '发起新任务', cancelText: '先核对平台',
-    }))
+    expect(mocks.confirmAction).not.toHaveBeenCalled()
     expect(mocks.refreshLiveLaunch).not.toHaveBeenCalled()
     expect(start).not.toHaveBeenCalled()
     expect(store.runId).toBe('live-existing-result-001')
     wrapper.unmount()
   })
 
-  it('明确确认后仍沿用已有的新授权启动流程，不声称断点恢复', async () => {
+  it('已有未完成人工核对记录后才以新授权启动，不复用旧执行断点', async () => {
     mocks.confirmAction.mockResolvedValue(true)
     const { wrapper, start } = mountStoppedLiveWorkspace()
+    window.electronAPI = { recovery: { list: vi.fn().mockResolvedValue([{ runId: 'live-existing-result-001', retryAllowed: true }]) } } as unknown as NonNullable<typeof window.electronAPI>
+    window.dispatchEvent(new Event('toolbox:recovery-updated'))
+    await flushPromises()
     await wrapper.get('[data-testid="new-live-task"]').trigger('click')
     await flushPromises()
     expect(mocks.refreshLiveLaunch).toHaveBeenCalledOnce()
@@ -339,7 +351,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
     wrapper.unmount()
   })
 
-  it('仅重试演示记录同步不启动新任务，并保持本次任务状态', async () => {
+  it('真实结果不调用旧演示同步，也不提供演示式重跑同步入口', async () => {
     mocks.queueDemoReceipt.mockResolvedValue(false)
     const wrapper = mountWorkspace()
     await flushPromises()
@@ -349,11 +361,11 @@ describe('ToolWorkspace 极简运行工作台', () => {
     const originalRunId = store.runId
     const start = vi.spyOn(store, 'start')
     mocks.queueDemoReceipt.mockResolvedValue(true)
-    await wrapper.get('[data-testid="record-sync-status"] button').trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-testid="record-sync-status"] button').exists()).toBe(false)
     expect(start).not.toHaveBeenCalled()
     expect(store.runId).toBe(originalRunId)
     expect(store.status).toBe('completed')
+    expect(mocks.queueDemoReceipt).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="record-sync-status"]').exists()).toBe(false)
     wrapper.unmount()
   })

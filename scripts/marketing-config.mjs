@@ -43,8 +43,15 @@ export function validateMarketingConfig(values) {
   if (provider === 'github-pages') {
     const repository = values.GITHUB_PAGES_REPOSITORY || ''
     const match = /^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\/([a-z0-9-]+\.github\.io)$/i.exec(repository)
+    const siteUrl = new URL(publicUrl)
+    const hostname = siteUrl.hostname
     if (!match || match[2].toLowerCase() !== `${match[1].toLowerCase()}.github.io`
-      || publicUrl !== `https://${match[2].toLowerCase()}`) throw new Error('GitHub Pages 仅支持明确匹配的用户官网仓库与根网址')
+      || ((hostname === 'github.io' || hostname.endsWith('.github.io')) && hostname !== match[2].toLowerCase())) {
+      throw new Error('GitHub Pages 仅支持明确匹配的用户官网仓库，不接受其他用户的 github.io 地址')
+    }
+    if (siteUrl.port || (hostname !== match[2].toLowerCase() && !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/i.test(hostname))) {
+      throw new Error('GitHub Pages 自定义网址必须使用有效的公开域名')
+    }
     return { provider, repository, projectName: repository, publicUrl, downloadUrl }
   }
   if (!/^[a-f0-9]{32}$/i.test(values.CLOUDFLARE_ACCOUNT_ID || '')) throw new Error('请在 .env.marketing.local 配置 Cloudflare Account ID')
@@ -59,9 +66,14 @@ export function validateMarketingConfig(values) {
 }
 
 export function assertGitHubPagesProject(pages, config) {
+  const hostname = new URL(config.publicUrl).hostname
+  const userHostname = config.repository.split('/')[1].toLowerCase()
+  const expectedCname = hostname === userHostname ? null : hostname
+  const cname = typeof pages.cname === 'string' ? pages.cname.trim().toLowerCase() : pages.cname
   if (pages.html_url?.replace(/\/$/, '') !== config.publicUrl || pages.source?.branch !== 'main'
-    || pages.source?.path !== '/' || pages.build_type !== 'legacy') {
-    throw new Error('GitHub Pages 网址或 main 根目录发布来源不匹配；不会改动远端站点配置')
+    || pages.source?.path !== '/' || pages.build_type !== 'legacy'
+    || (expectedCname ? cname !== expectedCname : Boolean(cname))) {
+    throw new Error('GitHub Pages 网址、已绑定自定义域名或 main 根目录发布来源不匹配；不会改动远端站点配置')
   }
 }
 

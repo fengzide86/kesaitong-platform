@@ -23,6 +23,20 @@ export default defineConfig(({ command }) => {
   const publicArtifactPlugin: Plugin = {
     name: 'kst-marketing-only',
     enforce: 'post',
+    configurePreviewServer(server) {
+      // Vite's generic SPA fallback otherwise makes an unknown clean URL a
+      // 200 page. Match the static site's deployment contract in local UAT.
+      const routes = new Set(['/', '/competition', '/course', '/tools', '/terms', '/user/terms', '/demo'])
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url || '/', 'http://localhost').pathname.replace(/\/$/, '') || '/'
+        if (!['GET', 'HEAD'].includes(request.method || '') || !request.headers.accept?.includes('text/html')
+          || routes.has(pathname) || pathname.split('/').at(-1)?.includes('.')) return next()
+        response.statusCode = 404
+        response.setHeader('Content-Type', 'text/html; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-store')
+        response.end(request.method === 'HEAD' ? undefined : readFileSync(path.join(projectRoot, 'dist-marketing', '404.html')))
+      })
+    },
     transformIndexHtml() {
       return publicUrl ? [
         { tag: 'link', attrs: { rel: 'canonical', href: publicUrl }, injectTo: 'head' },

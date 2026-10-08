@@ -1,4 +1,6 @@
 const { RunnerClient } = require('./runner-client.cjs');
+const crypto = require('node:crypto');
+import type { RecoveryStore } from './recovery-store.cjs';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
@@ -26,6 +28,7 @@ interface HostManagerLike {
 }
 
 interface ImportedRow {
+  retryOf?: string;
   itemId: string;
   sourceRow?: number;
   input: UnknownRecord;
@@ -43,6 +46,9 @@ interface ParsedImport {
 }
 
 interface BatchItem {
+  attemptId: string;
+  recoveryId: string | null;
+  retryOf?: string;
   itemId: string;
   sourceRow?: number;
   input: UnknownRecord | null;
@@ -57,6 +63,7 @@ interface BatchItem {
 }
 
 interface ActiveBatch {
+  owner: string | null;
   batchId: string;
   serverBatchId?: string | number;
   tool: UnknownRecord;
@@ -74,6 +81,9 @@ interface RunnerFactoryOptions {
 }
 
 interface CoordinatorOptions {
+  validateUpload?: (payload: UnknownRecord) => Promise<unknown>;
+  authorizeMutation?: () => Promise<string>;
+  recoveryStore?: RecoveryStore;
   scriptPath?: string;
   env?: NodeJS.ProcessEnv;
   hostManager?: HostManagerLike;
@@ -83,6 +93,9 @@ interface CoordinatorOptions {
 }
 
 class BatchCoordinator {
+  validateUpload?: (payload: UnknownRecord) => Promise<unknown>;
+  authorizeMutation?: () => Promise<string>;
+  recoveryStore?: RecoveryStore;
   scriptPath: string;
   env: NodeJS.ProcessEnv;
   hostManager: HostManagerLike;
@@ -90,26 +103,32 @@ class BatchCoordinator {
   onNotify: (payload: { itemId: string; accountLabelMasked: string; type: string }) => void;
   runnerFactory: (options: RunnerFactoryOptions) => RunnerLike;
   imports: Map<string, ImportedRow[]>;
+  importOwners: Map<string, string | null>;
   batch: ActiveBatch | null;
   activeItemId: string | null;
   provisioningItemId: string | null;
 
-  constructor({ scriptPath = '', env, hostManager, onEvent = () => {}, onNotify = () => {}, runnerFactory }: CoordinatorOptions = {}) {
+  constructor({ scriptPath = '', env, hostManager, onEvent = () => {}, onNotify = () => {}, runnerFactory, recoveryStore, authorizeMutation, validateUpload }: CoordinatorOptions = {}) {
     if (!hostManager) throw new Error('BatchCoordinator requires hostManager');
     this.scriptPath = scriptPath;
     this.env = env || {};
+    this.recoveryStore = recoveryStore;
+    this.authorizeMutation = authorizeMutation;
+    this.validateUpload = validateUpload;
     this.hostManager = hostManager;
     this.onEvent = onEvent;
     this.onNotify = onNotify;
     this.runnerFactory = runnerFactory || ((options: RunnerFactoryOptions) => new RunnerClient(options) as RunnerLike);
     this.imports = new Map<string, ImportedRow[]>();
+    this.importOwners = new Map<string, string | null>();
     this.batch = null;
     this.activeItemId = null;
     this.provisioningItemId = null;
   }
 
-  storeImport(parsed: ParsedImport) {
+  storeImport(parsed: ParsedImport, owner: string | null = null) {
     this.imports.set(parsed.importId, parsed.rows);
+    this.importOwners.set(parsed.importId, owner);
     return {
       importId: parsed.importId,
       fileName: parsed.fileName,
@@ -122,14 +141,17 @@ class BatchCoordinator {
     };
   }
 
-  remapImportItems(importId: string, itemIds: string[]) {
+  remapImportItems(importId: string, itemIds: string[], owner: string | null = null) {
+    this.assertImportOwner(importId, owner);
     const importedRows = this.imports.get(importId);
     if (!importedRows?.length) throw this.error('BATCH_IMPORT_MISSING', '导入数据已经失效，请重新载入');
     if (itemIds.length !== importedRows.length) throw this.error('BATCH_ITEM_COUNT_MISMATCH', '服务端任务数与本地导入行数不一致');
     const nextImportId = `${importId}_mapped`;
     const rows = importedRows.map((row, index) => ({ ...row, itemId: itemIds[index]! }));
     this.imports.delete(importId);
+    this.importOwners.delete(importId);
     this.imports.set(nextImportId, rows);
+    this.importOwners.set(nextImportId, owner);
     return {
       importId: nextImportId,
       validCount: rows.length,
@@ -139,12 +161,17 @@ class BatchCoordinator {
     };
   }
 
-  create({ importId, batchId, serverBatchId, tool, maxOpenSessions = 6, recordKind = 'live' }: { importId: string; batchId: string; serverBatchId?: string | number; tool: UnknownRecord; maxOpenSessions?: number; recordKind?: 'demo' | 'live' }) {
+  create({ importId, batchId, serverBatchId, tool, maxOpenSessions = 6, recordKind = 'live', owner = null }: { importId: string; batchId: string; serverBatchId?: string | number; tool: UnknownRecord; maxOpenSessions?: number; recordKind?: 'demo' | 'live'; owner?: string | null }) {
     if (this.batch && this.batch.status === 'running') throw this.error('BATCH_ACTIVE', '已有批次正在执行');
     const importedRows = this.imports.get(importId);
     if (!importedRows?.length) throw this.error('BATCH_IMPORT_MISSING', '导入数据已经失效，请重新选择文件');
+    if (recordKind === 'live') this.assertImportOwner(importId, owner);
+    const queued = recordKind === 'live' && this.recoveryStore && owner
+      ? this.recoveryStore.queue(owner, tool, importedRows.map(row => ({ input: row.input, batchId, itemId: row.itemId, originalRow: row.sourceRow, retryOf: row.retryOf }))) : [];
     this.imports.clear();
+    this.importOwners.clear();
     this.batch = {
+      owner,
       batchId,
       serverBatchId,
       tool: { ...tool },
@@ -152,6 +179,7 @@ class BatchCoordinator {
       recordKind,
       maxOpenSessions: Math.min(Math.max(Number(maxOpenSessions) || 6, 2), 10),
       items: importedRows.map(row => ({
+        attemptId: crypto.randomUUID(), recoveryId: queued.find(record => record.itemId === row.itemId)?.id || null, retryOf: row.retryOf,
         itemId: row.itemId,
         sourceRow: row.sourceRow,
         input: row.input,
@@ -168,6 +196,37 @@ class BatchCoordinator {
     this.emit('batch.created');
     this.schedule();
     return this.snapshot();
+  }
+
+  prepareRecovery(owner: string, request: { batchId: string; importId: string; toolId: string; toolVersion: string }) {
+    if (this.batch?.status === 'running') throw this.error('BATCH_ACTIVE', '当前批次仍在执行，请先完成或停止。');
+    if (!this.recoveryStore) throw this.error('RECOVERY_MISSING', '当前客户端无法读取本机恢复记录。');
+    const imported = this.imports.get(request.importId);
+    if (!imported?.length) throw this.error('BATCH_IMPORT_MISSING', '请重新选择原始文件。');
+    this.assertImportOwner(request.importId, owner);
+    const previous = this.recoveryStore.list(owner, request.batchId);
+    if (!previous.length) throw this.error('RECOVERY_MISSING', '缺少这批任务的本机证据，禁止自动恢复。');
+    const expectedRows = new Set(previous.map(row => row.originalRow).filter((row): row is number => row !== null));
+    if ([...expectedRows].some(sourceRow => !imported.some(row => row.sourceRow === sourceRow))) throw this.error('RECOVERY_ROW_MISMATCH', '所选文件缺少原批次行，请选择完整原文件。');
+    const rows: ImportedRow[] = [];
+    const errors: Array<{ rowNumber: number | undefined; message: string }> = [];
+    for (const row of imported) {
+      if (!expectedRows.has(row.sourceRow || -1)) { errors.push({ rowNumber: row.sourceRow, message: '缺少这行的本机提交证据，已排除；请先核对平台。' }); continue; }
+      const retryOf = this.recoveryStore.matchRetry(owner, request.batchId, row, request.toolId, request.toolVersion);
+      if (retryOf) rows.push({ ...row, retryOf, itemId: `retry_${crypto.randomUUID()}` });
+      else errors.push({ rowNumber: row.sourceRow, message: '已完成、待核对或已建立恢复尝试，已排除以免重复执行。' });
+    }
+    if (!rows.length) throw this.error('RECOVERY_NOT_RETRYABLE', '没有确定可重试的行；成功项和待核对项不会重复执行。');
+    const importId = `recovery_${crypto.randomUUID()}`;
+    return this.storeImport({ importId, fileName: '已核对的原文件可重试行', rows, errors }, owner);
+  }
+
+  private assertImportOwner(importId: string, owner: string | null): void {
+    if (this.recoveryStore && (!owner || this.importOwners.get(importId) !== owner)) throw this.error('RECOVERY_OWNER_MISMATCH', '所选原文件不属于当前授权，请重新选择文件。');
+  }
+
+  assertOwner(owner: string): void {
+    if (this.batch && this.batch.recordKind === 'live' && this.batch.owner !== owner) throw this.error('RECOVERY_OWNER_MISMATCH', '当前授权不拥有这个本机批次。');
   }
 
   registerBrowser(itemId: string, guest: unknown) {
@@ -209,6 +268,14 @@ class BatchCoordinator {
         input: item.input,
       },
     };
+    try {
+      if (batch.recordKind === 'live' && this.recoveryStore) {
+        if (!batch.owner) throw this.error('RECOVERY_OWNER_MISSING', '未验证当前授权，已禁止执行。');
+        const record = this.recoveryStore.begin(batch.owner, runTool, item.input || {}, { batchId: batch.batchId, itemId, originalRow: item.sourceRow, retryOf: item.recoveryId || item.retryOf });
+        item.recoveryId = record.id;
+        (runTool.executionContext as UnknownRecord).sessionId = `session_${item.attemptId}`;
+      }
+    } catch (cause) { this.finishItem(item, 'failed', cause instanceof Error ? cause.message : '恢复检查失败'); throw cause; }
     item.runner = this.createRunner(item);
     this.emit('batch.item_updated', { itemId });
     try {
@@ -223,6 +290,12 @@ class BatchCoordinator {
     const item = this.requireItem(itemId);
     if (this.provisioningItemId !== itemId) return this.snapshot();
     this.provisioningItemId = null;
+    const batch = this.batch;
+    if (batch?.recordKind === 'live' && batch.owner && this.recoveryStore && !item.recoveryId) {
+      const record = this.recoveryStore.begin(batch.owner, batch.tool, item.input || {}, { batchId: batch.batchId, itemId, originalRow: item.sourceRow, retryOf: item.retryOf });
+      item.recoveryId = record.id;
+      this.recoveryStore.observe(batch.owner, record.id, { type: 'run.failed', error: { code: 'GRANT_START_FAILED' } });
+    }
     this.finishItem(item, 'failed', message);
     return this.snapshot();
   }
@@ -243,9 +316,18 @@ class BatchCoordinator {
       throw this.error('BATCH_REIMPORT_REQUIRED', '批次已结束，请重新导入需要处理的账号并新建批次');
     }
     if (item.status !== 'failed') throw this.error('BATCH_ITEM_NOT_FAILED', '只有未完成账号可以重新发起');
+    if (this.batch.recordKind === 'live' && this.recoveryStore) {
+      const record = this.recoveryStore.list(this.batch.owner || '').find(row => row.id === item.recoveryId);
+      if (!record?.retryAllowed) throw this.error('RECOVERY_REVIEW_REQUIRED', '结果待核对，禁止直接重试；请先核对平台并记录结论。');
+      item.retryOf = record.id;
+    } else if (this.batch.recordKind === 'live' && item.runner) {
+      throw this.error('RECOVERY_REVIEW_REQUIRED', '缺少完整未提交证据，请先核对平台结果。');
+    }
     await item.runner?.stop?.().catch(() => {});
     item.runner = null;
     item.status = 'pending';
+    item.attemptId = crypto.randomUUID();
+    item.recoveryId = null;
     item.message = '';
     item.interventionType = null;
     this.emit('batch.item_updated', { itemId });
@@ -258,6 +340,7 @@ class BatchCoordinator {
     const runners = this.batch.items.flatMap((item) => item.runner ? [item.runner.stop()] : []);
     await Promise.allSettled(runners);
     for (const item of this.batch.items) {
+      if (this.batch.owner && item.recoveryId && this.recoveryStore) this.recoveryStore.observe(this.batch.owner, item.recoveryId, { type: status === 'interrupted' ? 'run.interrupted' : 'run.cancelled' });
       if (!TERMINAL.has(item.status)) item.status = 'cancelled';
       item.input = null;
       item.runner = null;
@@ -275,11 +358,31 @@ class BatchCoordinator {
       scriptPath: this.scriptPath,
       env: this.env,
       onEvent: (event: RunnerEvent) => this.handleRunnerEvent(item, event),
-      onHostRequest: (action: string, payload: UnknownRecord) => this.hostManager.request(item.itemId, action, payload),
+      onHostRequest: async (action: string, payload: UnknownRecord) => {
+        if (action === 'files.validate-upload' || (action === 'browser.action' && (payload.action as UnknownRecord | undefined)?.kind === 'upload')) {
+          if (!this.validateUpload) throw this.error('LOCAL_FILE_UNAVAILABLE', '本机上传验证不可用，已禁止上传');
+          const upload = (payload.action || {}) as UnknownRecord;
+          const filePath = action === 'files.validate-upload' ? payload.filePath
+            : typeof upload.inputKey === 'string' ? (payload.input as UnknownRecord | undefined)?.[upload.inputKey] : upload.value;
+          const result = await this.validateUpload({ filePath });
+          if (action === 'files.validate-upload') return result;
+        }
+        if (action === 'recovery.before-mutation') {
+          if (!this.batch?.owner || !item.recoveryId || !this.recoveryStore) throw this.error('RECOVERY_MISSING', '缺少本机恢复记录，已禁止提交。');
+          if (this.authorizeMutation && await this.authorizeMutation() !== this.batch.owner) throw this.error('RECOVERY_OWNER_MISMATCH', '授权已变化，已禁止继续提交。');
+          this.recoveryStore.mutation(this.batch.owner, item.recoveryId);
+          return { saved: true };
+        }
+        return this.hostManager.request(item.itemId, action, payload);
+      },
     });
   }
 
   handleRunnerEvent(item: BatchItem, event: RunnerEvent) {
+    if (this.batch?.owner && item.recoveryId && this.recoveryStore) {
+      try { this.recoveryStore.observe(this.batch.owner, item.recoveryId, event); }
+      catch { this.finishItem(item, 'failed', '本机恢复记录保存失败，结果待核对。'); return; }
+    }
     const enriched = { ...event, batchId: this.batch?.batchId, itemId: item.itemId };
     if (event.type === 'user.action_required') {
       item.status = 'waiting_user';
@@ -303,6 +406,10 @@ class BatchCoordinator {
   finishItem(item: BatchItem, status: string, message = '') {
     const batch = this.batch;
     if (!batch) return;
+    if (batch.owner && item.recoveryId && this.recoveryStore && status !== 'completed') {
+      try { this.recoveryStore.observe(batch.owner, item.recoveryId, { type: status === 'cancelled' ? 'run.cancelled' : 'run.failed', error: { code: 'RUNNER_START_OR_EXECUTION_FAILED' } }); }
+      catch { message = '本机恢复记录保存失败，结果待核对。'; }
+    }
     item.status = status;
     item.message = message || '';
     item.interventionType = null;
@@ -369,6 +476,8 @@ class BatchCoordinator {
       interventionType: item.interventionType,
       message: item.message,
       browserReady: item.browserReady,
+      attemptId: item.attemptId,
+      recovery: this.batch?.owner && item.recoveryId ? this.recoveryStore?.list(this.batch.owner).find(record => record.id === item.recoveryId) : undefined,
     }));
     const count = (status: string) => items.filter(item => item.status === status).length;
     return {

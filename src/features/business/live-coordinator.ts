@@ -312,7 +312,7 @@ export class BusinessLiveCoordinator {
         executionMode: 'batch',
         clientBatchId: snapshot.batchId,
         clientItemId: itemId,
-        idempotencyKey: `${snapshot.batchId}:${itemId}`,
+        idempotencyKey: `${snapshot.batchId}:${itemId}:${snapshot.items.find(item => item.itemId === itemId)?.attemptId || 'initial'}`,
       }))
       if (!valid()) return
       const grant = envelope.launch_data || envelope.grant || (envelope.token ? launchGrantSchema.parse(envelope) : null)
