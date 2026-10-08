@@ -40,7 +40,9 @@ const env = {
   CHROMA_PERSIST_DIR: join(runtime, 'chroma'),
   JWT_SECRET_KEY: randomBytes(48).toString('hex'),
   REDIS_URL: '', QWEN_API_KEY: '', OPENAI_API_KEY: '',
-  TOOL_EXECUTION_MODE: 'demo', AI_SUPPORT_MODE: 'rules',
+  // Opt-in UI QA can display a disabled synthetic live catalog. The fixture
+  // owner is still restricted to its own loopback SQLite test environment.
+  TOOL_EXECUTION_MODE: process.env.KST_REAL_E2E_UI_CATALOG === '1' ? 'live' : 'demo', AI_SUPPORT_MODE: 'rules',
   VITE_SENTRY_DSN: '', VITE_SENTRY_ENABLED: 'false',
   VITE_CONTROL_API_BASE: `http://127.0.0.1:${port}`, VITE_API_BASE: `http://127.0.0.1:${port}`,
   VITE_DEV_API_TARGET: `http://127.0.0.1:${port}`,

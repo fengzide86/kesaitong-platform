@@ -33,7 +33,15 @@ async def seed(root: Path) -> None:
     from core.security import hash_password
     from database import async_session_maker, engine, init_db
     from domains.catalog import seed_initial_data
-    from models import Agency, AuthCode, Plan, StaffRole, StaffStatus, StaffUser
+    from models import (
+        Agency,
+        AuthCode,
+        Plan,
+        Setting,
+        StaffRole,
+        StaffStatus,
+        StaffUser,
+    )
     from sqlalchemy import select
 
     await init_db()
@@ -53,6 +61,21 @@ async def seed(root: Path) -> None:
         plans = list((await db.execute(select(Plan))).scalars())
         consumer = next(p for p in plans if p.name.startswith("Y199"))
         business = next(p for p in plans if p.product_type == "business")
+        if os.environ.get("KST_REAL_E2E_UI_CATALOG") == "1":
+            # Display-only synthetic catalog: never a real-tool acceptance.
+            from domains.catalog.seed_service import default_tool_configs
+
+            catalog = [tool for tool in default_tool_configs() if tool.get("capability_key") in {"listing_script", "ad_script"}]
+            if len(catalog) != 2:
+                raise RuntimeError("UI fixture requires the known two catalog schemas")
+            for tool in catalog:
+                tool.update(availability="live_beta", supports_demo_single=False, supports_demo_batch=False,
+                            supports_live_single=True, supports_live_batch=True, supports_batch=True,
+                            status="maintenance", release_status="maintenance", script_status="blocked",
+                            capability_tags=["本机界面验收"], preparation_notes=["只核对查找与说明布局，不启动任何任务。"],
+                            description="仅用于本机界面验收的不可执行目录；不会启动平台或 Runner。")
+            setting = (await db.execute(select(Setting).where(Setting.key == "tool_configs"))).scalar_one()
+            setting.value = json.dumps(catalog, ensure_ascii=False)
         for label in ("consumer", "business", "business_cancel"):
             db.add(AuthCode(
                 code=credentials[label],
