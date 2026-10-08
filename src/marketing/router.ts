@@ -4,7 +4,7 @@ import ScenarioView from '@/views/ScenarioView.vue'
 import MarketingToolsView from '@/views/MarketingToolsView.vue'
 import MarketingTermsView from './MarketingTermsView.vue'
 import MarketingNotFound from './MarketingNotFound.vue'
-import SimulationView from './demo/SimulationView.vue'
+import SimulationView from './demo/v2/V2SimulationView.vue'
 
 // This small static site loads its pages together. An already-open homepage
 // must not need a removed lazy chunk after the local preview is rebuilt.
