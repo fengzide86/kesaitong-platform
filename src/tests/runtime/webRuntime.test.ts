@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getApiBase } from '@/shared/api/base'
 import { installerPathFromManifest, resolveDesktopInstallerUrl } from '@/runtime/desktop-download'
 import { resolveRuntimeCapabilities } from '@/runtime/capabilities'
-import { compareVersions } from '@/features/updates/web-version'
 
 describe('web runtime capabilities', () => {
   afterEach(() => {
@@ -33,7 +32,7 @@ describe('web runtime capabilities', () => {
     expect(capabilities).toMatchObject({ kind: 'desktop', singleLive: true, batchLive: true, freightWorkbook: true })
   })
 
-  it('uses the browser origin as the formal web API base', () => {
+  it('uses the browser origin for local renderer API tests', () => {
     expect(getApiBase()).toBe(window.location.origin)
   })
 })
@@ -125,13 +124,5 @@ describe('desktop download discovery', () => {
     const invalid = vi.fn<typeof fetch>().mockResolvedValue(new Response('path: ../bad.exe'))
     await expect(resolveDesktopInstallerUrl(invalid, 'https://kst.example')).rejects.toThrow('地址无效')
     expect(vi.getTimerCount()).toBe(0)
-  })
-})
-
-describe('web version comparison', () => {
-  it('compares numeric version segments instead of lexical text', () => {
-    expect(compareVersions('1.10.0', '1.9.9')).toBeGreaterThan(0)
-    expect(compareVersions('v1.8.5', '1.8.5')).toBe(0)
-    expect(compareVersions('1.8.4', '1.8.5')).toBeLessThan(0)
   })
 })

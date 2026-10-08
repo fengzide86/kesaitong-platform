@@ -38,11 +38,11 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Build web bundle
+      - name: Build local renderer for isolated UI tests
         run: npm run build:web
       - uses: actions/upload-artifact@v7
         with:
-          name: web-dist
+          name: local-renderer-dist
           path: dist/
           retention-days: 1
       - name: Build and audit the independent marketing website
@@ -215,7 +215,7 @@ jobs:
       - run: npm ci
       - uses: actions/download-artifact@v8
         with:
-          name: web-dist
+          name: local-renderer-dist
           path: dist
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --config=playwright.business.config.ts
@@ -242,7 +242,7 @@ jobs:
       - run: npm ci
       - uses: actions/download-artifact@v8
         with:
-          name: web-dist
+          name: local-renderer-dist
           path: dist
       - uses: actions/download-artifact@v8
         with:

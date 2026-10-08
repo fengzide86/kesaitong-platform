@@ -1,6 +1,6 @@
 {
   "name": "amazon-toolbox",
-  "version": "1.8.13",
+  "version": "1.8.14",
   "description": "课赛通 KST · 跨境电商赛训效率平台",
   "author": "课赛通 KST 团队",
   "private": true,
@@ -123,7 +123,6 @@
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.1.0",
     "vite": "^8.1.4",
-    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0",

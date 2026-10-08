@@ -12,7 +12,7 @@
 | `dev-preview.bat` | 本地后端与 Electron 用户登录入口；按授权进入 C/B 端 | 否；`remote` 需明确指定 |
 | `检查.bat` / `检查.bat full` | 快速测试 / 完整发布门禁 | 否 |
 | `仅打包.bat` | 当前版本 NSIS、包内容审计、更新清单哈希检查 | 否；不改版本、不提交、不上传 |
-| `一键发布.bat` | 后端、Web 应用和桌面正式更新 | 是；完整生产门禁 |
+| `一键发布.bat` | 后端、桌面正式更新及业务网页版下线核验 | 是；完整生产门禁 |
 | `官网预览.bat` | 独立宣传官网构建、审计和本地预览 | 否 |
 | `官网发布.bat` | 按官网配置发布独立宣传站及上线核验 | 是；配置或认证缺失会失败 |
 | `联合发布.bat` | 先预检官网账号，再完整发布系统，最后发布宣传官网 | 是；任一步失败均中止并说明完成范围 |
@@ -124,7 +124,7 @@ node scripts/toolbox-cli.mjs pack
   - `Real backend C B Admin journeys`
   - `Windows NSIS install and runtime smoke`
 
-确认生产发布后，脚本执行完整质量门禁、构建及内容审计，再依次部署后端、Web 和桌面更新。发布阶段为 `prepared → backend_deployed → web_activated → desktop_published → verified`，状态与产物校验值保存到 `TOOLBOX_DATA_ROOT/release-workflows/<release-id>/`，Windows 默认位于 D 盘。后端部署包通过 `git archive` 从该提交的跟踪文件生成。最终核对健康信息、Web 版本、桌面清单后才创建并推送版本标签。
+确认生产发布后，脚本执行完整质量门禁、构建及内容审计，再依次部署后端与桌面更新。发布阶段为 `prepared → backend_deployed → desktop_published → verified`，schemaVersion=2 状态与后端、桌面产物校验值保存到 `TOOLBOX_DATA_ROOT/release-workflows/<release-id>/`，Windows 默认位于 D 盘。后端部署包通过 `git archive` 从该提交的跟踪文件生成，包含业务网页版下线策略及 Service Worker 清退脚本；不生成、上传或激活业务 Web 归档。最终核对健康信息、桌面清单及旧网页的跳转、410 和清退脚本后才创建并推送版本标签。`build:web` 仅用于本地预览和隔离界面测试，测试产物不进入生产发布。
 
 无人值守发布示例：
 
@@ -150,7 +150,7 @@ $releaseId='<原发布 ID>'
 node scripts/toolbox-cli.mjs release --publish "--version=$releaseVersion" "--resume=$releaseId"
 ```
 
-**生产禁止 `--skip-verify` 和 `--skip-build`。** `--resume` 会验证原状态、产物哈希和已完成阶段的线上版本，不是绕过验证。发布过程中保留服务器发布租约，失败后应按原 release ID 恢复，不要手动清理租约或另起一轮发布。
+**生产禁止 `--skip-verify` 和 `--skip-build`。** `--resume` 会验证原状态、产物哈希和已完成阶段的线上版本；后端部署后还会验证业务网页版持续下线。发布过程中保留服务器发布租约，失败后应按原 release ID 恢复，不要手动清理租约或另起一轮发布。历史 schemaVersion=1 记录保留原文件，但禁止自动迁移或续跑（含旧 `web_activated` 阶段），避免重新开放旧网页。先核对原发布是否完成及其租约归属，再按新的已审核版本建立 schemaVersion=2 发布；不得编辑历史状态伪装成新版。
 
 仅打包的低层命令如下；它不等同于完整门禁，也不部署或发布：
 
@@ -173,7 +173,7 @@ npm run package:audit
 
 2026-09-21 实际可访问通道为 `https://fengzide86.github.io`（独立静态仓库），Cloudflare 的 `kesaitong.pages.dev` 当时返回 522。官网通道以本机 `.env.marketing.local` 的当前配置及公开访问核验为准，登录成功不等于域名或站点可用。域名 `kesaitong.top` 是否完成绑定必须另行核验。
 
-官网不再直接搬运业务应用。`官网预览.bat` 依次执行 `build:marketing`、`marketing:audit`、`preview:marketing`，只使用 `dist-marketing`，默认在 `http://127.0.0.1:4200` 预览，不覆盖桌面或业务 Web 产物。
+官网不再直接搬运业务应用。`官网预览.bat` 依次执行 `build:marketing`、`marketing:audit`、`preview:marketing`，只使用 `dist-marketing`，默认在 `http://127.0.0.1:4200` 预览，不覆盖桌面或本地预览产物。正式产品入口为 `https://kesaitong.top`，工具、授权管理和代理业务通过 Windows 软件使用。
 
 `官网发布.bat` 委托 `marketing:publish`，由独立发布器检查 `.env.marketing.local`、所选托管通道账号、主分支及版本前置条件，构建并核对线上结果。未配置账号、站点或无法从正式更新清单取得下载链接时必须明确失败，不生成占位“发布成功”。通常留空可选的 `VITE_DESKTOP_DOWNLOAD_URL`，由当前已发布的 `latest.yml` 自动生成；若显式配置，必须与本轮系统版本一致。认证与实际生产发布由发布器控制，不由 BAT 隐式登录或静默跳过。
 
@@ -184,11 +184,11 @@ npm run package:audit
 .\官网发布.bat
 ```
 
-`一键发布.bat` 的原五阶段仍只负责后端、Web 应用与桌面更新；不能把系统发布成功描述成 Cloudflare 官网也已上线。需要两个通道一起更新时，使用以下联合入口。
+`一键发布.bat` 的四阶段只负责后端、桌面更新及业务网页版下线核验；不能把系统发布成功描述成官网也已上线。需要两个通道一起更新时，使用以下联合入口。
 
 ## 联合发布系统与宣传官网
 
-双击 `联合发布.bat`，默认使用当前 `package.json` 版本。它先通过官网发布器的 `--check-account` 核验本地配置、所选托管通道登录与已存在项目，再调用原系统 `release --publish` 完整门禁和五阶段，最后运行独立官网发布器。账号预检不要求新系统版本此时已经上线；真正上传官网前仍会核对系统版本、下载清单、同一提交的 CI 与线上文件。
+双击 `联合发布.bat`，默认使用当前 `package.json` 版本。它先通过官网发布器的 `--check-account` 核验本地配置、所选托管通道登录与已存在项目，再调用系统 `release --publish` 完整门禁和四阶段，最后运行独立官网发布器。账号预检不要求新系统版本此时已经上线；真正上传官网前仍会核对系统版本、下载清单、同一提交的 CI 与线上文件。
 
 ```powershell
 .\联合发布.bat --dry-run
@@ -213,12 +213,12 @@ SSH 连接信息统一放在忽略提交的 `.env.deploy`。服务器使用非 2
 ## 回滚
 
 - 后端部署脚本在停服后冻结写入并备份数据库、附件及代码/配置，避免数据库与凭证文件备份时间不一致。Alembic 已开始后的失败使用 `ops/deploy/restore-backup.sh` 恢复一致备份；此前失败恢复代码、配置和 Python 环境指针。
-- Web 构建发布到独立版本目录，用 `current` 软链接原子切换；该阶段验证失败会恢复上一 Web 指针。带哈希的静态资源保留兼容旧的已打开页面。
-- 桌面清单经暂存、校验后原子发布。若较早阶段已成功而后续失败，已成功阶段不会自动全部回旧版；优先用同一 release ID 恢复。三项发布不是跨服务的全局原子事务。
+- 业务网页版下线使用独立的私有备份和恢复清单。网页问题只能恢复该网页配置及产物，不能恢复数据库；显式恢复网页须使用下线工具的 `--restore <backup-dir> --allow-web-restore` 并重新核对影响。普通后端回滚保留下线策略，不自动恢复旧网页入口。
+- 桌面清单经暂存、校验后原子发布。若较早阶段已成功而后续失败，已成功阶段不会自动全部回旧版；优先用同一 release ID 恢复。后端与桌面发布不是跨服务的全局原子事务。
 - 需要人工恢复后端时，先核对本次部署输出的 `backup_dir`、恢复影响和备份完整性，再使用服务器已安装的 `toolbox-restore-backup`；该操作会恢复数据库和附件，不得只因网页问题就盲目执行。
 - 代码回退使用经过评审的 `git revert <commit>`，再按新版本发布。
 
-不要使用 `git reset --hard`、强推或覆盖已发布标签。不要把某一阶段的回滚成功描述为三端都已回滚；必须重新核对后端健康、Web 元数据和桌面更新清单。
+不要使用 `git reset --hard`、强推或覆盖已发布标签。不要把某一阶段的回滚成功描述为全部服务都已回滚；必须重新核对后端健康、业务网页版下线状态和桌面更新清单。
 
 ## 仍需人工确认
 
@@ -230,4 +230,4 @@ SSH 连接信息统一放在忽略提交的 `.env.deploy`。服务器使用非 2
 
 仓库生产部署脚本使用 `toolbox-backend.service`，通过发布版 Python 环境的 `current-venv` 指针启动 Uvicorn。Compose 用于本地一致性和 MariaDB 集成测试，不是默认生产部署方式；不要因本机没有 Docker 而安装或迁移生产环境。
 
-控制面及部署目标以当前 `.env.deploy` 为准；Web 和桌面更新使用同一 HTTPS 控制面。仓库 Nginx 配置分别提供 `/api/`、`/updates/` 和 Web 静态页面。发布前实时验证 TLS、健康信息和版本，不把旧部署记录或旧电脑端口配置当作当前事实；不要关闭证书续期相关入口或擅自修改网络规则。
+控制面及部署目标以当前 `.env.deploy` 为准；业务 API 和桌面更新使用同一 HTTPS 控制面。仓库 Nginx 配置保留 `/api/`、`/updates/` 及证书续期入口。旧业务页面 302 跳转至 `https://kesaitong.top/#`，丢弃查询参数并阻止浏览器继承旧片段；旧脚本、资源、清单和 Web 版本文件返回 410；`/sw.js` 保留清退脚本，仅清理该 scope 的历史预缓存并注销自身。发布前实时验证 TLS、健康信息、版本与下线状态，不把旧部署记录或旧电脑端口配置当作当前事实。

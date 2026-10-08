@@ -110,7 +110,7 @@ test -f "${BACKUP_DIR}/package.json"
 test -f "${BACKUP_DIR}/database.sql.gz"
 test -f "${BACKUP_DIR}/backend.env"
 
-require_commands chmod chown cp curl grep ln mkdir mktemp mv mysql nginx readlink rm rsync seq sleep systemctl tar
+require_commands chmod chown cp curl grep install ln mkdir mktemp mv mysql nginx readlink rm rsync seq sleep systemctl tar
 
 VENV_POINTER_ACTION="keep"
 if [[ -f "${BACKUP_DIR}/current-venv.target" ]]; then
@@ -346,6 +346,18 @@ for pair in \
 do
   source_file="${pair%%:*}"
   target_file="${pair#*:}"
+  if [[ "${target_file}" == /usr/local/sbin/toolbox-restore-backup && -f "${DATA_ROOT}/web-retirement.json" ]]; then
+    # Keep this retirement-aware restore program across historical restores.
+    continue
+  fi
+  # A backend/database rollback is not authorization to reopen a retired Web.
+  # Only the separate retire-web.py --restore --allow-web-restore does that.
+  if [[ "${target_file}" == /etc/nginx/sites-enabled/amazon-toolbox && -f "${DATA_ROOT}/web-retirement.json" ]]; then
+    test -f "${DATA_ROOT}/web-retired/nginx.conf"
+    test -f "${DATA_ROOT}/web-retired/sw.js"
+    install -m 0644 "${DATA_ROOT}/web-retired/nginx.conf" "${target_file}"
+    continue
+  fi
   if [[ -f "${source_file}.missing" ]]; then
     rm -f "${target_file}"
   elif [[ -f "${source_file}" ]]; then

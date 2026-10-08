@@ -21,7 +21,7 @@ async function configuration(command: 'build' | 'serve' = 'build'): Promise<User
 
 async function compiledApiBase(config: UserConfig, runtimeBase?: string): Promise<{ code: string, base: string }> {
   // Compile the real resolver against the real production env and the loaded
-  // defines, without producing artifacts or running the app/PWA plugins.
+  // defines, without producing artifacts or running the app plugins.
   const result = await build({
     configFile: false,
     root: repository,
@@ -59,7 +59,7 @@ describe('renderer API build isolation', () => {
 
   afterEach(() => vi.unstubAllEnvs())
 
-  it('builds the ordinary production Web artifact against the current origin, not the desktop IP', async () => {
+  it('builds the local browser renderer against its current origin', async () => {
     const config = await configuration()
     for (const key of baseKeys) expect(config.define?.[`import.meta.env.${key}`]).toBe('""')
     const compiled = await compiledApiBase(config)

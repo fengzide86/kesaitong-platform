@@ -1,44 +1,13 @@
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { visualizer } from 'rollup-plugin-visualizer'
-import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'node:fs'
 
 const packageMetadata = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
-const hashedStaticAsset = /^assets\/(?:.+\/)?[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css|woff2?|png|webp|svg)$/i
-
-function keepOnlyHashedStaticAssets(
-  entries: Array<{ url: string, revision: string | null, integrity?: string, size: number }>,
-) {
-  return {
-    manifest: entries.filter(entry => hashedStaticAsset.test(entry.url)),
-    warnings: [],
-  }
-}
-
-function webVersionPlugin(version: string): Plugin {
-  const payload = () => JSON.stringify({
-    version,
-    commit: process.env.GITHUB_SHA || process.env.RELEASE_COMMIT || null,
-  }, null, 2)
-  return {
-    name: 'kst-web-version',
-    configureServer(server) {
-      server.middlewares.use('/web-version.json', (_request, response) => {
-        response.setHeader('Content-Type', 'application/json; charset=utf-8')
-        response.setHeader('Cache-Control', 'no-store')
-        response.end(payload())
-      })
-    },
-    generateBundle() {
-      this.emitFile({ type: 'asset', fileName: 'web-version.json', source: payload() })
-    },
-  }
-}
 
 export default defineConfig(({ command, mode }) => {
   const desktopBuild = process.env.TOOLBOX_BUILD_TARGET === 'electron'
@@ -72,27 +41,6 @@ export default defineConfig(({ command, mode }) => {
         resolvers: [ElementPlusResolver()],
         dts: declarationOutput ? 'src/components.d.ts' : false,
       }),
-      !desktopBuild && webVersionPlugin(packageMetadata.version),
-      // Service Worker 只属于明确的 Web 构建，桌面壳使用自身更新与缓存策略。
-      !desktopBuild && VitePWA({
-        registerType: 'autoUpdate',
-        includeManifestIcons: false,
-        // The manifest remains installable but is served as a normal static
-        // file so it never enters the service worker's precache.
-        manifest: false,
-        workbox: {
-          cleanupOutdatedCaches: true,
-          navigateFallback: null,
-          globPatterns: ['assets/**/*.{js,css,png,webp,svg,woff,woff2}'],
-          manifestTransforms: [keepOnlyHashedStaticAssets],
-          runtimeCaching: [
-            {
-              urlPattern: /\/api\//,
-              handler: 'NetworkOnly',
-            },
-          ],
-        },
-      }),
       // 构建分析（仅在分析模式时启用）
       mode === 'analyze' && visualizer({
         open: true,
@@ -108,8 +56,8 @@ export default defineConfig(({ command, mode }) => {
     },
     define: {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageMetadata.version),
-      // .env.production contains the desktop control-plane fallback. A Web
-      // artifact must instead use its own origin (/api), unless an isolated
+      // .env.production contains the desktop control-plane fallback. Local
+      // browser renderer tests use their own origin (/api), unless an isolated
       // build explicitly injects an API URL (for example real-backend E2E).
       // Do not apply this override to Electron or the development server.
       ...(command === 'build' && !desktopBuild ? {

@@ -10,7 +10,9 @@ import { resolvePython } from './run-python.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const isWindows = process.platform === 'win32'
-const RELEASE_STAGES = ['prepared', 'backend_deployed', 'web_activated', 'desktop_published', 'verified']
+const RELEASE_STAGES = ['prepared', 'backend_deployed', 'desktop_published', 'verified']
+const RELEASE_SCHEMA_VERSION = 2
+const RETIRED_WEB_DESTINATION = 'https://kesaitong.top/#'
 const REMOTE_PRODUCTION_LEASE = '/var/lib/amazon-toolbox/release-control/production.lease'
 const REMOTE_PRODUCTION_LEASE_GUARD = `${REMOTE_PRODUCTION_LEASE}.guard`
 const releaseSessionId = crypto.randomUUID()
@@ -201,14 +203,22 @@ function writeReleaseState(state) {
   log(`发布状态：${state.stage}（${state.releaseId}）`)
 }
 
+export function validateReleaseState(state, releaseId) {
+  if (state.schemaVersion === 1) {
+    fail('历史 schemaVersion=1 发布记录已保留；旧 Web 发布流程不能自动续跑。请核对原发布结果和租约，使用新版本建立 schemaVersion=2 发布。')
+  }
+  if (state.schemaVersion !== RELEASE_SCHEMA_VERSION || state.releaseId !== releaseId || !RELEASE_STAGES.includes(state.stage)) {
+    fail(`发布状态文件无效：${releaseId}`)
+  }
+  if (state.artifacts?.web) fail('schemaVersion=2 不允许携带旧业务 Web 发布产物')
+  return state
+}
+
 function readReleaseState(releaseId) {
   const filename = statePath(releaseId)
   if (!fs.existsSync(filename)) fail(`未找到可恢复的发布状态：${filename}`)
   const state = JSON.parse(fs.readFileSync(filename, 'utf8'))
-  if (state.schemaVersion !== 1 || state.releaseId !== releaseId || !RELEASE_STAGES.includes(state.stage)) {
-    fail(`发布状态文件无效：${filename}`)
-  }
-  return state
+  return validateReleaseState(state, releaseId)
 }
 
 function processIsAlive(pid) {
@@ -886,12 +896,12 @@ function deploymentArchive(version, commitSha, artifactDir) {
     'ops',
   ])
   const listing = output('tar', ['-tzf', archive])
-  for (const required of ['backend/main.py', 'backend/constraints-py310.txt', 'ops/deploy/deploy-backend.sh', 'package.json']) {
+  for (const required of ['backend/main.py', 'backend/constraints-py310.txt', 'ops/deploy/deploy-backend.sh', 'ops/deploy/retire-web.py', 'ops/web-retired/sw.js', 'ops/nginx/amazon-toolbox.conf', 'package.json']) {
     if (!listing.split(/\r?\n/).includes(required)) fail(`提交归档缺少必要文件：${required}`)
   }
   for (const shellScript of [
     'ops/deploy/deploy-backend.sh',
-    'ops/deploy/deploy-web.sh',
+    'ops/deploy/retire-web.py',
     'ops/deploy/restore-backup.sh',
   ]) {
     const source = output('tar', ['-xOf', archive, shellScript])
@@ -929,6 +939,7 @@ async function deployBackend(state, connection) {
     if (result.release_id !== state.releaseId) {
       fail(`部署后端发布 ID 不匹配：期望 ${state.releaseId}，实际 ${result.release_id}`)
     }
+    await verifyRetiredWeb(state.controlUrl)
     log(`生产后端已部署：v${state.version} / ${state.commitSha.slice(0, 12)}`)
   } finally {
     try { run('ssh', [...sshArgs, target, `rm -rf ${shellQuote(remoteStage)}`]) } catch { /* best-effort cleanup */ }
@@ -948,22 +959,6 @@ function releaseArtifacts(version, releaseDir = path.join(root, 'release')) {
     if (!fs.existsSync(artifact)) fail(`发布产物不存在：${artifact}`)
   }
   return { installer, blockmap, manifest: manifestPath }
-}
-
-function createWebArtifact(state, artifactDir) {
-  const distDir = path.join(root, 'dist')
-  if (!fs.existsSync(path.join(distDir, 'index.html'))) fail('Web 构建缺少 dist/index.html')
-  const versionMetadata = {
-    version: state.version,
-    commitSha: state.commitSha,
-    releaseId: state.releaseId,
-    builtAt: new Date().toISOString(),
-  }
-  fs.writeFileSync(path.join(distDir, 'web-version.json'), JSON.stringify(versionMetadata), 'utf8')
-  const archive = path.join(artifactDir, `kst-web-${state.releaseId}.tar.gz`)
-  fs.rmSync(archive, { force: true })
-  run('tar', ['-czf', archive, '-C', distDir, '.'])
-  return artifactRecord(archive)
 }
 
 function copyDesktopArtifacts(version, artifactDir) {
@@ -991,15 +986,14 @@ function preparedArtifactRecords(state) {
   const desktop = state.artifacts?.desktop
   return [
     state.artifacts?.backend,
-    state.artifacts?.web,
     desktop?.installer,
     desktop?.blockmap,
     desktop?.manifest,
   ]
 }
 
-function hasPreparedArtifacts(state) {
-  return preparedArtifactRecords(state).every(Boolean)
+export function hasPreparedArtifacts(state) {
+  return !state.artifacts?.web && preparedArtifactRecords(state).every(Boolean)
 }
 
 function verifyPreparedArtifacts(state) {
@@ -1012,45 +1006,50 @@ async function prepareRelease(state, ciAttestedSha) {
   const artifactDir = path.join(releaseStateDirectory(state.releaseId), 'artifacts')
   fs.mkdirSync(artifactDir, { recursive: true })
   run('npm', ['run', 'verify:release'], { env: releaseVerificationEnvironment(ciAttestedSha) })
-  run('npm', ['run', 'build:web'])
-  const web = createWebArtifact(state, artifactDir)
   run('npm', ['run', 'electron:release'])
   run('npm', ['run', 'package:audit'])
   const desktop = copyDesktopArtifacts(state.version, artifactDir)
   const backend = artifactRecord(deploymentArchive(state.version, state.commitSha, artifactDir))
-  return { backend, web, desktop }
+  return { backend, desktop }
 }
 
-async function publishWeb(state, connection) {
-  const { target, sshArgs, scpArgs } = connection
-  verifyArtifactRecord(state.artifacts.web)
-  verifyArtifactRecord(state.artifacts.backend)
-  const remoteStage = `/tmp/amazon-toolbox-${state.releaseId}-${releaseSessionId}-web`
-  const remoteWebArchive = `${remoteStage}/${path.basename(state.artifacts.web.path)}`
-  const remoteBackendArchive = `${remoteStage}/${path.basename(state.artifacts.backend.path)}`
-  const remoteScript = `${remoteStage}/ops/deploy/deploy-web.sh`
-  try {
-    run('ssh', [...sshArgs, target, `rm -rf ${shellQuote(remoteStage)} && mkdir -p ${shellQuote(remoteStage)} && chmod 700 ${shellQuote(remoteStage)}`])
-    run('scp', [...scpArgs, state.artifacts.web.path, state.artifacts.backend.path, `${target}:${remoteStage}/`])
-    run('ssh', [...sshArgs, target, [
-      'tar -xzf', shellQuote(remoteBackendArchive), '-C', shellQuote(remoteStage),
-      shellQuote('ops/deploy/deploy-web.sh'),
-    ].join(' ')])
-    const deployCommand = [
-      'bash', shellQuote(remoteScript), shellQuote(remoteWebArchive), shellQuote(state.version),
-      shellQuote(state.commitSha), shellQuote(state.releaseId), shellQuote(state.controlUrl),
-    ].join(' ')
-    run('ssh', [...sshArgs, target, privileged(remoteLeaseGuardedCommand(state, deployCommand))], {
-      redactValues: [state.leaseToken],
-    })
-    const deployed = await getJson(`${state.controlUrl}/web-version.json`, 30_000)
-    if (deployed.version !== state.version || deployed.commitSha !== state.commitSha || deployed.releaseId !== state.releaseId) {
-      fail('线上 Web 版本元数据与本次发布不一致')
+export async function verifyRetiredWeb(controlUrl, request = fetch) {
+  const baseUrl = controlUrl.replace(/\/+$/, '')
+  const routes = ['/', '/login', '/user', '/user/history', '/business', '/business/workspace', '/admin', '/admin/users', '/agent', '/agency', '/agency/customers']
+  const assets = ['/assets/retirement-probe.js', '/manifest.webmanifest', '/web-version.json', '/registerSW.js', '/workbox-retirement-probe.js']
+  const fetchPath = route => request(`${baseUrl}${route}`, { redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+  for (const route of routes) {
+    const response = await fetchPath(`${route}?retirement_probe=discard`)
+    if (response.status !== 302 || response.headers.get('location') !== RETIRED_WEB_DESTINATION) {
+      fail(`业务 Web 下线检查失败：${route} 必须跳转到不携带查询参数和旧片段的正式官网`)
     }
-    log(`Web 已原子切换：v${state.version} / ${state.releaseId}`)
-  } finally {
-    try { run('ssh', [...sshArgs, target, `rm -rf ${shellQuote(remoteStage)}`]) } catch { /* best-effort cleanup */ }
   }
+  for (const route of assets) {
+    const response = await fetchPath(route)
+    if (response.status !== 410) fail(`业务 Web 资源下线检查失败：${route} 返回 HTTP ${response.status}`)
+  }
+  const worker = await fetchPath('/sw.js')
+  if (worker.status !== 200 || !/javascript/i.test(worker.headers.get('content-type') || '')) {
+    fail('业务 Web Service Worker 清退脚本不可用')
+  }
+  const source = await worker.text()
+  if (!source.includes('self.registration.unregister()') || !source.includes('workbox-precache-v2-')) {
+    fail('业务 Web Service Worker 清退脚本内容不匹配')
+  }
+  return { status: 'retired', destination: RETIRED_WEB_DESTINATION }
+}
+
+export async function verifyDesktopDownloadRange(state, request = fetch) {
+  const installer = state.artifacts.desktop.installer
+  const url = `${state.controlUrl.replace(/\/+$/, '')}/updates/${encodeURIComponent(path.basename(installer.path))}`
+  const response = await request(url, {
+    headers: { Range: 'bytes=0-15' }, redirect: 'manual', signal: AbortSignal.timeout(30_000),
+  })
+  if (response.status !== 206 || response.headers.get('content-range') !== `bytes 0-15/${installer.size}`) {
+    await response.body?.cancel()
+    fail('桌面安装包断点下载检查失败：必须返回 206 及正确的文件长度')
+  }
+  if ((await response.arrayBuffer()).byteLength !== 16) fail('桌面安装包断点下载返回的字节数不正确')
 }
 
 async function publishedDesktopMatches(state, baseUrl) {
@@ -1117,11 +1116,9 @@ async function verifyPublishedRelease(state) {
   if (live.release_id !== state.releaseId) fail(`最终健康检查发布 ID 不匹配：${live.release_id}`)
   const ready = await getJson(`${baseUrl}/api/health/ready`, 30_000)
   if (ready.status !== 'ok') fail(`生产就绪检查失败：${ready.status}`)
-  const web = await getJson(`${baseUrl}/web-version.json`, 30_000)
-  if (web.version !== state.version || web.commitSha !== state.commitSha || web.releaseId !== state.releaseId) {
-    fail('最终 Web 版本检查不匹配')
-  }
+  await verifyRetiredWeb(baseUrl)
   if (!(await publishedDesktopMatches(state, baseUrl))) fail('最终桌面更新清单检查不匹配')
+  await verifyDesktopDownloadRange(state)
 }
 
 async function verifyResumeCheckpoints(state) {
@@ -1133,15 +1130,11 @@ async function verifyResumeCheckpoints(state) {
     }
     const ready = await getJson(`${baseUrl}/api/health/ready`, 30_000)
     if (ready.status !== 'ok') fail(`恢复发布前检查失败：线上后端未就绪（${ready.status}）`)
+    await verifyRetiredWeb(baseUrl)
   }
-  if (hasReached(state, 'web_activated')) {
-    const web = await getJson(`${baseUrl}/web-version.json`, 30_000)
-    if (web.version !== state.version || web.commitSha !== state.commitSha || web.releaseId !== state.releaseId) {
-      fail('恢复发布前检查失败：线上 Web 不再匹配已记录的 checkpoint')
-    }
-  }
-  if (hasReached(state, 'desktop_published') && !(await publishedDesktopMatches(state, baseUrl))) {
-    fail('恢复发布前检查失败：线上桌面更新不再匹配已记录的 checkpoint')
+  if (hasReached(state, 'desktop_published')) {
+    if (!(await publishedDesktopMatches(state, baseUrl))) fail('恢复发布前检查失败：线上桌面更新不再匹配已记录的 checkpoint')
+    await verifyDesktopDownloadRange(state)
   }
   log(`恢复发布 checkpoint 已核对：${state.stage}`)
 }
@@ -1169,11 +1162,13 @@ async function release(args) {
   if (publish && (args.includes('--skip-verify') || args.includes('--skip-build'))) {
     fail('生产发布禁止 --skip-verify 和 --skip-build；紧急操作也必须先通过 verify:release')
   }
+  // Reject legacy states before dependencies, network access, locks, or writes.
+  const resumeState = resumeId ? readReleaseState(resumeId) : undefined
   if (!dryRun) ensureDependencies()
   let version = optionValue(
     args,
     'version',
-    process.env.TOOLBOX_RELEASE_VERSION || args.find(value => /^\d+\.\d+\.\d+$/.test(value)) || (resumeId ? readReleaseState(resumeId).version : ''),
+    process.env.TOOLBOX_RELEASE_VERSION || args.find(value => /^\d+\.\d+\.\d+$/.test(value)) || resumeState?.version || '',
   )
   if (!version) {
     if (!process.stdin.isTTY) fail('非交互发布必须提供 --version=x.y.z')
@@ -1249,7 +1244,7 @@ async function release(args) {
           fail(`发布状态已存在，请使用 --resume=${releaseId}`)
         }
         state = {
-          schemaVersion: 1,
+          schemaVersion: RELEASE_SCHEMA_VERSION,
           releaseId,
           version,
           commitSha: preflight.commitSha,
@@ -1315,13 +1310,6 @@ async function release(args) {
         await deployBackend(state, connection)
         assertRemoteReleaseLease(state, connection)
         state.stage = 'backend_deployed'
-        writeReleaseState(state)
-      }
-      if (!hasReached(state, 'web_activated')) {
-        assertRemoteReleaseLease(state, connection)
-        await publishWeb(state, connection)
-        assertRemoteReleaseLease(state, connection)
-        state.stage = 'web_activated'
         writeReleaseState(state)
       }
       if (!hasReached(state, 'desktop_published')) {
@@ -1402,7 +1390,7 @@ export async function jointRelease(args, actions = {
   await actions.checkAccount()
   const systemOptions = [...args, '--publish']
   if (!explicitVersion && !resumeId) systemOptions.push(`--version=${packageVersion()}`)
-  log('官网账号预检通过，开始系统完整生产发布；原有质量门禁、确认和可恢复五阶段保持不变。')
+  log('官网账号预检通过，开始后端与桌面端完整生产发布，并核验业务网页版持续下线。')
   await actions.releaseSystem(systemOptions)
   log('系统发布已完成，开始独立宣传官网发布。两者不是跨服务原子事务。')
   try {

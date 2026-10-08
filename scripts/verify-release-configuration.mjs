@@ -65,6 +65,8 @@ if (!metadata.scripts['verify:release'].includes('npm run test:e2e:real')) {
   throw new Error('verify:release must execute isolated actual-backend journeys')
 }
 requireText('.github/workflows/test.yml', ['Real backend C B Admin journeys', 'node scripts/prepare-nsis-upgrade.mjs', 'test-results/nsis/**'])
+requireCount('.github/workflows/test.yml', 'name: local-renderer-dist', 3)
+rejectText('.github/workflows/test.yml', ['name: web-dist', 'Build web bundle'])
 requireText('scripts/toolbox-cli.mjs', ["'Real backend C B Admin journeys'"])
 requireText('package.json', ['node scripts/bundle-electron-preload.mjs'])
 if (!metadata.scripts['test:coverage'].startsWith('npm run electron:compile && ')) {
@@ -77,7 +79,12 @@ requireText('.gitattributes', [
 ])
 requireText('scripts/toolbox-cli.mjs', [
   "run('npm', ['run', 'verify:release'],",
-  "['prepared', 'backend_deployed', 'web_activated', 'desktop_published', 'verified']",
+  "['prepared', 'backend_deployed', 'desktop_published', 'verified']",
+  'const RELEASE_SCHEMA_VERSION = 2',
+  'validateReleaseState(state, releaseId)',
+  'await verifyRetiredWeb(baseUrl)',
+  'await verifyRetiredWeb(state.controlUrl)',
+  'await verifyDesktopDownloadRange(state)',
   "'archive'",
   "'--format=tar.gz'",
   "output('tar', ['-xOf', archive, shellScript])",
@@ -100,10 +107,8 @@ requireText('scripts/toolbox-cli.mjs', [
   'flock -x 9',
   'verifyResumeCheckpoints(state)',
   'verifyArtifactRecord(state.artifacts.backend)',
-  'const remoteBackendArchive =',
-  'const remoteScript = `${remoteStage}/ops/deploy/deploy-web.sh`',
-  'state.artifacts.web.path, state.artifacts.backend.path',
-  "shellQuote('ops/deploy/deploy-web.sh')",
+  "'ops/deploy/retire-web.py'",
+  "'ops/web-retired/sw.js'",
   "gitOutput(['show-ref', '--verify', '--hash', `refs/tags/${tag}`])",
   'lockedPreflight = await productionPreflight(',
   'artifactsPrepared: false',
@@ -115,11 +120,15 @@ requireText('scripts/toolbox-cli.mjs', [
   "parsed.protocol !== 'https:'",
   '生产发布禁止 --skip-verify 和 --skip-build',
 ])
-requireCount('scripts/toolbox-cli.mjs', 'shellQuote(state.releaseId), shellQuote(state.controlUrl)', 2)
-requireCount('scripts/toolbox-cli.mjs', 'remoteLeaseGuardedCommand(state, deployCommand)', 2)
+requireCount('scripts/toolbox-cli.mjs', 'shellQuote(state.releaseId), shellQuote(state.controlUrl)', 1)
+requireCount('scripts/toolbox-cli.mjs', 'remoteLeaseGuardedCommand(state, deployCommand)', 1)
+requireCount('scripts/toolbox-cli.mjs', 'await verifyRetiredWeb(baseUrl)', 2)
 rejectText('scripts/toolbox-cli.mjs', [
   '.venv/bin/python scripts/publish_update.py',
-  "path.join(root, 'ops', 'deploy', 'deploy-web.sh')",
+  'deploy-web.sh',
+  "run('npm', ['run', 'build:web'])",
+  'function createWebArtifact(',
+  'function publishWeb(',
 ])
 requireText('scripts/verify-release-mariadb-gate.mjs', [
   "const headSha = commandOutput('git', ['rev-parse', 'HEAD'])",
@@ -164,24 +173,23 @@ requireText('ops/systemd/toolbox-backend.service', [
   'ExecStart=/opt/amazon-toolbox/current-venv/bin/python',
 ])
 requireText('ops/nginx/amazon-toolbox.conf', [
-  'location /api/',
-  'root /var/lib/amazon-toolbox/web/current;',
-  'root /var/lib/amazon-toolbox/web;',
+  'location ^~ /api/',
+  'https://kesaitong.top/#',
   'location = /web-version.json',
   'location /updates/',
+  'location = /sw.js',
+  'return 410',
 ])
-requireText('ops/deploy/deploy-web.sh', [
-  'mv -Tf',
-  'web-version.json',
-  'previous_web_release',
-  'ASSETS_DIR',
-  'Hashed Web asset collision',
-  'CONTROL_PLANE_URL="${5:?control plane URL is required}"',
-  'FIRST_HASHED_ASSET_URL',
-  'PUBLIC_WEB_OK',
-  'Public Web activation verification failed',
+rejectText('ops/nginx/amazon-toolbox.conf', [
+  'root /var/lib/amazon-toolbox/web/current;',
+  'try_files $uri $uri/ /index.html',
 ])
+if (fs.existsSync(path.join(root, 'ops/deploy/deploy-web.sh'))) throw new Error('Retired Web publisher must not remain executable in the repository')
 requireText('ops/deploy/deploy-backend.sh', [
+  '"${STAGING_DIR}/ops/deploy/retire-web.py"',
+  '--control-plane-url "${CONTROL_PLANE_URL}" --install-policy',
+  '"${UPDATE_ROOT}/web-retirement.json"',
+  '"${UPDATE_ROOT}/web-retired/nginx.conf"',
   'BACKUP_COMPLETE=1',
   'MIGRATION_STARTED=1',
   'restore-backup.sh',
@@ -213,6 +221,8 @@ requireText('ops/deploy/deploy-backend.sh', [
   'runuser -u toolbox -- test -w "${BACKEND_DIR}/runtime"',
 ])
 requireText('ops/deploy/restore-backup.sh', [
+  '"${DATA_ROOT}/web-retirement.json"',
+  '"${DATA_ROOT}/web-retired/nginx.conf"',
   'trap restore_failure ERR',
   'Restore failed; toolbox-backend remains stopped.',
   '"${RESTORE_VENV_PYTHON}" - "${BACKEND_DIR}/.env"',
@@ -284,6 +294,18 @@ rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbo
 // regressions as well as static invariants, including migrated compatibility
 // roots and directory/symbolic-link escapes. No deployment script is executed.
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
+  cwd: root,
+  stdio: 'inherit',
+})
+execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/release-retirement.test.mjs')], {
+  cwd: root,
+  stdio: 'inherit',
+})
+execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/retirement-worker.test.mjs')], {
+  cwd: root,
+  stdio: 'inherit',
+})
+execFileSync(process.execPath, [path.join(root, 'scripts/run-python.mjs'), 'scripts/tests/test_web_retirement.py', '-v'], {
   cwd: root,
   stdio: 'inherit',
 })

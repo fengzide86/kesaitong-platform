@@ -173,11 +173,18 @@ rollback() {
     rsync -a --delete "${BACKEND_PERSISTENT_EXCLUDES[@]}" \
       "${BACKUP_DIR}/backend/" "${BACKEND_DIR}/"
     cp -a "${BACKUP_DIR}/package.json" "${APP_ROOT}/package.json"
-    restore_file "${BACKUP_DIR}/nginx-amazon-toolbox" "/etc/nginx/sites-enabled/amazon-toolbox"
+    if [[ -f "${UPDATE_ROOT}/web-retirement.json" ]]; then
+      test -f "${UPDATE_ROOT}/web-retired/nginx.conf"
+      install -m 0644 "${UPDATE_ROOT}/web-retired/nginx.conf" /etc/nginx/sites-enabled/amazon-toolbox
+    else
+      restore_file "${BACKUP_DIR}/nginx-amazon-toolbox" "/etc/nginx/sites-enabled/amazon-toolbox"
+    fi
     restore_file "${BACKUP_DIR}/nginx-toolbox-observability.conf" "/etc/nginx/conf.d/toolbox-observability.conf"
     restore_file "${BACKUP_DIR}/toolbox-backend.service" "/etc/systemd/system/toolbox-backend.service"
     restore_file "${BACKUP_DIR}/release.env" "${RELEASE_ENV}"
-    restore_file "${BACKUP_DIR}/toolbox-restore-backup" "${RESTORE_COMMAND}"
+    if [[ ! -f "${UPDATE_ROOT}/web-retirement.json" ]]; then
+      restore_file "${BACKUP_DIR}/toolbox-restore-backup" "${RESTORE_COMMAND}"
+    fi
     restore_current_venv || {
       echo "Automatic venv rollback failed; service remains stopped" >&2
       cleanup
@@ -304,6 +311,8 @@ test -f "${STAGING_DIR}/package.json"
 test -f "${STAGING_DIR}/ops/nginx/amazon-toolbox.conf"
 test -f "${STAGING_DIR}/ops/systemd/toolbox-backend.service"
 test -f "${STAGING_DIR}/ops/deploy/restore-backup.sh"
+test -f "${STAGING_DIR}/ops/deploy/retire-web.py"
+test -f "${STAGING_DIR}/ops/web-retired/sw.js"
 test -f "${STAGING_DIR}/backend/requirements.txt"
 test -f "${STAGING_DIR}/backend/constraints-py310.txt"
 test -f "${STAGING_DIR}/backend/alembic.ini"
@@ -576,8 +585,10 @@ atomic_switch_current_venv "${VENV_RELEASE_DIR}"
 
 install -m 0644 "${STAGING_DIR}/ops/nginx/toolbox-observability.conf" \
   /etc/nginx/conf.d/toolbox-observability.conf
-install -m 0644 "${STAGING_DIR}/ops/nginx/amazon-toolbox.conf" \
-  /etc/nginx/sites-enabled/amazon-toolbox
+# Archive and retire the public Web before nginx switches. This installs the
+# service worker first and never starts a browser renderer or changes the DB.
+python3 "${STAGING_DIR}/ops/deploy/retire-web.py" \
+  --control-plane-url "${CONTROL_PLANE_URL}" --install-policy
 install -m 0644 "${STAGING_DIR}/ops/systemd/toolbox-backend.service" \
   /etc/systemd/system/toolbox-backend.service
 install -o root -g root -m 0750 "${STAGING_DIR}/ops/deploy/restore-backup.sh" \
@@ -609,6 +620,8 @@ curl -fsS http://127.0.0.1:8000/api/health/ready \
   | grep -q '"status":"ok"'
 
 systemctl reload nginx
+python3 "${STAGING_DIR}/ops/deploy/retire-web.py" \
+  --control-plane-url "${CONTROL_PLANE_URL}" --verify-only
 curl -fsS "${CONTROL_PLANE_URL}/api/health/live" \
   | grep -q "\"version\":\"${EXPECTED_VERSION}\""
 if [[ -f "${PUBLIC_UPDATES_DIR}/latest.yml" ]]; then
