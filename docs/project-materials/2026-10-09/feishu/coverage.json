@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "collectedOn": "2026-10-09",
+  "scope": "KST / 课赛通项目",
+  "status": "partial_text_export",
+  "counts": {
+    "project_document_text": 4,
+    "navigation_page_text": 7,
+    "markdown_attachment_body": 4,
+    "derived_summary": 1,
+    "meeting_metadata": 1,
+    "table_field_lists": 4,
+    "source_index_entries": 43,
+    "source_index_distinct_urls": 24,
+    "title_only_entries": 19
+  },
+  "sourceIndexIsBodyArchive": false,
+  "limitations": [
+    "仅文本；原格式、图片、画板、视频及嵌入Word/PDF未导出",
+    "2026-10-04会议仅有筛选改写项目摘要，原始全文不纳入交付",
+    "2026-06-02会议仅59字基本信息，没有成功复制全文",
+    "多维表格仅字段名及部分可见视图名；无记录、字段类型、公式、自动化或仪表盘配置",
+    "资产索引是历史交接线索；不能将43条索引称43篇正文"
+  ],
+  "gaps": [
+    {
+      "title": "课赛通团队协作台",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi",
+      "coverage": "field_names_only"
+    },
+    {
+      "title": "课赛通｜团队资料上传与版本归档",
+      "url": "https://mcnrvslvxm0m.feishu.cn/drive/folder/PI3JfapZMluW7udqj4vcWExnnxg",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "历史附件｜20261007插件快照",
+      "url": "https://mcnrvslvxm0m.feishu.cn/drive/folder/RMNJffsJyl6lWhd0cv8cQUEYnKb",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "课赛通运营工作台 Edge插件.zip",
+      "url": "https://mcnrvslvxm0m.feishu.cn/file/TppVbgDvooeiPiximGxcXf9UnNg",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "物流模板使用说明｜待审核草稿",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/OE9pwHoaHiwsRdkgsTycwuVsnbv",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "课赛通项目协作工作区",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/BBVXwCVxYizvO9knXc5cOupKngg",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "项目落地排期",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/R4MVwFP1eixqvpkzyyIcqXx7nzL",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "文字记录：项目核心方向与落地事项讨论 2026年10月4日",
+      "url": "https://mcnrvslvxm0m.feishu.cn/docx/CVpUdDpZyoPSBRx8Z9Tcktgwnrg",
+      "coverage": "indexed_not_exported"
+    },
+    {
+      "title": "飞书协作教程2.mp4",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "飞书协作教程1.mp4",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "飞书协作教程3.mp4",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "🗓️项目落地排期",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "工具箱_技术骨架",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "用户端流程图",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "市场目标",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "管理员端流程图",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "项目背景与市场领导者认知",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "核心业务流程",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "技术学习",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "技术学习",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "三大业务线的关系",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "比赛打法库",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "产品功能",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "套餐权益",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "🆘飞书使用教程",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "技术目标",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    },
+    {
+      "title": "产品目标",
+      "url": null,
+      "coverage": "title_only_url_unresolved"
+    }
+  ],
+  "latestRefresh": {
+    "materials": "已重新读取10月9日晚55bb140公开提交记录",
+    "knowledge_home": "已重新读取10月9日晚55bb140摘要"
+  },
+  "cloudState": {
+    "accidental_template_toggle": true,
+    "restored_non_template": true,
+    "verification": "开关恢复为ud__switch（无ud__switch-checked），页面模板标识消失",
+    "permanent_changes": false
+  },
+  "provenance": "Exporter coverage report captured after its turn completed; this projection omits staging-specific pushed flags and does not claim full cloud export."
+}

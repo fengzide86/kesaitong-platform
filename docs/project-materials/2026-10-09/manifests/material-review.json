@@ -1,0 +1,1037 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtUtc": "2026-10-09T18:27:13.294682+08:00",
+  "methodology": "Full raster decode and contact-sheet visual review; no original edits. Historical assets, not a copyright ownership declaration.",
+  "imageExtensionInventory": 144,
+  "publishedOriginalImages": 68,
+  "withheldImages": 76,
+  "preservedLocally": true,
+  "included": [
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/床上用品.jpg",
+      "bytes": 50520,
+      "sha256": "E48342FBEAF7AA3EC70A3DE8C6EF7F34DC28986FA65EFDB3715D500AE9BC0523",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/戒指.jpg",
+      "bytes": 84029,
+      "sha256": "358382D68FFAAC43A4922595E9DD519CF1DD4F7BF0A3D4FC790CF9140D11AC23",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/手枪一样的脱毛器.png",
+      "bytes": 173913,
+      "sha256": "5E550659EF70CD39B5AC3081D5C0F1B75BD111E7E8C81AC2053364161E3726FB",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/手表.jpg",
+      "bytes": 76096,
+      "sha256": "1E8DE49E9B25B8A1605D2437F807513D7010CB20383E196F0CC19AAAD7644810",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/指甲灯.png",
+      "bytes": 80661,
+      "sha256": "5D0FE2923E49F6D3E8D785FC256BB46170AA8377ECD1699FED4A0372A73877E0",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/摄像头.jpg",
+      "bytes": 31216,
+      "sha256": "53F94FB59C013C3617A9FE1BE8A86FC8392ED4B7C2BAE576C0D506B246D36CFD",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/木头玩具.jpg",
+      "bytes": 102381,
+      "sha256": "D06DE7F87EE972FE11202002FA0F0922934CCCE5F0C4AF532B87969CD0163A9B",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/毛巾.jpg",
+      "bytes": 102222,
+      "sha256": "97BF000CB35B5F9342A867E263F7A34314A21343261CF8F31364E42F0DC9ECE6",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/珍珠项链.png",
+      "bytes": 238502,
+      "sha256": "A951582FE68EDCF8745194A85FC9345F3915EABDE2ECAA3E6E45DB74D5CB05B5",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/生活自理玩具.jpg",
+      "bytes": 53591,
+      "sha256": "CB3054A7688AF0B124F94CD9A8B527A285E62CD71C22C166BA4C07C748F7B114",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/瘦脸仪.png",
+      "bytes": 116686,
+      "sha256": "D816E3D28E18AD9DACB6544B2AD07E6178301C25BDE99186AC4CC6F054F58633",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/白色婚纱.png",
+      "bytes": 449836,
+      "sha256": "24F59B281A15CD5CB61CE0E0A1D82949FE07F55DFCE0B2098C594F24D68041AA",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/白色电动牙刷.png",
+      "bytes": 310326,
+      "sha256": "E3AF855DC00B54CC6597CAD26579E1250229892A2C91CC543DD31F9E1B1247F3",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/脱毛器.jpg",
+      "bytes": 33844,
+      "sha256": "8B8A5CD0F03C6FB76D6AF7861686951A05D519B900BEE3DD86BAF0763AB7897A",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/连衣裙.jpg",
+      "bytes": 29436,
+      "sha256": "46058BB3A73EA7A218D0A509B2ADC9DF72033BB3908AD2EDEAB7EAF72546FFC4",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/透明电脑套.png",
+      "bytes": 288825,
+      "sha256": "208ABAFB9BB1829EB2C9E39312F2056078DD7BBEC245F69C4468AA3F3CB76420",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/金色假发.jpg",
+      "bytes": 71442,
+      "sha256": "01F10E38E400817DAA3A2012239FE236649CCB075784B01F9B3CF9183706010A",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黄色玩具推土机.jpg",
+      "bytes": 44743,
+      "sha256": "4FF95BB4E64EF181AE883F4984D88A09686872C84D6F40F81604423238AB1C3A",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色假发.jpg",
+      "bytes": 42014,
+      "sha256": "8FA5B4A905F98036BB9225E91F673A597E839C746505802648D55B187A13A3FE",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色凉鞋.jpg",
+      "bytes": 48769,
+      "sha256": "7521441E0D8096E17CBCB71D20096CF7C23ED1E6927802FDB8B54588865B5CCC",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色机车皮衣.jpg",
+      "bytes": 50313,
+      "sha256": "2F48605A434F11AB3F98969225B4F8D6511281170D1A020A7827C2520ECB2D45",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色表带.jpg",
+      "bytes": 27989,
+      "sha256": "075F241E5202621F2BDD86CC632E740DF375BE66C9F026EA7801417A229D6F03",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色高跟鞋.jpg",
+      "bytes": 54508,
+      "sha256": "1400131A5B2DCBC4DE03401DC4DC0E1ADFA24A09A5F3F91047AA388BBD913710",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/小孩生活自理玩具/12.jpg",
+      "bytes": 81807,
+      "sha256": "BC39A0557F1B26ECA294DA138C365F174116196279198E1DA83BA441815C87CB",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/床上用品/2025_11_17_20_55_46 - 副本 - 副本.jpeg",
+      "bytes": 44176,
+      "sha256": "0C270B02E45D590A526EA052DD10FFC8C9F52C79DBF56E7D27C5EBB207B3D75E",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/戒指/D1AB65E6DF9042B9761FE019CB37D1E6.webp",
+      "bytes": 81786,
+      "sha256": "B8FED3248D2840386194E91079B336BA7A6A342DA0CD5266E80599B6EE368573",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/手枪一样的脱毛器/2025_11_16_22_09_16 - 副本 - 副本.png",
+      "bytes": 252321,
+      "sha256": "F93716FFAA724CD6A256CDBA9C06A2C69E058E8EE2EF30A922A004FFA580BDB8",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/指甲灯/2025_11_19_21_30_09.png",
+      "bytes": 168468,
+      "sha256": "069FF5621CBF3AB35C8E8BFF1DD303AD2BC06D8C629954AC1E74552236B4B405",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/摄像头/223.jpg",
+      "bytes": 46399,
+      "sha256": "8C4D3456A4E9DF269047FDC5316509CF7EAE54EA2A90497A475F8F28B37B0718",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/木头积木玩具/2025_11_14_11_19_42_963 - 副本 (2).jpg",
+      "bytes": 143667,
+      "sha256": "A562BB091247449A35BCD601A7DDFFFFE3EC600AFD2B5892D09B06A8395FE48A",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/橙色公文包/2025_11_19_20_06_07.jpeg",
+      "bytes": 41256,
+      "sha256": "3FBC7B24B3F968C6E906EC3F7C47D979E2C6D5AAD92E4CE11E868AD4983F4559",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/毛巾/112.jpg",
+      "bytes": 151057,
+      "sha256": "CDFE5ACCAA1A47CD4CEBC3DDBF4A7D72326FBE4B8F869CF6377D9D8B733AA8FC",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/珍珠项链/2025_11_13_09_17_50_132.png",
+      "bytes": 164151,
+      "sha256": "8074A3E1CB90598056581917A324F4A5D552D9054F6FD044A34C869EE7810B99",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/男手表/31408DB66FF4F0E332F6F0803FD35745.webp",
+      "bytes": 61192,
+      "sha256": "2CA74FB569D46E4DCA1BD5130193120368C0E2A14BA8A909CD93BA55FD2C5CC5",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/瘦脸仪/2025_11_19_21_08_37 - 副本 (2).png",
+      "bytes": 230333,
+      "sha256": "BE6E87445B730A8B6A371C4A088E1986DFF9FB5C60D899DFE7CA86E0C6E22811",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/连衣裙/2025_11_16_22_12_36.jpg",
+      "bytes": 45197,
+      "sha256": "B457258D8D5391C166B4205188B68ABA306B1F6880A2FACA115A9EAA86874F91",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/透明电脑壳/2025_11_11_22_34_34_016.png",
+      "bytes": 223449,
+      "sha256": "A5B6945954F4CBB8C1093CD53C6F5AF60A65F441EE52BDAC973133B12D61C5C8",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/金色假发/44.jpg",
+      "bytes": 107845,
+      "sha256": "85AA3D840CBBAD8095B04E39B33459D9168BF0835AE3F2E4F81D65442B702736",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黄色玩具推土机/1BA051622BDE088867C5E917362BB709.jpg",
+      "bytes": 72096,
+      "sha256": "5E95E734DE83F9B5D354E4F5A159939E59F832BABE54AF2988F1ADC9C2F15718",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色假发/22.jpg",
+      "bytes": 65056,
+      "sha256": "467A043250B21EA8D3D44AC5919A875582F0D9541DD967F998C021D022A66D03",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色方根鞋/45.jpg",
+      "bytes": 72574,
+      "sha256": "A2013E8053D2D52503F753B71CDFE431F876BBA4D74ECAC2A7E0C9D6B6E76C65",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色机车皮衣/2025_11_17_20_21_00_283.png",
+      "bytes": 268679,
+      "sha256": "2CE9D4F9DCD72DD8D55F4487D077DD97149CEAB367E717C083C8ECE7503C8630",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色表带/122.jpg",
+      "bytes": 42420,
+      "sha256": "5BA1944788F85AEFEB75453D7FB8A2ED5EAAB0A9124FCA63A2CCB72ABD300349",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色高根鞋/2025_5_18_10_32_54.jpg",
+      "bytes": 47594,
+      "sha256": "279ADDFCE91199A30479DC66E1CE530D543E55CBB71C22E0B63F99523E7D95E0",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/003846棕色高跟鞋10个/1.jpg",
+      "bytes": 64764,
+      "sha256": "05513805363F4B958295B2F9D65909103A91BDC391666A7EB46447AD3CCBFCB0",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/0657红色情侣表10个/11.jpg",
+      "bytes": 86618,
+      "sha256": "6E35E6643FAF953977A523D134C6BBE02E1A7E9C46F4B2CD1B071F523B164048",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/0935红色晚礼服连衣裙/691E3F4C4909EA9FA73035DE4D4662C4.jpg",
+      "bytes": 44240,
+      "sha256": "EAB5C9B82435A4C44A7C15A772CF8E28CA137337C5C2AA121334B7D91AE2E728",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19868蓝色充电宝10个/1.jpg",
+      "bytes": 51151,
+      "sha256": "297DBBADA59F9C8FE883AFF984A07403E6FEB1211733F7CF55290DA656D75E95",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19875黑白充电宝10个/1.jpg",
+      "bytes": 29334,
+      "sha256": "2D34BAF40C8B55ABCE41F0AB6D5BE3A6075FB2217C49BAA0CA4AD8AE025AB309",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19878黑色充电宝10个/3EE95E900F1B13E958EC3ED5F000BEB7.webp",
+      "bytes": 32796,
+      "sha256": "F182F16C1E54519A2D813DD291EB41FE7F0C4A1D464523B92E28ECD98DBD4ED4",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3842深红色高跟鞋10个/1.jpg",
+      "bytes": 44165,
+      "sha256": "4448D968BA39EC642032A8F068696C83BD5FE7B269252BC020E682537A08F347",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3852金色连衣裙10件/1.jpg",
+      "bytes": 106832,
+      "sha256": "A0D27D03A3A785D7EAC2C6E8E7AF163032FDB2D07D6BDED743950A7B7C209103",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3858彩色连衣裙10件/1.jpg",
+      "bytes": 92484,
+      "sha256": "321B677A16C4C78B7B0E2C3CC75F601CAD534EFB27EB951F46D5DBB9898B6300",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/4718黄色高跟鞋10个/09C5377851419EEB25FEF01F16E3C264.webp",
+      "bytes": 27552,
+      "sha256": "5EDA404CFC45BF4E8B0557CE7B255403E0A4A2F4CBF9AA1304C4CDB38C3F4462",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/4754LED头灯10个/093161F61AE00EDB01F39E9F56B56B93.webp",
+      "bytes": 34602,
+      "sha256": "B366243BD07D90C75CAEC0B8DFB421B05046E18719EED27E8C4D1114A3B375C5",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5527木色编织单肩包15个/11.jpg",
+      "bytes": 48833,
+      "sha256": "CAF130E392FF52AA4C0264912719B2C403EC53DC2F57538429D5FE18AB9FC5AE",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5563灰色手提包10个/1 - 副本 (10).jpg",
+      "bytes": 105431,
+      "sha256": "EEFFD1A275A539A49B299B83A59D1F022FC667FA93E85A36D0D4E3C7B63E08B8",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5579棕色单肩包10个/1.jpg",
+      "bytes": 101823,
+      "sha256": "BD0E35EA1DC99B03408ED252E035E2B6EAB126CC3F50278D2FC6F61ECCD349C7",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (6).webp",
+      "bytes": 23978,
+      "sha256": "E3DE6D4DFC1E98C7C263F3D4B21D1A1C6EA000F635C431CBEDA96E1D947987E9",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/5923浅白色高跟鞋10个/1.jpg",
+      "bytes": 40600,
+      "sha256": "89ED6944B1D18D7218083C716E03CFA21CC3DB1D6B599869F1DB49DCBA9822A2",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400.webp",
+      "bytes": 23978,
+      "sha256": "636E81944DC42AAA7F31BB32857AC917280AF1CAEA5D1628ADC8B3441448F481",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/6705白色高跟鞋10个/1 - 副本 (2).jpg",
+      "bytes": 76758,
+      "sha256": "A6E995E15E6BBF93A98ED8780151B9703143DA3325755E1F7189F1312D8F2AAB",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77.jpg",
+      "bytes": 48187,
+      "sha256": "43D85B615EEBD11796606D99D5BB2BBD73795E4285AF73FE083D1763A1B11555",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (2).jpg",
+      "bytes": 67621,
+      "sha256": "6711A28F931C1D78F77F24D7361E60ABC9D5FF34D47B6502D0876A2F8A405550",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/10/10 - 副本 (2).webp",
+      "bytes": 26084,
+      "sha256": "2E8428C615CD07700A51DF4935DEAF5CD45D3B5D7DC307CBB3BAFC581F49E13F",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/1/7EC5F3E5CA45F8E827B2D25D04CF67D0.webp",
+      "bytes": 58980,
+      "sha256": "96BEF21F2C7283436B25E20DA0F313DFF403E2599B4CBAF1A560E14AD4767BFD",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/8/8 - 副本 (10).webp",
+      "bytes": 90738,
+      "sha256": "8C653E5DC3ACEDB31E945B199AAF7FDDF77B23D8037D17766471660FB2450FE4",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/9/9.webp",
+      "bytes": 6432,
+      "sha256": "CDAAD83B85C9CC7C7E8ADD49DB5F895D91B5B1AF8475440C009304DEF77B6983",
+      "reason": "Full raster decode plus contact-sheet visual check; product/marketing image, no account/customer/order/credential observed; no EXIF/GPS metadata found"
+    }
+  ],
+  "excluded": [
+    {
+      "relativePath": "旧亚马逊资料/02_规则打法与流程/数贸赛_宣传海报_历史参考.jpg",
+      "sha256": "5033AB02F72AEC1E617DB8D67547632C816FAD7A16FFF8C3A285347299344132",
+      "bytes": 405851,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/瘦脸仪/2025_11_19_21_08_37 - 副本.png",
+      "sha256": "85B7C8E20949026DFD69DC09162BAE7EB601014A51AAEEFC8642DC6C0B822F88",
+      "bytes": 230333,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/瘦脸仪/2025_11_19_21_08_37.png",
+      "sha256": "E3746C006233B9B689BAF6F3B5C343E3E2BA632564D3945D04D68F536BC7587A",
+      "bytes": 230333,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (2).png",
+      "sha256": "E749B225BA4F0ED573B46FB494FE540415FF2FD8FA71C69B3D634621F5F5C58E",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (3).png",
+      "sha256": "C9322F9FCA0E66A234D63F5745BCBFFE536270F550E8721C28D1F3220E0F63C1",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (4).png",
+      "sha256": "4AB83AB68454084515132E5629F201572456FBB38ACEBE8A41451CE1E7D4CD3E",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (5).png",
+      "sha256": "F14AF3FE9D0F6BB8C601C044F0613905ADE70AE897E75F2F7D59B09E6B212CED",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (6).png",
+      "sha256": "A9ECE48A179299F147206CB473EFFFE39BDBBBA2ED892AC04316B81FED4B7948",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (7).png",
+      "sha256": "FA93321C2473C6113A05300FA6765445706E1D0AB8A728E72990950B718E9C45",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (8).png",
+      "sha256": "E76627B73215A7FCC226917C0EBBE0318BFCB74F182E34FADC54F290FC579008",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294 - 副本 (9).png",
+      "sha256": "E720F7CEBA67A15A8C9F39025EC00BA725B63E68A108F13FBAC7B2E6C9931235",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色婚纱/2025_11_17_16_48_54_294.png",
+      "sha256": "A954D3ED24F04F7BF98BC745D24AE0CF7224CFB3262452AFAF236583BD74AEF4",
+      "bytes": 286766,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (2).png",
+      "sha256": "AC0659EC5A54839013A02166B0407142C323CE59D883B67F065A8D76C2754F9B",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (3).png",
+      "sha256": "F0035DB123727749B44AF28E4AAF0F83D17CA3F2AD8A267FB1D0FEE52C7D63B9",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (4).png",
+      "sha256": "A35ED1A13F58159FD69ED273305B25FA27756C4C51FEF06AE9DB4F091E07A9A4",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (5).png",
+      "sha256": "C12CDDFB187F7AAB9FA97EFDB88467CD11DEE13004F9C3CC5BC388B6F401D57C",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (6).png",
+      "sha256": "C188FD219C7FE1302844556BBB5FDF07AB1F3623650C29064BF77D6E82D86948",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (7).png",
+      "sha256": "CB9B57A8531604243F22D6F913178BF8F720890475CFE2133CC9C10487C98727",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本 (8).png",
+      "sha256": "FB4ED785C05368BA82B57EB7D25406DC065708B17D461844A60F068111DB2593",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52 - 副本.png",
+      "sha256": "12CF592093BBD5B00DB67E5A4C8430F3AA96F986B93F6FFB13AFA1CCF7EF72AD",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/白色电动牙刷/2025_11_17_20_38_52.png",
+      "sha256": "75BFBE3AA80F2AA692412B178696D1EAE269FA9372A50195A3A6DC5D631DC43C",
+      "bytes": 234916,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5923浅白色高跟鞋10个/1 - 副本 (7).jpg",
+      "sha256": "628DBF86A1AEAD8A5D1346D6897A8B9C9FB0A5338335152DAD9B552FBBA016EE",
+      "bytes": 40600,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5923浅白色高跟鞋10个/1 - 副本 (8).jpg",
+      "sha256": "997E3CB476BBDDB61BC8A52EA2275B5A545E58A2EAE32F4E8D0105C128393B62",
+      "bytes": 40600,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5923浅白色高跟鞋10个/1 - 副本.jpg",
+      "sha256": "A2B25ED6BABC821FC3889C778F8DB3997C148E1F44D659ACDFC9A53F23A44696",
+      "bytes": 40600,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5923浅白色高跟鞋10个/1.jpg",
+      "sha256": "F3CD009D116FB12C9332E34C267D3141B52F88B070776AB1C96A75D07BDA14A5",
+      "bytes": 40600,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (3).webp",
+      "sha256": "29AD9D4E95AFFA78B91C786AA45523A4BF81BA0AE9460B999AF362FFE7E840AF",
+      "bytes": 23978,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (4).webp",
+      "sha256": "3756B7692B2E3A1761091E32AAACACD0531B9E1CF4BBBD9903A02FF2670F569A",
+      "bytes": 23978,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (7).webp",
+      "sha256": "E851CBDA00ED376E88CBEF5411BA02F23A746100A9B4DA981F439DEEE13E746F",
+      "bytes": 23978,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (8).webp",
+      "sha256": "0D954AC380E5D3BA9248DF592EA2E71D31BA4E5E5FBF507F3CFEEA7050C42860",
+      "bytes": 23978,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400.webp",
+      "sha256": "DDCCDDC19A27359B19E3B09AEBFD950C78DF61BF14AC782152D90EC814A284A2",
+      "bytes": 23978,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (2).jpg",
+      "sha256": "0F669B3CE70B2ACB93FCF9129BEA3032C0AF2F4E2E462B1CD1B2F9FCFB940343",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (3).jpg",
+      "sha256": "A8A1FF1E517D7BF22122EEAD859C2895E059C31803D867ED080CE83C0CF0F52D",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (4).jpg",
+      "sha256": "6CF896DF94C6F3F326E7275AB0FD4D5F3130CCD6993081D901F1015222B3431A",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (5).jpg",
+      "sha256": "CF04EFE8C783D98CFCC44B65B2469C6C78AEFB2F2AE6629D8AE083098849CA4C",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (6).jpg",
+      "sha256": "290AE7188B1502062FF41F2ABC12172B438BA24A2058FFC9AB287115DF790D18",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (7).jpg",
+      "sha256": "6D5C7D27E0CCD5EF0B3E39D11F63EB05B606D0114D7742F31C240BAA6A0EDF83",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本 (8).jpg",
+      "sha256": "F1E7752F6D6BB09ACF5E015A27143E7AA4B424BE686D736D85F476F884BF3123",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77 - 副本.jpg",
+      "sha256": "F8F8BC55B1DE7B1B1795D7E42C84F7BAD110998DE91C667E2545E6DD4C6C474F",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77.jpg",
+      "sha256": "7DAC4367E89DAD31115CFE075DCE14F7834BF996FDDC35B3575F7621A5DECB7E",
+      "bytes": 48187,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (2).jpg",
+      "sha256": "BD11E9FAC9A91A069BA03C6E3D7875400825B7EBD0836C15BB5A80E2FA0615C0",
+      "bytes": 67621,
+      "decision": "withhold-visually-incomplete",
+      "reason": "Original decodes but visible large gray/incomplete raster regions; no source changes"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (3).jpg",
+      "sha256": "2FD09CD7ED3E401CFF6E4EC68A732C61384A7BA271266E55235F2801B53C75BF",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (4).jpg",
+      "sha256": "1795D3C35180B55B7786AF09A4ECB20E20C033F44D3F284F14B2265AB0E8C3D4",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (5).jpg",
+      "sha256": "DEBD73612BDC434D89ECB77E8DE9D52BD000078CD9A9617141FC010136A3FA66",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (6).jpg",
+      "sha256": "24C890500C3D327941BDC67756E0BDCF3C047378465F0AC79EE81C1D98E51A90",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (7).jpg",
+      "sha256": "FE9C926AC627E166EB8D046306DA115A52DFB53F3972448D458992EF913CEE38",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (8).jpg",
+      "sha256": "E15A2EEE52AF7F52C75E653A8A65F66E04A9371486766D294F00AA4BC40628DB",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (9).jpg",
+      "sha256": "EBE2388606DF742AAF9B9DA6400A947522CF39B77390EBE0CFFA383EFBDED1EB",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/SM379黑色时尚手提包10个/1 - 副本.jpg",
+      "sha256": "9BD621146995589506298481ECFE8D9191BCAA2491E6008C10020996A2310B6A",
+      "bytes": 67621,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (2).jpg",
+      "sha256": "5254620996DA8984A7352F0BDDB3F85D91A6893DCCCDF3D210DDF3B5CBD19269",
+      "bytes": 98219,
+      "decision": "withhold-visually-incomplete",
+      "reason": "Original decodes but visible large gray/incomplete raster regions; no source changes"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (3).jpg",
+      "sha256": "EF9DEB0F9F8F7EED09C374DEFCEA749B034CEDE049C8FB427871E4B1653BCCDA",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (4).jpg",
+      "sha256": "237350982E73E4FA5B3980F2478F900F6A8EF7404F8BFE138161039567B11836",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (5).jpg",
+      "sha256": "04EB5566A1784A70C8775C6B7A9E80FEA1A895F02D1AF41A0565DD9E8DA2F957",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (6).jpg",
+      "sha256": "EF335DDE425B09A2E43E2BF544D3F19C91226B71CA5DCE4E1187EC366946A925",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (7).jpg",
+      "sha256": "5927C31D570B01BA97DD5B9F37CF550E465269F2A14C51DA2820554E910D1B0E",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本 (8).jpg",
+      "sha256": "B679AFAA4989126708B84352BA7CBB68344DF9EB53F8F808D0240B8F52ABF0E1",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1 - 副本.jpg",
+      "sha256": "CC124AC67DDB704F69604C9AC1B51B9D83D9D6B285AE2D52FD4A9F83308F6868",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0332黑色男手表10个/1.jpg",
+      "sha256": "AFA4D00377F87E887B797A34B511D0122B8D28C05AB94F30DA0C4C5AE0B96331",
+      "bytes": 98219,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (2).jpg",
+      "sha256": "0B57BCB6E6059A8AA6D216AF5335DE0938554F94A6903645B95B7D3C2E41B889",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (3).jpg",
+      "sha256": "1C6ABB41B356DAF61C7490DEC7B485B1716A02215E6D2F574C11B80007B2E2BE",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (4).jpg",
+      "sha256": "2B21BACC98A219175FACAA4AB0D25451BACDEDD3BE280E5B2AD3F6D041749406",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (5).jpg",
+      "sha256": "73857C39E89B89CAF9EC5522C0BF549FE89CE5A5F8ACE8C22168AA0FC1566EC0",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (6).jpg",
+      "sha256": "5DC43B59529E0B1730D5D33E44EC3F109B61F4F6E17114AE368396A35758FDE2",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (7).jpg",
+      "sha256": "50F3FE1DC01C8A7814B67E9A57084BC64361A4FFD167389A8D334AC7339F6890",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本 (8).jpg",
+      "sha256": "537E0AC153AFC2C8B38BC35B8F89A62BDDDF59CC82F2F3489BDE077E020CE3EB",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11 - 副本.jpg",
+      "sha256": "D8F8EE541095D0093993363220997DF941722B718657019438477C5212C02FD0",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0657红色情侣表10个/11.jpg",
+      "sha256": "1C85DD4A548963E80EE68273179D30366C0AC8BD9E343579E675B82FB306993D",
+      "bytes": 86618,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (2).jpg",
+      "sha256": "50C2D9A51E3ADEEC3EC3B4661F982512D8469E31C73392708764C98DEC7D47C0",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (3).jpg",
+      "sha256": "B660CAD95FE218B111E5AC2AB3A0F5D4BBF6FCBE7E99D9F14B703ADFE1D89075",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (4).jpg",
+      "sha256": "D1AAE0A254E8DDC1ECE2A5623216C488E485E91B3175ABDCD2972F78E9F9DD4E",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (5).jpg",
+      "sha256": "90C3E03E5E79AD1D2127B8D214DB59383F5E754FD71BD4E279D1E6D8E172B40C",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (6).jpg",
+      "sha256": "AE19251D7AF4F6A30672E8787E8D286F1F5C85A7D12F27D23862967CE73F3F6D",
+      "bytes": 44240,
+      "decision": "withhold-visually-incomplete",
+      "reason": "Original decodes but visible large gray/incomplete raster regions; no source changes"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (7).jpg",
+      "sha256": "EFED02882A3D5111FD9CF75B19E1E486A33C489D45891A315500E92B2F846E53",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (8).jpg",
+      "sha256": "3EE417F868AF98E958FF16BDEA7D4C103D43C92E05C93EC5D72ABC08263CF81C",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4 - 副本 (9).jpg",
+      "sha256": "DB25E7C9B475AA32F88330AD38CB45B23A1FC5BDA5B90597728202C32EF9EF67",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/0935红色晚礼服连衣裙10个/691E3F4C4909EA9FA73035DE4D4662C4.jpg",
+      "sha256": "41C0CE96F51A714480B7316F88C66268A76BBAC265B328D04E3FD6A3789D3BD3",
+      "bytes": 44240,
+      "decision": "withhold-unverified-format-or-truncated",
+      "reason": "Bundled Pillow cannot fully decode original; preserved locally, not deleted or repaired"
+    },
+    {
+      "relativePath": "excluded-private-material/withheld-account-order-screenshot.png",
+      "sha256": "631C79F93AA879141D142A9B9F4160456CA17DDB1A7648F000DD0679ED6DD98F",
+      "bytes": 145025,
+      "decision": "withhold-account-customer-order-screenshot",
+      "reason": "Visible account identifier, buyer names and order records; no raw values recorded"
+    }
+  ],
+  "officeOriginals": [
+    {
+      "name": "市场战略.docx",
+      "sha256": "7C59C6F71A780F56EEB55499142018BBD40ED5D67497E603133DF3DFAB56A410",
+      "bytes": 22292,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Historical commercial/strategy reference, not essential to current public technical sync",
+        "No credential/customer/order literal found in extractable text; no embedded media found; two files contain author metadata; original excluded per parent release scope"
+      ]
+    },
+    {
+      "name": "第七届“数贸赛”一等奖直通车计划书.docx",
+      "sha256": "017C78C06B4FB5775E7C6C3AB443DB815421248FD925ACA775A8145D48D45A06",
+      "bytes": 6189817,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Historical commercial/strategy reference, not essential to current public technical sync",
+        "No credential/customer/order literal found in extractable text; no embedded media found; two files contain author metadata; original excluded per parent release scope"
+      ]
+    },
+    {
+      "name": "话术.docx",
+      "sha256": "6E41BD6F337C06B237333F980730FA9A7F3D4A592BA1BF8729E9954C3BF4988D",
+      "bytes": 21812,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Historical commercial/strategy reference, not essential to current public technical sync",
+        "No credential/customer/order literal found in extractable text; no embedded media found; two files contain author metadata; original excluded per parent release scope"
+      ]
+    },
+    {
+      "name": "03 单元二 亚马逊运营操作（二）.pptx",
+      "sha256": "A5B25F9620B284D7E660848FF4682E72AC5DCED4F8042FA2CD065F73B0B28629",
+      "bytes": 49663658,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Screenshots/media not fully inspected for account/customer/order content",
+        "Office author/reviewer metadata present; source file is historical course content, not project-generated evidence"
+      ]
+    },
+    {
+      "name": "4 单元二 亚马逊运营操作（三）.pptx",
+      "sha256": "CA9F15402B1D8FA1D7DE9C37C0081B15F3FA6EE1F0FE7266915F0EC7F0B2F9D5",
+      "bytes": 20402628,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Screenshots/media not fully inspected for account/customer/order content",
+        "Office author/reviewer metadata present; source file is historical course content, not project-generated evidence"
+      ]
+    },
+    {
+      "name": "5 亚马逊物流 FBA（一）.pptx",
+      "sha256": "82874067D2A3A70FD23B9A05F460DAC2BBF909907450A0ACE39C024725C66C57",
+      "bytes": 18112453,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Screenshots/media not fully inspected for account/customer/order content",
+        "Office author/reviewer metadata present; source file is historical course content, not project-generated evidence"
+      ]
+    },
+    {
+      "name": "6 单元三 亚马逊物流FBA（二）.pptx",
+      "sha256": "DA9229820855D99A526E74937057D85D26FC470831623797B119940A041BDF51",
+      "bytes": 19270327,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "Screenshots/media not fully inspected for account/customer/order content",
+        "Office author/reviewer metadata present; source file is historical course content, not project-generated evidence"
+      ]
+    },
+    {
+      "name": "软件操作手册-互联网+跨境电子商务亚马逊仿真系统V2.0.pdf",
+      "sha256": "33C486DB408FE10AE93F6B3293359FE37E74250ED22CFECE02305E0DD48851B9",
+      "bytes": 8964413,
+      "decision": "withhold-raw-office-original-this-release",
+      "reason": [
+        "101-page historical manual includes default-password text examples and screenshots; actual account/sample distinction not fully cleared",
+        "Raw PDF not part of this public projection; preserve original locally"
+      ]
+    }
+  ],
+  "excludedPrivateScreenshots": true,
+  "allOriginalsUnchanged": true
+}

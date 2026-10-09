@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-10-09T10:55:23.4453762Z",
+  "importedReviewPassed": true,
+  "reviewedExportFiles": 20,
+  "transformation": "Local source-root references adapted in six text files: ten absolute path occurrences across eight lines replaced with source-relative descriptive references. Leading clipboard-only spaces removed from two otherwise empty first lines in documents 02 and 09. Edited copies may normalize line endings. No project content, versions or dates rewritten.",
+  "exportManifestHashesDescribeOriginalExport": true,
+  "canonicalPublishedHashes": "The publishedSha256 fields here and ../manifests/published-files.json",
+  "originalCloudDocumentsPreserved": true,
+  "includesRawPrivateMeeting": false,
+  "records": [
+    {
+      "path": "documents/01-从这里开始.txt",
+      "contentKind": "readable_page_body",
+      "actualCoverage": "协作台当前页面可读正文；不可展示的嵌入表格未导出",
+      "sourceBytes": 6146,
+      "sourceSha256": "5AA1D8841292AD38FF9CF2922D6360D73D3626D9A1725C6BC0342CA066E6BF27",
+      "publishedBytes": 6146,
+      "publishedSha256": "5AA1D8841292AD38FF9CF2922D6360D73D3626D9A1725C6BC0342CA066E6BF27",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/02-团队资料与最新版本.txt",
+      "contentKind": "readable_page_body",
+      "actualCoverage": "团队资料当前页面可读正文；多个嵌入表格、安装包及其他附件不在正文内",
+      "sourceBytes": 27491,
+      "sourceSha256": "120B86231B1DC7BF1B3A58FBFC4604EEF4CF42F9F942F512D3AFC31B7CCEC003",
+      "publishedBytes": 27517,
+      "publishedSha256": "35E26DC0DCAC1556FEE3FD0F14B6C74EF06FA5AC384FF6D34660AC470E4344DE",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/03-团队协作与20分钟上手.txt",
+      "contentKind": "readable_page_body",
+      "actualCoverage": "上手与协作页面可读正文；嵌入块不可展示",
+      "sourceBytes": 7874,
+      "sourceSha256": "396951B3404B5943C85BB2AEF3C07842262524DF48542D322193915F5D949404",
+      "publishedBytes": 7874,
+      "publishedSha256": "396951B3404B5943C85BB2AEF3C07842262524DF48542D322193915F5D949404",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/04-当前可演示与可交付能力.txt",
+      "contentKind": "readable_page_body",
+      "actualCoverage": "能力说明页面可读文字；保留日期明确的旧段落",
+      "sourceBytes": 6116,
+      "sourceSha256": "2AB2A64CD876317EA7CC404A84C9F0B41E8BE2155F6B19B15E800620F54CBC48",
+      "publishedBytes": 6116,
+      "publishedSha256": "2AB2A64CD876317EA7CC404A84C9F0B41E8BE2155F6B19B15E800620F54CBC48",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/05-知识库从这里开始.txt",
+      "contentKind": "readable_page_body",
+      "actualCoverage": "知识库首页正文，不含所有子页",
+      "sourceBytes": 2316,
+      "sourceSha256": "E5A8BD642086EA375D5D13015AEA23BFA9761CCD9C6EF67BCDDD54BE57B865F6",
+      "publishedBytes": 2323,
+      "publishedSha256": "827E740C8697165223B9602D0BC3EC146D47871F8DFD48E68A3D7DE446184078",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/06-战略与复盘.txt",
+      "contentKind": "directory_summary",
+      "actualCoverage": "分类标题、短介绍及不可展示嵌入块",
+      "sourceBytes": 395,
+      "sourceSha256": "FDCE0B1789E8287EA71DF2629C7983CBE9C96C2EBFA5A3F015057F67AAB3A998",
+      "publishedBytes": 395,
+      "publishedSha256": "FDCE0B1789E8287EA71DF2629C7983CBE9C96C2EBFA5A3F015057F67AAB3A998",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/07-市场调研与案例.txt",
+      "contentKind": "directory_summary",
+      "actualCoverage": "分类短介绍及不可展示嵌入块",
+      "sourceBytes": 344,
+      "sourceSha256": "BFCD430E2D362BC609E7EB0DD19AC6475F49FD8C3B340EA66FE7C3CADEA18206",
+      "publishedBytes": 344,
+      "publishedSha256": "BFCD430E2D362BC609E7EB0DD19AC6475F49FD8C3B340EA66FE7C3CADEA18206",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/08-产品说明与经验.txt",
+      "contentKind": "directory_summary",
+      "actualCoverage": "分类短介绍",
+      "sourceBytes": 338,
+      "sourceSha256": "1FA67F48CD1B733ABB6C0F3AA15EF621658335CD4752B69D6A230E45D8DF2A35",
+      "publishedBytes": 338,
+      "publishedSha256": "1FA67F48CD1B733ABB6C0F3AA15EF621658335CD4752B69D6A230E45D8DF2A35",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/09-技术工具与方法.txt",
+      "contentKind": "readable_historical_page_body",
+      "actualCoverage": "当前技术页内可读的6月历史技术文本；图片和6份历史附件未导出",
+      "sourceBytes": 18898,
+      "sourceSha256": "BBBAC5680017D817B18CE1705B6C2356162227548DD790C7DF0F43D4A50C0BF5",
+      "publishedBytes": 18897,
+      "publishedSha256": "F8FD0294E09763DC8757ADA4FF70CE41613432AF32AF9022ABFCE3B1C9C20F3D",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/10-成果与历史资料.txt",
+      "contentKind": "readable_page_body_and_attachment_directory",
+      "actualCoverage": "成果工作流正文及31份历史附件的分类摘要",
+      "sourceBytes": 2639,
+      "sourceSha256": "8B6B50EDE5BA95F878C63853A2F19F1F49E824A96C4DE167077D9DFAEF41EFC0",
+      "publishedBytes": 2639,
+      "publishedSha256": "8B6B50EDE5BA95F878C63853A2F19F1F49E824A96C4DE167077D9DFAEF41EFC0",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/11-会议记录与复盘.txt",
+      "contentKind": "directory_summary",
+      "actualCoverage": "会议链接与不可展示嵌入块",
+      "sourceBytes": 332,
+      "sourceSha256": "3827885BD0584B35281151233511E1AFD6555E6B121B22F170BC0E973A3D4C61",
+      "publishedBytes": 332,
+      "publishedSha256": "3827885BD0584B35281151233511E1AFD6555E6B121B22F170BC0E973A3D4C61",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "documents/12-项目决策摘要-20261004.md",
+      "contentKind": "human_selected_rewritten_project_summary",
+      "actualCoverage": "由10月4日AI会议纪要人工筛选改写的中性项目摘要",
+      "sourceBytes": 1433,
+      "sourceSha256": "3A388EB1B84F74A72F8EA3B4D80FA28F09FEDB84DA9C99A06D742F3DEB3F1DD0",
+      "publishedBytes": 1433,
+      "publishedSha256": "3A388EB1B84F74A72F8EA3B4D80FA28F09FEDB84DA9C99A06D742F3DEB3F1DD0",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "metadata/早期项目会议基本信息.txt",
+      "contentKind": "meeting_title_and_timestamp_only",
+      "actualCoverage": "仅两行主题与录音时间",
+      "sourceBytes": 121,
+      "sourceSha256": "D9532C36F261DA9892FC25419AA59F980FC17D305D846772B79B16A4D3808E77",
+      "publishedBytes": 121,
+      "publishedSha256": "D9532C36F261DA9892FC25419AA59F980FC17D305D846772B79B16A4D3808E77",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "attachments/01-运营工作台首次使用与内容交接.md",
+      "contentKind": "historical_team_markdown_copy",
+      "actualCoverage": "本地团队副本完整文字",
+      "sourceBytes": 5195,
+      "sourceSha256": "44F9D04FF44EFA9D3D85F57F93D910BCE05E1EB6B219DDA6CB0BA982AC5C5D5B",
+      "publishedBytes": 5202,
+      "publishedSha256": "1DE87DCAB7A38128E1866284BEF215AEB709149FBF5DDFD711733ED3DBB57807",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "attachments/02-运营工作台版本更新.md",
+      "contentKind": "historical_team_markdown_copy",
+      "actualCoverage": "本地团队副本完整文字",
+      "sourceBytes": 3338,
+      "sourceSha256": "33423606442BABCA82907CCB3AB17560A67AE2824FBDC1E40298B997C161FE81",
+      "publishedBytes": 3345,
+      "publishedSha256": "330208D0305B5AA971C521F115737A6625A590F429D39AF38564B325231BA6A6",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "attachments/03-官网产品说明与验收.md",
+      "contentKind": "historical_team_markdown_copy",
+      "actualCoverage": "本地团队副本完整文字",
+      "sourceBytes": 4414,
+      "sourceSha256": "47690379988B9515A210C304AAB0C637471317F11A78A8A7C7423B8D7BB9FE09",
+      "publishedBytes": 4421,
+      "publishedSha256": "41BB60DBBB4AD73FFB84477346F475631D6EF85C1A06EC8116A1965BC9DF4DF1",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "attachments/04-技术交接与CI结果.md",
+      "contentKind": "historical_team_markdown_copy",
+      "actualCoverage": "本地团队副本完整文字",
+      "sourceBytes": 4038,
+      "sourceSha256": "281CBCF8494062D0C2A084B2B631C00669243542B8C66D490A0F3ED9ED7116AB",
+      "publishedBytes": 4045,
+      "publishedSha256": "1F1B0134D840F57C63EA6B4CBDFAD2BD3D3FD75CF5D1CC739F1CA285413E5180",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "tables/field-names.json",
+      "contentKind": "table_field_and_visible_view_names_only",
+      "actualCoverage": "执行任务、内容排期与审核、反馈与需求、软件版本与下载四张表的字段名及部分可见视图名",
+      "sourceBytes": 2963,
+      "sourceSha256": "B5AC684AD175E2A6958FD441565983CD55526423D2B09CF4C93C67EABB896306",
+      "publishedBytes": 2963,
+      "publishedSha256": "B5AC684AD175E2A6958FD441565983CD55526423D2B09CF4C93C67EABB896306",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "export-manifest.json",
+      "contentKind": "export_coverage_manifest",
+      "actualCoverage": "11个页面可读文本、4份Markdown正文、1份改写摘要、1份会议metadata与四表字段目录的采集说明；17个正文来源的SHA256和UTF-16字符数",
+      "sourceBytes": 12497,
+      "sourceSha256": "170D54BB2DD6D7501AE962601EF0121155A37DE51BB7CC50B7D9720DB5071C6C",
+      "publishedBytes": 12497,
+      "publishedSha256": "170D54BB2DD6D7501AE962601EF0121155A37DE51BB7CC50B7D9720DB5071C6C",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    },
+    {
+      "path": "source-index.json",
+      "contentKind": "historical_asset_title_link_directory",
+      "actualCoverage": "历史交接清单的43个项目资产标题/链接或待确认链接",
+      "sourceBytes": 11228,
+      "sourceSha256": "30893A27F6A86BED949A2F49EFC1C2E0AFCF268CB4C442F37302F2DF7CBB376B",
+      "publishedBytes": 11228,
+      "publishedSha256": "30893A27F6A86BED949A2F49EFC1C2E0AFCF268CB4C442F37302F2DF7CBB376B",
+      "sourceRootOmitted": true,
+      "originalExportUnchanged": true
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "collected_on": "2026-10-09",
+  "method": "从飞书字段配置面板读取字段名和可见视图名；未导出记录、字段类型、公式或附件",
+  "tables": [
+    {
+      "title": "执行任务",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbliVbY88K8aHaw1&view=vewflITF1R",
+      "table": "tbliVbY88K8aHaw1",
+      "status": "field_names_only",
+      "fields": [
+        "任务标题",
+        "模块",
+        "负责人",
+        "验证人",
+        "状态",
+        "截止日期",
+        "完成标准",
+        "成果链接",
+        "阻塞原因",
+        "验证记录",
+        "关联反馈",
+        "关联内容",
+        "实际进展",
+        "进展日期",
+        "完成日期",
+        "验收依据",
+        "工作线",
+        "跟进状态",
+        "父记录 2",
+        "收入知识库",
+        "复用说明"
+      ],
+      "views": [
+        "全部任务",
+        "市场・产品・技术",
+        "我的任务｜按负责人筛选",
+        "执行看板",
+        "待分配负责人",
+        "待定截止日期",
+        "知识成果｜自动收录"
+      ]
+    },
+    {
+      "title": "内容排期与审核",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbl227c7Hrqsvtxk&view=veweBbABPg",
+      "table": "tbl227c7Hrqsvtxk",
+      "status": "field_names_only",
+      "fields": [
+        "内容标题",
+        "渠道",
+        "作者",
+        "审核人",
+        "状态",
+        "发布日期",
+        "草稿链接",
+        "发布链接",
+        "审核意见",
+        "咨询数量",
+        "试用数量",
+        "复盘结论"
+      ],
+      "views": [
+        "全部内容",
+        "审核看板",
+        "发布日历",
+        "未排期",
+        "我待审核｜按审核人筛选"
+      ]
+    },
+    {
+      "title": "反馈与需求",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tblnmNZGZnPgWPdr&view=vew4RkiM6d",
+      "table": "tblnmNZGZnPgWPdr",
+      "status": "field_names_only",
+      "fields": [
+        "反馈标题",
+        "来源",
+        "模块",
+        "影响程度",
+        "类型",
+        "说明",
+        "处理人",
+        "状态",
+        "工单编号",
+        "来源链接",
+        "验证记录",
+        "关联任务",
+        "来源链接（填写）"
+      ],
+      "views": [
+        "内部反馈表单",
+        "全部反馈",
+        "我的反馈｜按处理人筛选"
+      ]
+    },
+    {
+      "title": "软件版本与下载",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbl9oWQjMhZzupHd&view=vewmsdcqpk",
+      "table": "tbl9oWQjMhZzupHd",
+      "status": "field_names_only",
+      "fields": [
+        "版本与更新说明",
+        "安装包",
+        "产品",
+        "通知对象",
+        "撤回推荐",
+        "创建时间"
+      ]
+    }
+  ]
+}

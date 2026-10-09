@@ -1,0 +1,526 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-10-09T10:55:23.5554055Z",
+  "repository": "fengzide86/kesaitong-platform",
+  "branch": "docs/project-organization-2026-10-09",
+  "baseline": "65930281159e44fab7fc51a8afb42aac7232ca8f",
+  "selfExcluded": true,
+  "fileCount": 103,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 89,
+      "sha256": "73C3801E58AB6D2199E276F1E71384297B7BCFD15AA3890A5150F65648E7122D"
+    },
+    {
+      "path": "current-status.md",
+      "bytes": 2508,
+      "sha256": "80898DECABFAFE446F83DCC71B4BBB3A93C1C830899263789FB81C6AD125AA35"
+    },
+    {
+      "path": "feishu/attachments/01-运营工作台首次使用与内容交接.md",
+      "bytes": 5202,
+      "sha256": "1DE87DCAB7A38128E1866284BEF215AEB709149FBF5DDFD711733ED3DBB57807"
+    },
+    {
+      "path": "feishu/attachments/02-运营工作台版本更新.md",
+      "bytes": 3345,
+      "sha256": "330208D0305B5AA971C521F115737A6625A590F429D39AF38564B325231BA6A6"
+    },
+    {
+      "path": "feishu/attachments/03-官网产品说明与验收.md",
+      "bytes": 4421,
+      "sha256": "41BB60DBBB4AD73FFB84477346F475631D6EF85C1A06EC8116A1965BC9DF4DF1"
+    },
+    {
+      "path": "feishu/attachments/04-技术交接与CI结果.md",
+      "bytes": 4045,
+      "sha256": "1F1B0134D840F57C63EA6B4CBDFAD2BD3D3FD75CF5D1CC739F1CA285413E5180"
+    },
+    {
+      "path": "feishu/coverage.json",
+      "bytes": 5410,
+      "sha256": "494A66D433200F169CA857AD255BD43089D8D8635F3598916DB3EE66E4E19D14"
+    },
+    {
+      "path": "feishu/documents/01-从这里开始.txt",
+      "bytes": 6146,
+      "sha256": "5AA1D8841292AD38FF9CF2922D6360D73D3626D9A1725C6BC0342CA066E6BF27"
+    },
+    {
+      "path": "feishu/documents/02-团队资料与最新版本.txt",
+      "bytes": 27517,
+      "sha256": "35E26DC0DCAC1556FEE3FD0F14B6C74EF06FA5AC384FF6D34660AC470E4344DE"
+    },
+    {
+      "path": "feishu/documents/03-团队协作与20分钟上手.txt",
+      "bytes": 7874,
+      "sha256": "396951B3404B5943C85BB2AEF3C07842262524DF48542D322193915F5D949404"
+    },
+    {
+      "path": "feishu/documents/04-当前可演示与可交付能力.txt",
+      "bytes": 6116,
+      "sha256": "2AB2A64CD876317EA7CC404A84C9F0B41E8BE2155F6B19B15E800620F54CBC48"
+    },
+    {
+      "path": "feishu/documents/05-知识库从这里开始.txt",
+      "bytes": 2323,
+      "sha256": "827E740C8697165223B9602D0BC3EC146D47871F8DFD48E68A3D7DE446184078"
+    },
+    {
+      "path": "feishu/documents/06-战略与复盘.txt",
+      "bytes": 395,
+      "sha256": "FDCE0B1789E8287EA71DF2629C7983CBE9C96C2EBFA5A3F015057F67AAB3A998"
+    },
+    {
+      "path": "feishu/documents/07-市场调研与案例.txt",
+      "bytes": 344,
+      "sha256": "BFCD430E2D362BC609E7EB0DD19AC6475F49FD8C3B340EA66FE7C3CADEA18206"
+    },
+    {
+      "path": "feishu/documents/08-产品说明与经验.txt",
+      "bytes": 338,
+      "sha256": "1FA67F48CD1B733ABB6C0F3AA15EF621658335CD4752B69D6A230E45D8DF2A35"
+    },
+    {
+      "path": "feishu/documents/09-技术工具与方法.txt",
+      "bytes": 18897,
+      "sha256": "F8FD0294E09763DC8757ADA4FF70CE41613432AF32AF9022ABFCE3B1C9C20F3D"
+    },
+    {
+      "path": "feishu/documents/10-成果与历史资料.txt",
+      "bytes": 2639,
+      "sha256": "8B6B50EDE5BA95F878C63853A2F19F1F49E824A96C4DE167077D9DFAEF41EFC0"
+    },
+    {
+      "path": "feishu/documents/11-会议记录与复盘.txt",
+      "bytes": 332,
+      "sha256": "3827885BD0584B35281151233511E1AFD6555E6B121B22F170BC0E973A3D4C61"
+    },
+    {
+      "path": "feishu/documents/12-项目决策摘要-20261004.md",
+      "bytes": 1433,
+      "sha256": "3A388EB1B84F74A72F8EA3B4D80FA28F09FEDB84DA9C99A06D742F3DEB3F1DD0"
+    },
+    {
+      "path": "feishu/export-manifest.json",
+      "bytes": 12497,
+      "sha256": "170D54BB2DD6D7501AE962601EF0121155A37DE51BB7CC50B7D9720DB5071C6C"
+    },
+    {
+      "path": "feishu/metadata/早期项目会议基本信息.txt",
+      "bytes": 121,
+      "sha256": "D9532C36F261DA9892FC25419AA59F980FC17D305D846772B79B16A4D3808E77"
+    },
+    {
+      "path": "feishu/README.md",
+      "bytes": 4388,
+      "sha256": "05CE92DC3AF17C063498192474DCC0F1608E466609B39DF7A99898FCD1169328"
+    },
+    {
+      "path": "feishu/source-index.json",
+      "bytes": 11228,
+      "sha256": "30893A27F6A86BED949A2F49EFC1C2E0AFCF268CB4C442F37302F2DF7CBB376B"
+    },
+    {
+      "path": "feishu/sync-evidence.json",
+      "bytes": 11372,
+      "sha256": "EE24C470F1D489EA49D2A30E54289F4A3356DB38DC4210046DACB566E6D0EBC4"
+    },
+    {
+      "path": "feishu/tables/field-names.json",
+      "bytes": 2963,
+      "sha256": "B5AC684AD175E2A6958FD441565983CD55526423D2B09CF4C93C67EABB896306"
+    },
+    {
+      "path": "image-materials.md",
+      "bytes": 1866,
+      "sha256": "A55B4B1A1F58A3BC58E2155258B4D39A9DD71BBF94A0D40B025FFEAFAB8ABD5A"
+    },
+    {
+      "path": "legacy-materials.md",
+      "bytes": 2697,
+      "sha256": "994BDC84482E3F135DFDB7C21064B37B4DD3F46464E810ECD2B61C00F10E5D3F"
+    },
+    {
+      "path": "manifests/historical-image-slots.json",
+      "bytes": 86291,
+      "sha256": "D09F493C079268862A0950F59C45184B48CD1ED09CD379E102D98B417FFD3CC7"
+    },
+    {
+      "path": "manifests/image-aliases.json",
+      "bytes": 457465,
+      "sha256": "1E16B6E4CE1E6D4BDDF130B5463B4FCEB29AB66CFFE67617CF87B86FEDE89B05"
+    },
+    {
+      "path": "manifests/material-path-moves.json",
+      "bytes": 3847,
+      "sha256": "8FFFB1A437D7875376E0AC280EB84A1AE37F97FB862A2DE17CCCF16E19BB4626"
+    },
+    {
+      "path": "manifests/material-review.json",
+      "bytes": 70683,
+      "sha256": "B7F6776C6943C2BD8DF68FAFE4B62AF3B58A9CDE5C9F48A72EDD86E0D6D0B44A"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/1/7EC5F3E5CA45F8E827B2D25D04CF67D0.webp",
+      "bytes": 58980,
+      "sha256": "96BEF21F2C7283436B25E20DA0F313DFF403E2599B4CBAF1A560E14AD4767BFD"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/10/10 - 副本 (2).webp",
+      "bytes": 26084,
+      "sha256": "2E8428C615CD07700A51DF4935DEAF5CD45D3B5D7DC307CBB3BAFC581F49E13F"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/8/8 - 副本 (10).webp",
+      "bytes": 90738,
+      "sha256": "8C653E5DC3ACEDB31E945B199AAF7FDDF77B23D8037D17766471660FB2450FE4"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/高分商品图片_历史/高分便宜商品图片/9/9.webp",
+      "bytes": 6432,
+      "sha256": "CDAAD83B85C9CC7C7E8ADD49DB5F895D91B5B1AF8475440C009304DEF77B6983"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/橙色公文包/2025_11_19_20_06_07.jpeg",
+      "bytes": 41256,
+      "sha256": "3FBC7B24B3F968C6E906EC3F7C47D979E2C6D5AAD92E4CE11E868AD4983F4559"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/床上用品/2025_11_17_20_55_46 - 副本 - 副本.jpeg",
+      "bytes": 44176,
+      "sha256": "0C270B02E45D590A526EA052DD10FFC8C9F52C79DBF56E7D27C5EBB207B3D75E"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色表带/122.jpg",
+      "bytes": 42420,
+      "sha256": "5BA1944788F85AEFEB75453D7FB8A2ED5EAAB0A9124FCA63A2CCB72ABD300349"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色方根鞋/45.jpg",
+      "bytes": 72574,
+      "sha256": "A2013E8053D2D52503F753B71CDFE431F876BBA4D74ECAC2A7E0C9D6B6E76C65"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色高根鞋/2025_5_18_10_32_54.jpg",
+      "bytes": 47594,
+      "sha256": "279ADDFCE91199A30479DC66E1CE530D543E55CBB71C22E0B63F99523E7D95E0"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色机车皮衣/2025_11_17_20_21_00_283.png",
+      "bytes": 268679,
+      "sha256": "2CE9D4F9DCD72DD8D55F4487D077DD97149CEAB367E717C083C8ECE7503C8630"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黑色假发/22.jpg",
+      "bytes": 65056,
+      "sha256": "467A043250B21EA8D3D44AC5919A875582F0D9541DD967F998C021D022A66D03"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/黄色玩具推土机/1BA051622BDE088867C5E917362BB709.jpg",
+      "bytes": 72096,
+      "sha256": "5E95E734DE83F9B5D354E4F5A159939E59F832BABE54AF2988F1ADC9C2F15718"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/戒指/D1AB65E6DF9042B9761FE019CB37D1E6.webp",
+      "bytes": 81786,
+      "sha256": "B8FED3248D2840386194E91079B336BA7A6A342DA0CD5266E80599B6EE368573"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/金色假发/44.jpg",
+      "bytes": 107845,
+      "sha256": "85AA3D840CBBAD8095B04E39B33459D9168BF0835AE3F2E4F81D65442B702736"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/连衣裙/2025_11_16_22_12_36.jpg",
+      "bytes": 45197,
+      "sha256": "B457258D8D5391C166B4205188B68ABA306B1F6880A2FACA115A9EAA86874F91"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/毛巾/112.jpg",
+      "bytes": 151057,
+      "sha256": "CDFE5ACCAA1A47CD4CEBC3DDBF4A7D72326FBE4B8F869CF6377D9D8B733AA8FC"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/木头积木玩具/2025_11_14_11_19_42_963 - 副本 (2).jpg",
+      "bytes": 143667,
+      "sha256": "A562BB091247449A35BCD601A7DDFFFFE3EC600AFD2B5892D09B06A8395FE48A"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/男手表/31408DB66FF4F0E332F6F0803FD35745.webp",
+      "bytes": 61192,
+      "sha256": "2CA74FB569D46E4DCA1BD5130193120368C0E2A14BA8A909CD93BA55FD2C5CC5"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/摄像头/223.jpg",
+      "bytes": 46399,
+      "sha256": "8C4D3456A4E9DF269047FDC5316509CF7EAE54EA2A90497A475F8F28B37B0718"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/手枪一样的脱毛器/2025_11_16_22_09_16 - 副本 - 副本.png",
+      "bytes": 252321,
+      "sha256": "F93716FFAA724CD6A256CDBA9C06A2C69E058E8EE2EF30A922A004FFA580BDB8"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/瘦脸仪/2025_11_19_21_08_37 - 副本 (2).png",
+      "bytes": 230333,
+      "sha256": "BE6E87445B730A8B6A371C4A088E1986DFF9FB5C60D899DFE7CA86E0C6E22811"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/透明电脑壳/2025_11_11_22_34_34_016.png",
+      "bytes": 223449,
+      "sha256": "A5B6945954F4CBB8C1093CD53C6F5AF60A65F441EE52BDAC973133B12D61C5C8"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/小孩生活自理玩具/12.jpg",
+      "bytes": 81807,
+      "sha256": "BC39A0557F1B26ECA294DA138C365F174116196279198E1DA83BA441815C87CB"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/珍珠项链/2025_11_13_09_17_50_132.png",
+      "bytes": 164151,
+      "sha256": "8074A3E1CB90598056581917A324F4A5D552D9054F6FD044A34C869EE7810B99"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/指甲灯/2025_11_19_21_30_09.png",
+      "bytes": 168468,
+      "sha256": "069FF5621CBF3AB35C8E8BFF1DD303AD2BC06D8C629954AC1E74552236B4B405"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/白色电动牙刷.png",
+      "bytes": 310326,
+      "sha256": "E3AF855DC00B54CC6597CAD26579E1250229892A2C91CC543DD31F9E1B1247F3"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/白色婚纱.png",
+      "bytes": 449836,
+      "sha256": "24F59B281A15CD5CB61CE0E0A1D82949FE07F55DFCE0B2098C594F24D68041AA"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/床上用品.jpg",
+      "bytes": 50520,
+      "sha256": "E48342FBEAF7AA3EC70A3DE8C6EF7F34DC28986FA65EFDB3715D500AE9BC0523"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色表带.jpg",
+      "bytes": 27989,
+      "sha256": "075F241E5202621F2BDD86CC632E740DF375BE66C9F026EA7801417A229D6F03"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色高跟鞋.jpg",
+      "bytes": 54508,
+      "sha256": "1400131A5B2DCBC4DE03401DC4DC0E1ADFA24A09A5F3F91047AA388BBD913710"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色机车皮衣.jpg",
+      "bytes": 50313,
+      "sha256": "2F48605A434F11AB3F98969225B4F8D6511281170D1A020A7827C2520ECB2D45"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色假发.jpg",
+      "bytes": 42014,
+      "sha256": "8FA5B4A905F98036BB9225E91F673A597E839C746505802648D55B187A13A3FE"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黑色凉鞋.jpg",
+      "bytes": 48769,
+      "sha256": "7521441E0D8096E17CBCB71D20096CF7C23ED1E6927802FDB8B54588865B5CCC"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/黄色玩具推土机.jpg",
+      "bytes": 44743,
+      "sha256": "4FF95BB4E64EF181AE883F4984D88A09686872C84D6F40F81604423238AB1C3A"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/戒指.jpg",
+      "bytes": 84029,
+      "sha256": "358382D68FFAAC43A4922595E9DD519CF1DD4F7BF0A3D4FC790CF9140D11AC23"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/金色假发.jpg",
+      "bytes": 71442,
+      "sha256": "01F10E38E400817DAA3A2012239FE236649CCB075784B01F9B3CF9183706010A"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/连衣裙.jpg",
+      "bytes": 29436,
+      "sha256": "46058BB3A73EA7A218D0A509B2ADC9DF72033BB3908AD2EDEAB7EAF72546FFC4"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/毛巾.jpg",
+      "bytes": 102222,
+      "sha256": "97BF000CB35B5F9342A867E263F7A34314A21343261CF8F31364E42F0DC9ECE6"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/木头玩具.jpg",
+      "bytes": 102381,
+      "sha256": "D06DE7F87EE972FE11202002FA0F0922934CCCE5F0C4AF532B87969CD0163A9B"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/摄像头.jpg",
+      "bytes": 31216,
+      "sha256": "53F94FB59C013C3617A9FE1BE8A86FC8392ED4B7C2BAE576C0D506B246D36CFD"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/生活自理玩具.jpg",
+      "bytes": 53591,
+      "sha256": "CB3054A7688AF0B124F94CD9A8B527A285E62CD71C22C166BA4C07C748F7B114"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/手表.jpg",
+      "bytes": 76096,
+      "sha256": "1E8DE49E9B25B8A1605D2437F807513D7010CB20383E196F0CC19AAAD7644810"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/手枪一样的脱毛器.png",
+      "bytes": 173913,
+      "sha256": "5E550659EF70CD39B5AC3081D5C0F1B75BD111E7E8C81AC2053364161E3726FB"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/瘦脸仪.png",
+      "bytes": 116686,
+      "sha256": "D816E3D28E18AD9DACB6544B2AD07E6178301C25BDE99186AC4CC6F054F58633"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/透明电脑套.png",
+      "bytes": 288825,
+      "sha256": "208ABAFB9BB1829EB2C9E39312F2056078DD7BBEC245F69C4468AA3F3CB76420"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/脱毛器.jpg",
+      "bytes": 33844,
+      "sha256": "8B8A5CD0F03C6FB76D6AF7861686951A05D519B900BEE3DD86BAF0763AB7897A"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/珍珠项链.png",
+      "bytes": 238502,
+      "sha256": "A951582FE68EDCF8745194A85FC9345F3915EABDE2ECAA3E6E45DB74D5CB05B5"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品发布素材_批次3_历史/发品/商品图片/A+++++++++++大海报/指甲灯.png",
+      "bytes": 80661,
+      "sha256": "5D0FE2923E49F6D3E8D785FC256BB46170AA8377ECD1699FED4A0372A73877E0"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/5923浅白色高跟鞋10个/1.jpg",
+      "bytes": 40600,
+      "sha256": "89ED6944B1D18D7218083C716E03CFA21CC3DB1D6B599869F1DB49DCBA9822A2"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400.webp",
+      "bytes": 23978,
+      "sha256": "636E81944DC42AAA7F31BB32857AC917280AF1CAEA5D1628ADC8B3441448F481"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/6705白色高跟鞋10个/1 - 副本 (2).jpg",
+      "bytes": 76758,
+      "sha256": "A6E995E15E6BBF93A98ED8780151B9703143DA3325755E1F7189F1312D8F2AAB"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/SM364奶油色手提包5个/FD48A529F6AFD3821E163347D0C49A77.jpg",
+      "bytes": 48187,
+      "sha256": "43D85B615EEBD11796606D99D5BB2BBD73795E4285AF73FE083D1763A1B11555"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_补充版本/20个商品图片/SM379黑色时尚手提包10个/1 - 副本 (2).jpg",
+      "bytes": 67621,
+      "sha256": "6711A28F931C1D78F77F24D7361E60ABC9D5FF34D47B6502D0876A2F8A405550"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/003846棕色高跟鞋10个/1.jpg",
+      "bytes": 64764,
+      "sha256": "05513805363F4B958295B2F9D65909103A91BDC391666A7EB46447AD3CCBFCB0"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/0657红色情侣表10个/11.jpg",
+      "bytes": 86618,
+      "sha256": "6E35E6643FAF953977A523D134C6BBE02E1A7E9C46F4B2CD1B071F523B164048"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/0935红色晚礼服连衣裙/691E3F4C4909EA9FA73035DE4D4662C4.jpg",
+      "bytes": 44240,
+      "sha256": "EAB5C9B82435A4C44A7C15A772CF8E28CA137337C5C2AA121334B7D91AE2E728"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19868蓝色充电宝10个/1.jpg",
+      "bytes": 51151,
+      "sha256": "297DBBADA59F9C8FE883AFF984A07403E6FEB1211733F7CF55290DA656D75E95"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19875黑白充电宝10个/1.jpg",
+      "bytes": 29334,
+      "sha256": "2D34BAF40C8B55ABCE41F0AB6D5BE3A6075FB2217C49BAA0CA4AD8AE025AB309"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/19878黑色充电宝10个/3EE95E900F1B13E958EC3ED5F000BEB7.webp",
+      "bytes": 32796,
+      "sha256": "F182F16C1E54519A2D813DD291EB41FE7F0C4A1D464523B92E28ECD98DBD4ED4"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3842深红色高跟鞋10个/1.jpg",
+      "bytes": 44165,
+      "sha256": "4448D968BA39EC642032A8F068696C83BD5FE7B269252BC020E682537A08F347"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3852金色连衣裙10件/1.jpg",
+      "bytes": 106832,
+      "sha256": "A0D27D03A3A785D7EAC2C6E8E7AF163032FDB2D07D6BDED743950A7B7C209103"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/3858彩色连衣裙10件/1.jpg",
+      "bytes": 92484,
+      "sha256": "321B677A16C4C78B7B0E2C3CC75F601CAD534EFB27EB951F46D5DBB9898B6300"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/4718黄色高跟鞋10个/09C5377851419EEB25FEF01F16E3C264.webp",
+      "bytes": 27552,
+      "sha256": "5EDA404CFC45BF4E8B0557CE7B255403E0A4A2F4CBF9AA1304C4CDB38C3F4462"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/4754LED头灯10个/093161F61AE00EDB01F39E9F56B56B93.webp",
+      "bytes": 34602,
+      "sha256": "B366243BD07D90C75CAEC0B8DFB421B05046E18719EED27E8C4D1114A3B375C5"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5527木色编织单肩包15个/11.jpg",
+      "bytes": 48833,
+      "sha256": "CAF130E392FF52AA4C0264912719B2C403EC53DC2F57538429D5FE18AB9FC5AE"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5563灰色手提包10个/1 - 副本 (10).jpg",
+      "bytes": 105431,
+      "sha256": "EEFFD1A275A539A49B299B83A59D1F022FC667FA93E85A36D0D4E3C7B63E08B8"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/5579棕色单肩包10个/1.jpg",
+      "bytes": 101823,
+      "sha256": "BD0E35EA1DC99B03408ED252E035E2B6EAB126CC3F50278D2FC6F61ECCD349C7"
+    },
+    {
+      "path": "materials/旧亚马逊资料/03_商品图片素材/商品图片_20件_主集/20个商品图片/6699奶油色高跟鞋10个/B98BACBAD13C23E02FC9E29B6486F400 - 副本 (6).webp",
+      "bytes": 23978,
+      "sha256": "E3DE6D4DFC1E98C7C263F3D4B21D1A1C6EA000F635C431CBEDA96E1D947987E9"
+    },
+    {
+      "path": "organization-and-recovery.md",
+      "bytes": 2402,
+      "sha256": "A71A2065BD34E3B4BD561B4F532928CEC4BEB88652F4AB07A51B063179985591"
+    },
+    {
+      "path": "project-map.md",
+      "bytes": 2207,
+      "sha256": "BA7216A8F34DB0064309D30CAFBF2A2537CF9F6986341231A6345C7568ED9223"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1871,
+      "sha256": "3807E80AFAE03AB2AE02C085528B4421196B6C1955B5E74834D20A20D667A034"
+    },
+    {
+      "path": "sync-boundary.md",
+      "bytes": 2131,
+      "sha256": "D195F2905788C3A9042CAA6998A6A29795AAE084980EAF5EA88B91706A0C5C0A"
+    }
+  ]
+}

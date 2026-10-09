@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-10-09T09:58:05.6557777Z",
+  "localMovementCompleted": true,
+  "fileCount": 8,
+  "pathBase": "Local primary collection; path inventory only, not uploaded Office files",
+  "files": [
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/课程与平台资料_历史/03 单元二 亚马逊运营操作（二）.pptx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/课程与平台资料_历史/03 单元二 亚马逊运营操作（二）.pptx",
+      "bytes": 49663658,
+      "sha256": "A5B25F9620B284D7E660848FF4682E72AC5DCED4F8042FA2CD065F73B0B28629",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/课程与平台资料_历史/4 单元二 亚马逊运营操作（三）.pptx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/课程与平台资料_历史/4 单元二 亚马逊运营操作（三）.pptx",
+      "bytes": 20402628,
+      "sha256": "CA9F15402B1D8FA1D7DE9C37C0081B15F3FA6EE1F0FE7266915F0EC7F0B2F9D5",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/课程与平台资料_历史/5 亚马逊物流 FBA（一）.pptx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/课程与平台资料_历史/5 亚马逊物流 FBA（一）.pptx",
+      "bytes": 18112453,
+      "sha256": "82874067D2A3A70FD23B9A05F460DAC2BBF909907450A0ACE39C024725C66C57",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/课程与平台资料_历史/6 单元三 亚马逊物流FBA（二）.pptx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/课程与平台资料_历史/6 单元三 亚马逊物流FBA（二）.pptx",
+      "bytes": 19270327,
+      "sha256": "DA9229820855D99A526E74937057D85D26FC470831623797B119940A041BDF51",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/课程与平台资料_历史/软件操作手册-互联网+跨境电子商务亚马逊仿真系统V2.0.pdf",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/课程与平台资料_历史/软件操作手册-互联网+跨境电子商务亚马逊仿真系统V2.0.pdf",
+      "bytes": 8964413,
+      "sha256": "33C486DB408FE10AE93F6B3293359FE37E74250ED22CFECE02305E0DD48851B9",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/商品项目素材_历史/第七届“数贸赛”一等奖直通车计划书.docx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/商品项目与商业参考_历史/第七届“数贸赛”一等奖直通车计划书.docx",
+      "bytes": 6189817,
+      "sha256": "017C78C06B4FB5775E7C6C3AB443DB815421248FD925ACA775A8145D48D45A06",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/商品项目素材_历史/话术.docx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/商品项目与商业参考_历史/话术.docx",
+      "bytes": 21812,
+      "sha256": "6E41BD6F337C06B237333F980730FA9A7F3D4A592BA1BF8729E9954C3BF4988D",
+      "originalBytesUploaded": false
+    },
+    {
+      "oldRelativePath": "旧亚马逊资料/03_商品图片素材/商品项目素材_历史/市场战略.docx",
+      "newRelativePath": "旧亚马逊资料/02_规则打法与流程/商品项目与商业参考_历史/市场战略.docx",
+      "bytes": 22292,
+      "sha256": "7C59C6F71A780F56EEB55499142018BBD40ED5D67497E603133DF3DFAB56A410",
+      "originalBytesUploaded": false
+    }
+  ]
+}

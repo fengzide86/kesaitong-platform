@@ -1,0 +1,333 @@
+{
+  "collected_on": "2026-10-09",
+  "scope": "KST课赛通项目资料；已排除个人内容与凭据",
+  "method": "通过飞书可见文档界面全选复制正文，Markdown附件从查看代码界面读取；仅文本，不包含原始格式或嵌入媒体",
+  "documents": [
+    {
+      "title": "01_运营工作台首次使用与内容交接_团队副本_20261007.md",
+      "url": "https://mcnrvslvxm0m.feishu.cn/file/RaADbB8vzocWUcxal9mc6uSEnXc",
+      "file": "attachments/01-运营工作台首次使用与内容交接.md",
+      "status": "ui_read_markdown_source",
+      "characters": 1943,
+      "content_kind": "markdown_attachment_body",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "44f9d04ff44efa9d3d85f57f93d910bce05e1eb6b219dda6cb0ba982ac5c5d5b"
+    },
+    {
+      "title": "02_运营工作台版本更新_团队副本_20261007",
+      "url": "https://mcnrvslvxm0m.feishu.cn/file/O756bSeqEobS35xTk7Wchfo3nUc",
+      "file": "attachments/02-运营工作台版本更新.md",
+      "status": "ui_read_markdown_source",
+      "characters": 1390,
+      "content_kind": "markdown_attachment_body",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "33423606442babca82907ccb3ab17560a67ae2824fbdc1e40298b997c161fe81"
+    },
+    {
+      "title": "03_官网产品说明与验收_团队副本_20261007",
+      "url": "https://mcnrvslvxm0m.feishu.cn/file/AOH9bqHBHoxU1GxhKlPcep9XnKf",
+      "file": "attachments/03-官网产品说明与验收.md",
+      "status": "ui_read_markdown_source",
+      "characters": 1836,
+      "content_kind": "markdown_attachment_body",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "47690379988b9515a210c304aab0c637471317f11a78a8a7c7423b8d7bb9fe09"
+    },
+    {
+      "title": "04_技术交接与CI结果_团队副本_20261007",
+      "url": "https://mcnrvslvxm0m.feishu.cn/file/RFedbcce8obHqNxka2YcIQgBnhh",
+      "file": "attachments/04-技术交接与CI结果.md",
+      "status": "ui_read_markdown_source",
+      "characters": 2154,
+      "content_kind": "markdown_attachment_body",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "281cbcf8494062d0c2a084b2b631c00669243542b8c66d490a0f3ed9ed7116ab"
+    },
+    {
+      "title": "课赛通团队协作台｜从这里开始",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/JNSWwWuOjik5LVkrtWhcerBOnKh",
+      "file": "documents/01-从这里开始.txt",
+      "status": "ui_copied_body",
+      "characters": 2210,
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "5aa1d8841292ad38ff9cf2922d6360d73d3626d9a1725c6bc0342ca066e6bf27"
+    },
+    {
+      "title": "团队资料与最新版本｜市场・产品・技术",
+      "url": "https://mcnrvslvxm0m.feishu.cn/docx/H71sdUstuoI4exxdTqDcwEidn2e",
+      "file": "documents/02-团队资料与最新版本.txt",
+      "status": "ui_copied_body",
+      "characters": 11658,
+      "content_kind": "project_document_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "120b86231b1dc7bf1b3a58fbfc4604eef4cf42f9f942f512d3afc31b7ccec003"
+    },
+    {
+      "title": "市场・产品・技术｜团队协作与20分钟上手",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/HilXwPfO5iQyH9k4kGtcIsnAnK9",
+      "file": "documents/03-团队协作与20分钟上手.txt",
+      "status": "ui_copied_body",
+      "characters": 2736,
+      "content_kind": "project_document_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "396951b3404b5943c85bb2aef3c07842262524df48542d322193915f5d949404"
+    },
+    {
+      "title": "当前可演示与可交付能力",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/ZpM8wq3q8iKL50kwMWlcG25snDe",
+      "file": "documents/04-当前可演示与可交付能力.txt",
+      "status": "ui_copied_body",
+      "characters": 2460,
+      "content_kind": "project_document_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "2ab2a64cd876317ea7cc404a84c9f0b41e8be2155f6b19b15e800620f54cbc48"
+    },
+    {
+      "title": "知识库｜从这里开始",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/CzhawONt5ihMlJknRZ0czZqunNh",
+      "file": "documents/05-知识库从这里开始.txt",
+      "status": "ui_copied_body",
+      "characters": 1175,
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "e5a8bd642086ea375d5d13015aea23bfa9761ccd9c6ef67bcddd54be57b865f6"
+    },
+    {
+      "title": "战略与复盘",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/YfxLwTNBfiM6gdkkEsNczAumnvf",
+      "file": "documents/06-战略与复盘.txt",
+      "status": "ui_copied_body",
+      "characters": 140,
+      "excluded_embedded_files": [
+        "亚马逊赛训商业验证计划书_商业验证版_v2.docx"
+      ],
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "fdce0b1789e8287ea71df2629c7983cbe9c96c2ebfa5a3f015057f67aab3a998"
+    },
+    {
+      "title": "市场｜调研与案例",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/ZOFBw0k51iLT5wkxozzc4jNxnae",
+      "file": "documents/07-市场调研与案例.txt",
+      "status": "ui_copied_body",
+      "characters": 122,
+      "excluded_embedded_files": [
+        "任务拆分(1).docx"
+      ],
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "bfcd430e2d362bc609e7eb0dd19ac6475f49fd8c3b340ea66fe7c3cadea18206"
+    },
+    {
+      "title": "产品｜说明与经验",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/FY6uwISZEidByDkAVoLczwevnXc",
+      "file": "documents/08-产品说明与经验.txt",
+      "status": "ui_copied_body",
+      "characters": 134,
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "1fa67f48cd1b733abb6c0f3aa15ef621658335cd4752b69d6a230e45d8df2a35"
+    },
+    {
+      "title": "技术｜工具与方法",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/RkcZwgf5niLGUyknetJcYNTCnOh",
+      "file": "documents/09-技术工具与方法.txt",
+      "status": "ui_copied_body",
+      "characters": 7364,
+      "excluded_content": [
+        "内嵌图片"
+      ],
+      "content_kind": "project_document_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "bbbac5680017d817b18ce1705b6c2356162227548dd790c7df0f43d4a50c0bf5"
+    },
+    {
+      "title": "成果与历史资料",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/OPA0w9Z7SiCzmukttcIcCkOAnIf",
+      "file": "documents/10-成果与历史资料.txt",
+      "status": "ui_copied_body",
+      "characters": 947,
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "8b6b50ede5ba95f878c63853a2f19f1f49e824a96c4de167077d9dfaef41efc0"
+    },
+    {
+      "title": "会议记录与复盘",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/JswkwD72ViD8eykPMDNcZYADnCe",
+      "file": "documents/11-会议记录与复盘.txt",
+      "status": "ui_copied_body",
+      "characters": 126,
+      "excluded_embedded_files": [
+        "2026.6.2会议1.mp4",
+        "2026.6.2会议2.mp4",
+        "6-14项目方向与业务交付规划.pdf"
+      ],
+      "content_kind": "navigation_page_text",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "3827885bd0584b35281151233511e1afd6555e6b121b22f170bc0e973a3d4c61"
+    },
+    {
+      "title": "智能纪要：项目核心方向与落地事项讨论 2026年10月4日",
+      "url": "https://mcnrvslvxm0m.feishu.cn/docx/XeCndakVEoJDInxm3n5c8iB4nTg",
+      "file": "documents/12-项目决策摘要-20261004.md",
+      "status": "derived_project_summary_only",
+      "characters": 561,
+      "excluded_content": [
+        "人员及私人内容",
+        "原始全文",
+        "画板、录音、内嵌媒体"
+      ],
+      "content_kind": "derived_summary",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "3a388eb1b84f74a72f8ea3b4d80fa28f09fedb84da9c99a06d742f3deb3f1dd0"
+    },
+    {
+      "title": "智能纪要：跨境电商比赛提效工具规划 2026年6月2日",
+      "url": "https://mcnrvslvxm0m.feishu.cn/docx/IQYBd5vICocTXvxK9qocq16Zndb",
+      "file": "metadata/早期项目会议基本信息.txt",
+      "status": "partial_metadata_only",
+      "characters": 59,
+      "excluded_content": [
+        "画板、录音、内嵌表格的原始媒体"
+      ],
+      "content_kind": "meeting_metadata",
+      "collected_on": "2026-10-09",
+      "character_count_unit": "UTF-16 code units",
+      "sha256": "d9532c36f261da9892fc25419aa59f980fc17d305d846772b79b16a4d3808e77"
+    }
+  ],
+  "tables": [
+    {
+      "title": "执行任务",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbliVbY88K8aHaw1&view=vewflITF1R",
+      "table": "tbliVbY88K8aHaw1",
+      "status": "field_names_only",
+      "fields": [
+        "任务标题",
+        "模块",
+        "负责人",
+        "验证人",
+        "状态",
+        "截止日期",
+        "完成标准",
+        "成果链接",
+        "阻塞原因",
+        "验证记录",
+        "关联反馈",
+        "关联内容",
+        "实际进展",
+        "进展日期",
+        "完成日期",
+        "验收依据",
+        "工作线",
+        "跟进状态",
+        "父记录 2",
+        "收入知识库",
+        "复用说明"
+      ],
+      "views": [
+        "全部任务",
+        "市场・产品・技术",
+        "我的任务｜按负责人筛选",
+        "执行看板",
+        "待分配负责人",
+        "待定截止日期",
+        "知识成果｜自动收录"
+      ]
+    },
+    {
+      "title": "内容排期与审核",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbl227c7Hrqsvtxk&view=veweBbABPg",
+      "table": "tbl227c7Hrqsvtxk",
+      "status": "field_names_only",
+      "fields": [
+        "内容标题",
+        "渠道",
+        "作者",
+        "审核人",
+        "状态",
+        "发布日期",
+        "草稿链接",
+        "发布链接",
+        "审核意见",
+        "咨询数量",
+        "试用数量",
+        "复盘结论"
+      ],
+      "views": [
+        "全部内容",
+        "审核看板",
+        "发布日历",
+        "未排期",
+        "我待审核｜按审核人筛选"
+      ]
+    },
+    {
+      "title": "反馈与需求",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tblnmNZGZnPgWPdr&view=vew4RkiM6d",
+      "table": "tblnmNZGZnPgWPdr",
+      "status": "field_names_only",
+      "fields": [
+        "反馈标题",
+        "来源",
+        "模块",
+        "影响程度",
+        "类型",
+        "说明",
+        "处理人",
+        "状态",
+        "工单编号",
+        "来源链接",
+        "验证记录",
+        "关联任务",
+        "来源链接（填写）"
+      ],
+      "views": [
+        "内部反馈表单",
+        "全部反馈",
+        "我的反馈｜按处理人筛选"
+      ]
+    },
+    {
+      "title": "软件版本与下载",
+      "url": "https://mcnrvslvxm0m.feishu.cn/wiki/C7TWwn5B2iH63ikwyjzc93hhnTi?table=tbl9oWQjMhZzupHd&view=vewmsdcqpk",
+      "table": "tbl9oWQjMhZzupHd",
+      "status": "field_names_only",
+      "fields": [
+        "版本与更新说明",
+        "安装包",
+        "产品",
+        "通知对象",
+        "撤回推荐",
+        "创建时间"
+      ]
+    }
+  ],
+  "cloud_state": {
+    "accidental_template_toggle": true,
+    "restored_non_template": true,
+    "verification": "开关恢复为ud__switch（无ud__switch-checked），页面模板标识消失",
+    "permanent_changes": false
+  },
+  "table_data_export": {
+    "status": "not_exported",
+    "reason": "UI下载等待60秒未返回文件，Downloads没有本轮xlsx；已取消下载设置"
+  }
+}
