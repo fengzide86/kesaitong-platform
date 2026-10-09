@@ -14,8 +14,8 @@
     },
     {
       "path": "current-status.md",
-      "bytes": 2508,
-      "sha256": "80898DECABFAFE446F83DCC71B4BBB3A93C1C830899263789FB81C6AD125AA35"
+      "bytes": 7660,
+      "sha256": "FF3AE971CBCDFBB4328296F718598A116D8659F240703C62398E84A8E5ED2DB4"
     },
     {
       "path": "feishu/attachments/01-运营工作台首次使用与内容交接.md",
@@ -139,8 +139,8 @@
     },
     {
       "path": "legacy-materials.md",
-      "bytes": 2697,
-      "sha256": "994BDC84482E3F135DFDB7C21064B37B4DD3F46464E810ECD2B61C00F10E5D3F"
+      "bytes": 5135,
+      "sha256": "CBBF2285C738330EED2445502CF7F8E4D87A8B143B498B38E5CBBD457C2E91C8"
     },
     {
       "path": "manifests/historical-image-slots.json",
@@ -509,18 +509,19 @@
     },
     {
       "path": "project-map.md",
-      "bytes": 2207,
-      "sha256": "BA7216A8F34DB0064309D30CAFBF2A2537CF9F6986341231A6345C7568ED9223"
+      "bytes": 2991,
+      "sha256": "76BE359D2D4E9A1C4776D5F8A949225AC0D000D7D26D5D779F84BBE6CBD12876"
     },
     {
       "path": "README.md",
-      "bytes": 1871,
-      "sha256": "3807E80AFAE03AB2AE02C085528B4421196B6C1955B5E74834D20A20D667A034"
+      "bytes": 2444,
+      "sha256": "E6653B61B1319FF961C6EDF03310BE9D52FA001F72ACA1287F3F0B019A461962"
     },
     {
       "path": "sync-boundary.md",
       "bytes": 2131,
       "sha256": "D195F2905788C3A9042CAA6998A6A29795AAE084980EAF5EA88B91706A0C5C0A"
     }
-  ]
+  ],
+  "verifiedAtUtc": "2026-10-09T12:03:46.126Z"
 }

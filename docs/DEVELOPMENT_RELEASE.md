@@ -2,7 +2,7 @@
 
 ## 日常开发
 
-唯一源码目录为 `D:\开发项目\amazon-toolbox-vue`；入口均从自身所在目录解析项目，不依赖打开终端的位置，也不复制源码到旧目录。
+源码从本次明确选定的 Git 工作区执行；本机主开发目录已改名为 `D:\开发项目\课赛通-核心平台`，另有正式基线与候选工作树。入口均从自身所在目录解析项目，不依赖终端位置，也不复制源码到旧目录。先核对 [AI 指南](../AI_GUIDE.md)及[当前工程与成果](project-materials/2026-10-09/current-status.md)，不能把路径名或旧分支里的本手册当成最新实现证明。
 
 第一次使用请先看根目录 `00_快捷入口说明.md`。保留全部原入口文件名，已有桌面快捷方式继续有效。
 
@@ -170,6 +170,8 @@ npm run package:audit
 当前 `internal` 桌面安装包不包含 Python 后端；`package:audit` 会拒绝 `toolbox-backend.exe`。包内包含前端、编译后的 Electron/Runner、必要生产依赖和模板、费率、品牌资源。安装包不得包含 Token、测试、文档、运维脚本、TypeScript 源码或 source map。`backend:build` 仅保留为兼容场景的手动命令，不是默认发布步骤。
 
 ## 独立宣传官网
+
+当前官网使用独立 GitHub Pages 静态仓库和 `https://kesaitong.top`；核验时间、源码快照与静态提交统一在 [当前工程与成果](project-materials/2026-10-09/current-status.md)维护。发布器仍按所选工作区的 `.env.marketing.local` 配置选择通道；不得因为历史默认值就改回 Cloudflare。下面 2026-09-21 的访问记录是历史样本，不覆盖当前事实。
 
 2026-09-21 实际可访问通道为 `https://fengzide86.github.io`（独立静态仓库），Cloudflare 的 `kesaitong.pages.dev` 当时返回 522。官网通道以本机 `.env.marketing.local` 的当前配置及公开访问核验为准，登录成功不等于域名或站点可用。域名 `kesaitong.top` 是否完成绑定必须另行核验。
 
