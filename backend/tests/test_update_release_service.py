@@ -4,6 +4,7 @@ import io
 import json
 import os
 import stat
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -402,6 +403,58 @@ async def test_public_permission_failure_keeps_previous_manifest(tmp_path, monke
     assert not list(service.releases_dir.glob(".latest.yml.tmp"))
     assert not list(service.releases_dir.glob(".publishing-*"))
     assert not list(service.staging_dir.glob(".publishing-*"))
+
+
+def test_public_file_permission_repair_branches_without_root(tmp_path, monkeypatch):
+    """Exercise the POSIX permission guard without changing host ownership."""
+    service = UpdateReleaseService(tmp_path / "updates")
+    release_gid = service.releases_dir.stat().st_gid
+    regular_mode = stat.S_IFREG | 0o600
+    repaired_mode = stat.S_IFREG | 0o640
+    monkeypatch.setattr(service_module.os, "name", "posix")
+
+    class FakePath:
+        def __init__(self, metadata):
+            self.metadata = iter(metadata)
+
+        def lstat(self):
+            return next(self.metadata)
+
+    monkeypatch.setattr(service_module.os, "chown", lambda *_args: None, raising=False)
+    monkeypatch.setattr(service_module.os, "chmod", lambda *_args: None)
+    service._prepare_public_file(FakePath([
+        SimpleNamespace(st_mode=regular_mode, st_gid=release_gid + 1),
+        SimpleNamespace(st_mode=repaired_mode, st_gid=release_gid),
+    ]))
+
+    with pytest.raises(HTTPException, match="普通文件"):
+        service._prepare_public_file(FakePath([
+            SimpleNamespace(st_mode=stat.S_IFDIR | 0o750, st_gid=release_gid),
+        ]))
+
+    monkeypatch.setattr(service_module.os, "chown", None)
+    with pytest.raises(HTTPException, match="不支持公开更新文件组权限"):
+        service._prepare_public_file(FakePath([
+            SimpleNamespace(st_mode=regular_mode, st_gid=release_gid + 1),
+        ]))
+
+    monkeypatch.setattr(service_module.os, "chown", lambda *_args: (_ for _ in ()).throw(OSError("synthetic")), raising=False)
+    with pytest.raises(HTTPException, match="组权限无法校正"):
+        service._prepare_public_file(FakePath([
+            SimpleNamespace(st_mode=regular_mode, st_gid=release_gid + 1),
+        ]))
+
+    monkeypatch.setattr(service_module.os, "chown", lambda *_args: None)
+    with pytest.raises(HTTPException, match="权限校验失败"):
+        service._prepare_public_file(FakePath([
+            SimpleNamespace(st_mode=regular_mode, st_gid=release_gid + 1),
+            SimpleNamespace(st_mode=regular_mode, st_gid=release_gid + 1),
+        ]))
+
+    monkeypatch.setattr(service_module.os, "name", "nt")
+    service._prepare_public_file(FakePath([
+        SimpleNamespace(st_mode=regular_mode, st_gid=release_gid),
+    ]))
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX group ownership is not available on Windows")
