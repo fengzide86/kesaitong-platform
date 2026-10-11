@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ORIGINAL_KNOWN_FOLDER_BLOCK, ORIGINAL_TEMPLATE_SHA256, PATCHED_KNOWN_FOLDER_BLOCK, SAFE_POINTER_COPY, SAFE_UPSTREAM_BUILDER_VERSION, SAFE_UPSTREAM_TEMPLATE_SHA256, patchNsisTemplate, prepareNsisTemplate } from '../../../scripts/prepare-nsis-template.mjs'
-import { renderKnownFolderProbe } from '../../../scripts/test-nsis-known-folder-copy.mjs'
+import { renderKnownFolderProbe, resolveNsisCompiler } from '../../../scripts/test-nsis-known-folder-copy.mjs'
 
 // Canonical upstream from the official 26.8.1 npm tarball; its entire file is
 // checked against the existing production allowlist, independently of which
@@ -116,6 +116,51 @@ describe('guarded NSIS known-folder memory fix', () => {
     expect(probe).toContain('!define KF_FLAG_CREATE 0')
     expect(probe).not.toMatch(/WriteReg|CreateShortCut|WriteUninstaller|FileOpen|SetOutPath/)
     expect(() => renderKnownFolderProbe('D:\\bad$path\\probe.exe')).toThrow('Unsafe')
+  })
+
+  it('uses the installed builder resolver and hashed Bin layout instead of a warm legacy cache', async () => {
+    const fixture = isolatedBuilder(SAFE_UPSTREAM_BUILDER_VERSION, safeUpstream)
+    const library = dirname(dirname(dirname(fixture.filename)))
+    mkdirSync(join(library, 'out', 'toolsets'), { recursive: true })
+    const bundle = join(fixture.root, 'data', 'electron-builder-cache', 'nsis-3.0.4.1', 'nsis-3.0.4.1-urlhash')
+    mkdirSync(join(bundle, 'Bin'), { recursive: true })
+    const compiler = join(bundle, 'Bin', 'makensis.exe')
+    writeFileSync(compiler, 'inert compiler fixture; never executed')
+    writeFileSync(join(fixture.root, 'package.json'), JSON.stringify({ build: { toolsets: { nsis: '0.0.0' }, nsis: { customNsisBinary: { version: 'reviewed-test' } } } }))
+    writeFileSync(join(library, 'out', 'toolsets', 'windows.js'), `exports.getMakeNsisPath = async (version, binary) => {
+      if (version !== '0.0.0' || binary.version !== 'reviewed-test') throw new Error('Build options were not forwarded');
+      if (process.env.ELECTRON_BUILDER_CACHE !== ${JSON.stringify(join(fixture.root, 'data', 'electron-builder-cache'))}) throw new Error('Build cache differs');
+      return { path: ${JSON.stringify(compiler)}, env: { NSISDIR: ${JSON.stringify(bundle)} } };
+    }`)
+    const previous = process.env.ELECTRON_BUILDER_CACHE
+    const selected = await resolveNsisCompiler({ root: fixture.root, env: { TOOLBOX_DATA_ROOT: join(fixture.root, 'data') } })
+    expect(selected).toEqual({ path: compiler, env: { NSISDIR: bundle } })
+    expect(process.env.ELECTRON_BUILDER_CACHE).toBe(previous)
+  })
+
+  it('supports an explicit reviewed NSIS home in both Bin and original layouts', async () => {
+    const fixture = isolatedBuilder(SAFE_UPSTREAM_BUILDER_VERSION, safeUpstream)
+    const nsisRoot = join(fixture.root, 'compiler with space 中文')
+    const nativePath = join(nsisRoot, 'Bin', 'makensis.exe')
+    const legacyPath = join(nsisRoot, 'makensis.exe')
+    const env = { KST_NSIS_HOME: nsisRoot }
+    for (const filename of [nativePath, legacyPath]) {
+      const selected = await resolveNsisCompiler({ root: fixture.root, env, fileExists: (candidate: string) => candidate === filename })
+      expect(selected).toEqual({ path: filename, env: { NSISDIR: nsisRoot } })
+    }
+  })
+
+  it('fails closed for an invalid explicit NSIS home rather than selecting a cached compiler', async () => {
+    const fixture = isolatedBuilder(SAFE_UPSTREAM_BUILDER_VERSION, safeUpstream)
+    let builderCalled = false
+    await expect(resolveNsisCompiler({ root: fixture.root, env: { KST_NSIS_HOME: join(fixture.root, 'missing') }, fileExists: () => false, resolveBuilderCompiler: async () => { builderCalled = true; return {} } })).rejects.toThrow('refusing to fall back')
+    expect(builderCalled).toBe(false)
+  })
+
+  it('rejects a missing or unreviewed compiler returned by the installed builder', async () => {
+    const fixture = isolatedBuilder(SAFE_UPSTREAM_BUILDER_VERSION, safeUpstream)
+    await expect(resolveNsisCompiler({ root: fixture.root, env: {}, fileExists: () => false, resolveBuilderCompiler: async () => ({ path: join(fixture.root, 'makensis.exe') }) })).rejects.toThrow('missing NSIS compiler')
+    await expect(resolveNsisCompiler({ root: fixture.root, env: {}, fileExists: () => true, resolveBuilderCompiler: async () => ({ path: join(fixture.root, 'makensis.cmd') }) })).rejects.toThrow('reviewed native Windows')
   })
 
   it('all documented NSIS packaging entry points prepare the reviewed template', () => {

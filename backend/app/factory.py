@@ -11,16 +11,15 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIASGIMiddleware
 from slowapi.util import get_remote_address
 
 from app.lifecycle import lifespan
-from app.middleware import request_tracking_middleware
+from app.middleware import RequestTrackingMiddleware
 from core.cache import cache
 from core.config import settings
 from core.exceptions import register_exception_handlers
 from core.logging import redact_sensitive
-from core.rate_limit import RateLimitStorageUnavailable, limiter
+from core.rate_limit import ApplicationRateLimitMiddleware, RateLimitStorageUnavailable, limiter
 from core.security import configure_cors
 from core.tasks import task_manager
 from database import check_db_health, get_db_stats
@@ -111,9 +110,9 @@ def create_app() -> FastAPI:
                             headers={"Retry-After": "5"})
 
     app.add_exception_handler(RateLimitStorageUnavailable, limiter_unavailable)
-    app.add_middleware(SlowAPIASGIMiddleware)
+    app.add_middleware(ApplicationRateLimitMiddleware)
     register_exception_handlers(app)
-    app.middleware("http")(request_tracking_middleware)
+    app.add_middleware(RequestTrackingMiddleware)
     _register_routers(app)
 
     async def readiness_snapshot() -> dict[str, Any]:

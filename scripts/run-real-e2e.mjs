@@ -6,11 +6,12 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { randomBytes } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { resolvePython } from './run-python.mjs'
+import { finalizeRealE2eEvidence } from './real-e2e-evidence.mjs'
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runtimeParent = resolve(process.env.KST_REAL_E2E_ROOT
@@ -104,8 +105,15 @@ try {
   })
   // Only remove generated credential material; keep the database and reports
   // for inspection. Never recursively delete a path supplied by a caller.
-  if (await readFile(join(runtime, '.kst-real-e2e-owned'), 'utf8') === 'kst-real-e2e-v1') {
-    await rm(join(runtime, 'credentials.json'), { force: true })
+  const cleanupErrors = await finalizeRealE2eEvidence(runtime, {
+    closeLog: () => new Promise((resolveClose, rejectClose) => {
+      log.once('error', rejectClose)
+      log.end(resolveClose)
+    }),
+    secrets: [env.JWT_SECRET_KEY],
+  })
+  if (cleanupErrors.length) {
+    console.error(`[real-e2e] Secondary evidence/cleanup failure: ${cleanupErrors.join(', ')}; prior test outcome remains unchanged`)
+    process.exitCode = 1
   }
-  log.end()
 }
