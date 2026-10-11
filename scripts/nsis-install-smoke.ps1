@@ -218,7 +218,7 @@ function Invoke-Runtime([string]$Mode, [string]$Version) {
 
 try {
     if ($PreviousInstaller) {
-        $fixtureFiles = @{ '1.8.5' = 'nsis-upgrade-fixture.json'; '1.8.7' = 'nsis-upgrade-fixture-1.8.7.json'; '1.8.8' = 'nsis-upgrade-fixture-1.8.8.json' }
+        $fixtureFiles = @{ '1.8.5' = 'nsis-upgrade-fixture.json'; '1.8.7' = 'nsis-upgrade-fixture-1.8.7.json'; '1.8.8' = 'nsis-upgrade-fixture-1.8.8.json'; '1.8.14' = 'nsis-upgrade-fixture-1.8.14.json' }
         if (-not $fixtureFiles.ContainsKey($PreviousVersion)) { throw "Unsupported pinned NSIS baseline: $PreviousVersion" }
         $fixture = Get-Content (Join-Path $PSScriptRoot $fixtureFiles[$PreviousVersion]) -Raw | ConvertFrom-Json
         if ($fixture.version -ne $PreviousVersion -or

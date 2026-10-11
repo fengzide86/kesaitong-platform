@@ -1,3 +1,4 @@
+<!-- Archived with the superseded prototype. -->
 <template>
   <svg viewBox="0 0 100 100" role="img" aria-label="虚构收纳袋商品示意图">
     <rect x="2" y="2" width="96" height="96" rx="14" fill="#edf3f5" />

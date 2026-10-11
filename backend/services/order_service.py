@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.audit import log_admin_action
 from core.cache import cache
 from core.exceptions import ConflictException, NotFoundException, ValidationException
+from domains.access.license_state import effective_license_status
 from domains.commerce.agency_commission import AgencyCommissionService
-from models import Order, OrderStatus, Plan, PlanStatus
+from models import Agency, AgencyCustomer, AuthCode, Order, OrderStatus, Plan, PlanStatus
 from services.profit_service import ProfitService
 
 CENT = Decimal("0.01")
@@ -30,8 +31,13 @@ class OrderService:
         status_filter: str | None = None,
         plan_id: int | None = None,
         platform_key: str | None = None,
+        source: str | None = None,
     ) -> dict:
         filters = []
+        if source == "direct":
+            filters.append(Order.agency_id.is_(None))
+        elif source == "agency":
+            filters.append(Order.agency_id.is_not(None))
         if status_filter:
             if status_filter not in OrderStatus.ALL:
                 raise ValidationException("订单状态无效")
@@ -64,6 +70,19 @@ class OrderService:
         if not order:
             raise NotFoundException("订单不存在")
         return order
+
+    async def detail(self, order_id: int, platform_key: str | None = None) -> dict:
+        order = await self.get_order(order_id)
+        if platform_key and order.platform_key not in (None, platform_key):
+            raise NotFoundException("订单不属于当前平台")
+        agency = await self.db.get(Agency, order.agency_id) if order.agency_id else None
+        customer = await self.db.get(AgencyCustomer, order.customer_id) if order.customer_id else None
+        code = (await self.db.execute(select(AuthCode).where(AuthCode.order_id == order.id))).scalar_one_or_none()
+        # Only expose real foreign-key relationships, never infer identities from names.
+        return {**self.serialize(order), "agency_name": agency.name if agency else None,
+                "customer_name": customer.name if customer else None,
+                "auth_code_id": code.id if code else None,
+                "auth_code_status": effective_license_status(code) if code else None}
 
     async def create_order(self, data: dict, actor: dict, request: Request) -> Order:
         plan = await self._active_plan(data["plan_id"])
@@ -203,8 +222,11 @@ class OrderService:
         order.updated_by_staff_id = actor["staff_id"]
         reversed_record = await ProfitService(self.db).reverse_for_refund(order, reason)
         await AgencyCommissionService(self.db, actor).record_refund(order)
-        # The ledger lookup/flush can expire the server-managed ``updated_at``
-        # value on the order.  Refresh it before synchronous serialization.
+        # Production disables autoflush. A missing optional commission ledger
+        # does not flush, so refreshing now would discard the pending refund.
+        # Persist both ledger and order changes within this same transaction
+        # before loading server-managed timestamps for synchronous serialization.
+        await self.db.flush()
         await self.db.refresh(order)
         await self._audit(
             actor,
@@ -289,6 +311,8 @@ class OrderService:
         return {
             "id": order.id,
             "order_no": order.order_no,
+            "agency_id": order.agency_id,
+            "customer_id": order.customer_id,
             "plan_id": order.plan_id,
             "plan_name_snapshot": order.plan_name_snapshot,
             "plan_price_snapshot": float(order.plan_price_snapshot or 0),

@@ -46,6 +46,7 @@
               ref="usernameInput"
               id="adminUsername"
               v-model="username"
+              :disabled="isLoading"
               type="text"
               placeholder="请输入管理账号"
               autocomplete="username"
@@ -67,6 +68,7 @@
               :type="showPassword ? 'text' : 'password'"
               id="adminPassword"
               v-model="password"
+              :disabled="isLoading"
               placeholder="请输入管理员密码"
               autocomplete="current-password"
               required
@@ -100,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Auth, showToast } from '@/utils'
 import { adminLogin } from '@/utils/api'
@@ -135,6 +137,8 @@ const showPassword = ref(false)
 const isLoading = ref(false)
 const showError = ref(false)
 const errorMessage = ref('')
+let active = true
+onUnmounted(() => { active = false })
 
 function focusPasswordInput() {
   nextTick(() => {
@@ -156,6 +160,7 @@ function togglePasswordVisibility() {
 }
 
 function handleLogin() {
+  if (!active || isLoading.value) return
   showError.value = false
 
   if (!username.value.trim()) {
@@ -170,9 +175,10 @@ function handleLogin() {
   }
 
   isLoading.value = true
-
-  adminLogin(username.value.trim(), password.value)
+  const submittedUsername = username.value.trim()
+  adminLogin(submittedUsername, password.value)
     .then((response) => {
+      if (!active) return
       const res = adminLoginResponseSchema.parse(response)
       if (res.success) {
         if (!res.data?.token) throw new Error('管理员登录响应缺少访问令牌')
@@ -181,7 +187,7 @@ function handleLogin() {
           token: res.data.token,
           role: res.data.role,
           auth_code: 'backoffice',
-          user: { ...res.data, username: res.data.username || username.value.trim() },
+          user: { ...res.data, username: res.data.username || submittedUsername },
         })
         
         // 保持 Auth 工具类的兼容性
@@ -190,6 +196,7 @@ function handleLogin() {
         window.dispatchEvent(new CustomEvent('toolbox:route-track', { detail: { duration: 780 } }))
         const destination = res.data.force_password_reset ? '/admin/change-password' : res.data.role === 'agent' ? '/agent/overview' : '/admin/dashboard'
         Promise.resolve(router.push(destination)).catch(() => {
+          if (!active) return
           isLoading.value = false
           focusPasswordInput()
         })
@@ -202,6 +209,7 @@ function handleLogin() {
       }
     })
     .catch((error: unknown) => {
+      if (!active) return
       const rawMessage = error instanceof Error ? error.message : ''
       errorMessage.value = /failed to fetch|networkerror|network request failed/i.test(rawMessage)
         ? '无法连接到后端服务，请检查网络或稍后重试'

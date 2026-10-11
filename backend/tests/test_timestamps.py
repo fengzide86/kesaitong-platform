@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from core.timestamps import utc_iso, utc_now
 from models import Feedback
@@ -11,7 +11,7 @@ def test_timestamp_preserves_utc_in_browser_contract():
     assert utc_iso(datetime(2026, 9, 21, 11, 30, tzinfo=timezone(timedelta(hours=8)))) == "2026-09-21T03:30:00+00:00"
     now = utc_now()
     assert now.tzinfo is None
-    assert abs((datetime.now(timezone.utc).replace(tzinfo=None) - now).total_seconds()) < 2
+    assert abs((datetime.now(UTC).replace(tzinfo=None) - now).total_seconds()) < 2
 
 
 def test_feedback_all_dates_include_timezone():

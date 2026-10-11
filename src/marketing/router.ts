@@ -4,7 +4,8 @@ import ScenarioView from '@/views/ScenarioView.vue'
 import MarketingToolsView from '@/views/MarketingToolsView.vue'
 import MarketingTermsView from './MarketingTermsView.vue'
 import MarketingNotFound from './MarketingNotFound.vue'
-import SimulationView from './demo/v2/V2SimulationView.vue'
+import { cancelMarketingScroll, focusMarketingPage, restoreMarketingPosition, scrollToMarketingAnchor } from './navigation-scroll'
+import { updateMarketingSeo } from './seo'
 
 // This small static site loads its pages together. An already-open homepage
 // must not need a removed lazy chunk after the local preview is rebuilt.
@@ -34,33 +35,32 @@ export const marketingRoutes: RouteRecordRaw[] = [
     meta: { title: '服务条款' },
   },
   {
-    path: '/demo', name: 'MarketingSimulation', component: SimulationView,
-    meta: { title: '独立模拟体验' },
-  },
-  {
     path: '/:pathMatch(.*)*', name: 'MarketingNotFound', component: MarketingNotFound,
     meta: { title: '页面未找到' },
   },
 ]
 
 export function createMarketingRouter(history: RouterHistory = createWebHistory()) {
+  const publicOrigin = new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href || window.location.origin).origin
   const router = createRouter({
     history,
     routes: marketingRoutes,
-    scrollBehavior(to, _from, savedPosition) {
-      if (savedPosition) return savedPosition
-      if (to.hash) return { el: to.hash, top: 88 }
-      return { top: 0 }
+    async scrollBehavior(to, from, savedPosition) {
+      if (savedPosition) {
+        await restoreMarketingPosition(savedPosition)
+        return false
+      }
+      if (to.hash) {
+        await scrollToMarketingAnchor(to.hash, to.path === from.path && from.matched.length > 0)
+        return false
+      }
+      focusMarketingPage()
+      return { left: 0, top: 0, behavior: 'instant' }
     },
   })
+  router.beforeEach(() => { cancelMarketingScroll() })
   router.afterEach(to => {
-    document.title = `${String(to.meta.title || '官网')} · 课赛通 KST`
-    window.requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>('[data-route-focus]')
-      if (!target) return
-      if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1')
-      target.focus({ preventScroll: true })
-    })
+    updateMarketingSeo(document, to.path, publicOrigin)
   })
   return router
 }

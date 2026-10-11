@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { prepareSupportContext } from '@/features/ai/supportHandoff'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -46,6 +47,8 @@ const endingRun = ref(false)
 const taskStarted = ref(false)
 const taskStarting = ref(false)
 const browserRegistered = ref(false)
+const browserPartition = ref('')
+let browserPreparation = 0
 const problemDetails = ref<HTMLDetailsElement | null>(null)
 const preflightResult = ref<RunnerPreflightResult | null>(null)
 type EvidenceReadState = 'idle' | 'loading' | 'ready' | 'missing' | 'error'
@@ -418,18 +421,14 @@ async function cancelPreflight(): Promise<void> {
 }
 
 async function openSupport() {
-  localStorage.setItem('toolbox_support_context', JSON.stringify({
-    run_id: taskRunStore.runId,
-    tool_id: appStore.currentTool?.id,
+  prepareSupportContext({
     tool_name: toolName.value,
-    platform_key: appStore.currentTool?.platformKey,
-    error_code: taskRunStore.error?.code,
     problem_code: problemCode.value,
     run_status: runStatus.value,
     execution_mode: appStore.currentTool?.executionMode,
     result_requires_review: needsPlatformReview.value,
     record_pending: recordPending.value,
-  }))
+  }, appStore.currentTool?.platformKey || 'amazon')
   await closeWorkspace()
   if (!appStore.toolVisible) router.push('/user/ai-chat')
 }
@@ -481,6 +480,20 @@ async function openSupport() {
    }
  }
 
+async function prepareWorkspaceBrowser() {
+  const request = ++browserPreparation
+  try {
+    const automation = window.electronAPI?.automation
+    if (!automation?.prepareBrowser) throw new Error('当前桌面版本不支持账号隔离，请更新后重新打开工具')
+    const result = await automation.prepareBrowser(appStore.currentTool?.platformKey === 'aliexpress' ? 'aliexpress' : 'amazon')
+    if (request === browserPreparation) browserPartition.value = result.partition
+  } catch (error) {
+    if (request !== browserPreparation) return
+    browserLoading.value = false
+    showToast(errorMessage(error, '独立浏览器准备失败，请重新打开工具'), 'error')
+  }
+}
+
 onMounted(() => {
   window.addEventListener('toolbox:recovery-updated', refreshRecoveryStatus)
   window.addEventListener('toolbox:auth-cleared', closeEvidence)
@@ -488,6 +501,7 @@ onMounted(() => {
   // Desktop runs wait for the WebView's dom-ready event so preflight uses the
   // same embedded host instead of opening a second Playwright window.
   if (!isDesktop.value) void startDemoTask()
+  else if (!isDemo.value) void prepareWorkspaceBrowser()
 })
 
 watch(runStatus, status => {
@@ -498,6 +512,7 @@ watch(runStatus, status => {
 }, { immediate: true })
 
 onUnmounted(() => {
+  browserPreparation += 1
   recoveryRequest += 1
   window.removeEventListener('toolbox:recovery-updated', refreshRecoveryStatus)
   closeEvidence()
@@ -508,7 +523,7 @@ onUnmounted(() => {
   taskRunStore.reset()
 })
   return {
-    currentRunId, recoveryRetryAllowed,
+    currentRunId, recoveryRetryAllowed, browserPartition,
     browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
     preflightResult, preflightMessage,
     platformName, platformShortName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,

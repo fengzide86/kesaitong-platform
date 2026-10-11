@@ -1,0 +1,64 @@
+/* Integration-only overrides. The outer feature frame establishes the fixed
+   containing block; its close header remains outside this scroll viewport. */
+.v2-experience.is-embedded {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: auto;
+  isolation: isolate;
+  padding-bottom: 24px;
+}
+.v2-experience.is-embedded.has-demo-controls { padding-bottom: 132px; }
+.v2-experience.is-embedded .v2-seller-content,
+.v2-experience.is-embedded .v2-warehouse-content { min-width: 0; }
+.v2-experience.is-embedded .v2-table-scroll { max-width: 100%; overscroll-behavior-inline: contain; }
+.v2-experience.is-embedded .kst-demo-panel {
+  right: 16px;
+  top: 16px;
+  bottom: auto;
+  height: auto;
+  max-width: calc(100% - 32px);
+  max-height: min(560px, calc(100% - 32px));
+}
+.v2-experience.is-embedded .kst-demo-panel .kst-demo-body { min-height: 0; max-height: none; flex: 1 1 auto; overflow-anchor: none; }
+.v2-experience.is-embedded .kst-demo-panel .kst-demo-header,
+.v2-experience.is-embedded .kst-demo-panel .kst-demo-footer { flex-shrink: 0; }
+.v2-experience.is-embedded .v2-run-dock.kst-demo-dock {
+  right: 16px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.v2-experience.is-embedded .v2-modal-backdrop { padding: 16px; overflow: hidden; }
+.v2-experience.is-embedded .v2-modal-backdrop > [role="dialog"] {
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.v2-experience.is-embedded .kst-freight-panel {
+  top: 16px;
+  right: 16px;
+  bottom: 150px;
+  width: min(780px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+}
+.v2-experience.is-embedded .v2-demo-entry-links .kst-home-link { min-height: 36px; }
+@media (max-width: 700px) {
+  .v2-experience.is-embedded { scrollbar-gutter: auto; }
+  .v2-experience.is-embedded .kst-demo-panel { top: auto; right: 0; left: 0; bottom: 0; width: 100%; height: 370px; max-width: 100%; max-height: min(62%, calc(100% - 80px)); }
+  .v2-experience.is-embedded .v2-run-dock.kst-demo-dock { right: 10px; max-width: calc(100% - 20px); }
+  .v2-experience.is-embedded .v2-modal-backdrop { padding: 10px; }
+  .v2-experience.is-embedded .kst-freight-panel { top: 10px; right: 10px; bottom: 160px; width: calc(100% - 20px); max-width: calc(100% - 20px); max-height: calc(100% - 20px); }
+  .v2-experience.is-embedded .v2-demo-entry-links { flex-wrap: wrap; }
+}
+@media (max-height: 560px) {
+  .v2-experience.is-embedded .kst-freight-panel { bottom: 12px; }
+}

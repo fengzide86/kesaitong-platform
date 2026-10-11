@@ -193,6 +193,18 @@ async def test_terminal_batch_cannot_gain_a_late_new_item(db_session: AsyncSessi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("stale_status", ["pending", "running", "waiting_user", "failed", "cancelled"])
+async def test_completed_item_is_monotonic_while_other_rows_are_running(db_session: AsyncSession, live_batch, stale_status: str) -> None:
+    batch_id, context = live_batch
+    original = await service.upsert_batch_item(db_session, batch_id, "done", BatchItemUpdate(account_label_masked="客户", status="completed"), context)
+    stale = BatchItemUpdate(account_label_masked="迟到覆盖", status=stale_status, intervention_type="captcha" if stale_status == "waiting_user" else None)
+    assert await service.upsert_batch_item(db_session, batch_id, "done", stale, context) == original
+    batch = await service.get_batch(db_session, batch_id, context)
+    assert batch["status"] == "running"
+    assert (batch["completed_count"], batch["pending_count"], batch["failed_count"]) == (1, 1, 0)
+
+
+@pytest.mark.asyncio
 async def test_failed_item_can_restart_while_batch_is_active(db_session: AsyncSession, live_batch) -> None:
     batch_id, context = live_batch
     for state in ("running", "failed"):

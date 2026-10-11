@@ -51,7 +51,7 @@ const taskIdsByTopic: Record<string, string> = {
 }
 const taskId = computed(() => taskIdsByTopic[current.value.id] ?? current.value.id)
 const currentTask = computed(() => marketingTasks.find(task => task.id === taskId.value))
-const isPlanned = computed(() => !currentTask.value || currentTask.value.status === 'in-development')
+const isPlanned = computed(() => !currentTask.value || ['in-development', 'controlled-validation'].includes(currentTask.value.status))
 const availabilityLabel = computed(() => statusLabels[currentTask.value?.status ?? 'in-development'])
 // Keep the first mobile comparison readable without opening the full workflow.
 const compactCopy: Record<string, { before: string; after: string }> = {
@@ -113,9 +113,9 @@ const rows = (items: string[]) => items.map((item) => { const [label, value, det
               </ol>
             </article>
             <article class="comparison-panel after-panel" :class="{ 'planned-panel': isPlanned }">
-              <div class="panel-label"><span>{{ isPlanned ? '规划的辅助方式' : '课赛通辅助后' }}</span><span class="availability-label">{{ availabilityLabel }}</span></div>
+              <div class="panel-label"><span>{{ isPlanned ? '后续辅助方式' : '课赛通辅助后' }}</span><span class="availability-label">{{ availabilityLabel }}</span></div>
               <h4>{{ current.afterTitle }}</h4>
-              <p v-if="isPlanned" class="planning-note">这一项仍在开发，以下是计划辅助的步骤。</p>
+              <p v-if="isPlanned" class="planning-note">这一项暂未开放，以下为辅助方式示意。</p>
               <ol class="action-steps">
                 <li v-for="(row, index) in rows(current.after)" :key="`${index}-${row.label}`"><span class="step-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><div><h5>{{ row.label }}</h5><p>{{ row.description }}</p></div></li>
               </ol>
@@ -128,7 +128,7 @@ const rows = (items: string[]) => items.map((item) => { const [label, value, det
                 <p>{{ compact.before }}</p>
               </article>
               <article class="compact-panel after-panel" :class="{ 'planned-panel': isPlanned }">
-                <div class="compact-label"><h4>{{ isPlanned ? '规划辅助' : '课赛通辅助' }}</h4><span class="availability-label">{{ availabilityLabel }}</span></div>
+                <div class="compact-label"><h4>{{ isPlanned ? '后续辅助' : '课赛通辅助' }}</h4><span class="availability-label">{{ availabilityLabel }}</span></div>
                 <p>{{ compact.after }}</p>
               </article>
             </div>
@@ -145,9 +145,9 @@ const rows = (items: string[]) => items.map((item) => { const [label, value, det
                   </ol>
                 </article>
                 <article class="comparison-panel after-panel" :class="{ 'planned-panel': isPlanned }">
-                  <div class="panel-label"><span>{{ isPlanned ? '规划的辅助方式' : '课赛通辅助后' }}</span><span class="availability-label">{{ availabilityLabel }}</span></div>
+                  <div class="panel-label"><span>{{ isPlanned ? '后续辅助方式' : '课赛通辅助后' }}</span><span class="availability-label">{{ availabilityLabel }}</span></div>
                   <h4>{{ current.afterTitle }}</h4>
-                  <p v-if="isPlanned" class="planning-note">这一项仍在开发，以下是计划辅助的步骤。</p>
+                  <p v-if="isPlanned" class="planning-note">这一项暂未开放，以下为辅助方式示意。</p>
                   <ol class="action-steps">
                     <li v-for="(row, index) in rows(current.after)" :key="`${index}-${row.label}`"><span class="step-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span><div><h5>{{ row.label }}</h5><p>{{ row.description }}</p></div></li>
                   </ol>

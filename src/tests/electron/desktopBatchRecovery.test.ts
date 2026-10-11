@@ -32,7 +32,7 @@ function setup() {
       if (name === './batch-coordinator.cjs') {
         const { BatchCoordinator } = require(name)
         return { BatchCoordinator: class extends BatchCoordinator {
-          constructor(options: Record<string, unknown>) { super({ ...options, runnerFactory: (callbacks: { onEvent(event: Record<string, unknown>): void }) => { runnerEvents = callbacks; return { start: vi.fn().mockResolvedValue({ runId: 'fixture' }), stop: vi.fn().mockResolvedValue(undefined) } } }) }
+          constructor(options: Record<string, unknown>) { super({ ...options, reportOutbox: { reserve: async () => 'fixture-reservation', releaseReservation: async () => {} }, runnerFactory: (callbacks: { onEvent(event: Record<string, unknown>): void }) => { runnerEvents = callbacks; return { start: vi.fn().mockResolvedValue({ runId: 'fixture' }), stop: vi.fn().mockResolvedValue(undefined) } } }) }
         } }
       }
       if (name === './embedded-browser-host-manager.cjs') return { EmbeddedBrowserHostManager: class {

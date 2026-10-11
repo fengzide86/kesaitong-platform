@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     validate: async (request: FileInputValidationRequest): Promise<FileInputValidationResult> => fileInputValidationResultSchema.parse(await invokeDesktop('files:validate-input', request)),
     clear: (): Promise<void> => invokeDesktop('files:clear-input'),
   }, automation: {
+    prepareBrowser: (platform: 'amazon' | 'aliexpress'): Promise<{ partition: string }> => invokeDesktop('automation:prepare-browser', platform),
     start: (tool: AutomationTool): Promise<AutomationStartResult> => invokeDesktop('automation:start', tool),
     preflight: (tool: AutomationTool): Promise<AutomationPreflightResult> => invokeDesktop('automation:preflight', tool),
     pause: (): Promise<AutomationStatusResult> => invokeDesktop('automation:pause'),

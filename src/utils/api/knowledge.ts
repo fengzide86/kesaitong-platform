@@ -1,6 +1,6 @@
 import { api, type ApiQueryParams } from './index'
 import { normalizePaginatedResponse } from '@/shared/api/pagination'
-import type { components } from '@/shared/api/openapi.generated'
+import type { components, paths } from '@/shared/api/openapi.generated'
 
 type EntityId = string | number
 type Schemas = components['schemas']
@@ -25,8 +25,8 @@ export const deleteKnowledge = (id: EntityId): Promise<Schemas['KnowledgeDeleteR
 export const batchImportKnowledge = (
   items: Schemas['KnowledgeBatchImportItem'][],
 ): Promise<Schemas['KnowledgeBatchImportResponse']> => api.post('/api/knowledge/batch-import', items)
-export const syncKnowledgeVector = (): Promise<Schemas['FeatureDisabledResponse-Output']> =>
+export const syncKnowledgeVector = (): Promise<paths['/api/knowledge/sync-vector']['post']['responses']['200']> =>
   api.post('/api/knowledge/sync-vector')
 export const testKnowledgeRetrieval = (
   data: Schemas['RetrievalTestRequest'],
-): Promise<Schemas['FeatureDisabledResponse-Output']> => api.post('/api/knowledge/retrieval-test', data)
+): Promise<paths['/api/knowledge/retrieval-test']['post']['responses']['200']> => api.post('/api/knowledge/retrieval-test', data)

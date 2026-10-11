@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function probePython(candidate, environment) {
-  const options = { env: environment, encoding: 'utf8', windowsHide: true, timeout: 10_000 }
+  // The executable path may contain Chinese characters. Python's inherited
+  // Windows codepage must not disagree with Node's UTF-8 stdout decoding.
+  const options = { env: { ...environment, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, encoding: 'utf8', windowsHide: true, timeout: 10_000 }
   const version = spawnSync(candidate, ['--version'], options)
   if (version.error || version.status !== 0 || !/^Python 3\.\d+/.test(`${version.stdout || ''}${version.stderr || ''}`.trim())) return null
   const executable = spawnSync(candidate, ['-c', 'import sys; print(sys.executable)'], options)

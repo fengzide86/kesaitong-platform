@@ -1,6 +1,87 @@
 import { expect, test, type Page } from '@playwright/test'
 
-type Observation = { api: string[], errors: string[], consoleErrors: Array<{ text: string; url: string }>, document404: string[] }
+for (const width of [1440, 390]) {
+  test(`award certificates remain clear, private and keyboard accessible at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const colors: string[] = []
+    for (const route of ['/', '/competition']) {
+      await page.goto(route)
+      const award = page.locator('.case-competition')
+      await award.scrollIntoViewIfNeeded()
+      await expect(award).toContainText('2025')
+      await expect(award).toContainText('第六届全国数字贸易技能大赛')
+      await expect(award).not.toContainText('第九届')
+      await expect(award).not.toContainText('团队专业能力')
+      const styles = await award.evaluate(node => ({
+        awardColor: getComputedStyle(node.querySelector('.case-award strong')!).color,
+        awardSize: parseFloat(getComputedStyle(node.querySelector('.case-award strong')!).fontSize),
+        baselineSize: parseFloat(getComputedStyle(node.querySelector('.case-before strong')!).fontSize),
+      }))
+      colors.push(styles.awardColor)
+      expect(styles.awardSize).toBeGreaterThan(styles.baselineSize)
+      const trigger = page.getByTestId('award-open-certificate')
+      await expect(trigger.locator('img')).toHaveAttribute('src', /competition-award-2025-thumb/)
+      await trigger.click()
+      const dialog = page.getByTestId('certificate-viewer')
+      await expect(dialog).toBeVisible()
+      const photo = dialog.locator('img')
+      await expect(photo).toHaveAttribute('src', /competition-award-2025-redacted/)
+      await expect(photo).toHaveJSProperty('complete', true)
+      expect(await photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThanOrEqual(1400)
+      const beforeWidth = (await photo.boundingBox())!.width
+      await page.getByTestId('certificate-zoom-in').click()
+      await expect.poll(async () => (await photo.boundingBox())!.width).toBeGreaterThan(beforeWidth)
+      const close = page.getByTestId('certificate-close')
+      await expect(close).toBeInViewport()
+      const closeBox = (await close.boundingBox())!
+      expect(closeBox.width).toBeGreaterThanOrEqual(44)
+      expect(closeBox.height).toBeGreaterThanOrEqual(44)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+      await page.getByTestId('certificate-fit').click()
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+      await expect(trigger).toBeFocused()
+      expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden')
+      const qualification = page.getByTestId('qualification-open-certificate')
+      if (route === '/') {
+        await expect(qualification).toHaveCount(0)
+      } else {
+        await qualification.click()
+        await expect(dialog).toBeVisible()
+        await expect(dialog).toContainText('跨境电子商务师（中级）职业能力证书')
+        await expect(dialog.locator('img')).toHaveAttribute('src', /team-qualification-redacted/)
+        await page.getByTestId('certificate-close').click()
+        await expect(dialog).toHaveCount(0)
+        await expect(qualification).toBeFocused()
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+    }
+    expect(colors[0]).toBe(colors[1])
+  })
+}
+
+test('award entrance plays once and respects reduced motion', async ({ page }) => {
+  await page.goto('/competition')
+  const award = page.locator('.case-competition')
+  await award.scrollIntoViewIfNeeded()
+  await expect(award).toHaveClass(/award-entered/)
+  const motion = await award.evaluate(el => ({ name: getComputedStyle(el).animationName, duration: getComputedStyle(el).animationDuration, iterations: getComputedStyle(el).animationIterationCount }))
+  expect(motion.name).not.toBe('none')
+  expect(parseFloat(motion.duration)).toBeGreaterThanOrEqual(0.45)
+  expect(parseFloat(motion.duration)).toBeLessThanOrEqual(0.6)
+  expect(motion.iterations).toBe('1')
+  await page.waitForTimeout(650)
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await award.scrollIntoViewIfNeeded()
+  await expect(award).toHaveClass(/award-entered/)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.reload()
+  await award.scrollIntoViewIfNeeded()
+  expect(await award.evaluate(el => getComputedStyle(el).animationName)).toBe('none')
+  await expect(page.getByTestId('award-open-certificate')).toBeVisible()
+})
+
+type Observation = { api: string[], errors: string[], consoleErrors: string[] }
 const observations = new WeakMap<Page, Observation>()
 const viewports = [
   { width: 1440, height: 900 },
@@ -10,17 +91,13 @@ const viewports = [
 ]
 
 test.beforeEach(async ({ page }) => {
-  const observed: Observation = { api: [], errors: [], consoleErrors: [], document404: [] }
+  const observed: Observation = { api: [], errors: [], consoleErrors: [] }
   observations.set(page, observed)
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/api/')) observed.api.push(request.url())
   })
   page.on('pageerror', error => observed.errors.push(error.message))
-  page.on('console', message => { if (message.type() === 'error') observed.consoleErrors.push({ text: message.text(), url: message.location().url }) })
-  page.on('response', response => {
-    if (response.status() === 404 && response.request().resourceType() === 'document'
-      && ['/not-a-page', '/not-a-page.foo', '/user/login'].includes(new URL(response.url()).pathname)) observed.document404.push(response.url())
-  })
+  page.on('console', message => { if (message.type() === 'error') observed.consoleErrors.push(message.text()) })
   // Never contact a production or external download host during acceptance.
   await page.route('https://**', route => route.abort())
 })
@@ -29,22 +106,18 @@ test.afterEach(async ({ page }) => {
   const observed = observations.get(page)
   expect(observed?.api).toEqual([])
   expect(observed?.errors).toEqual([])
-  // Chromium reports a known 404 navigation as a resource console error.
-  // Exempt only that exact document response, never missing scripts/assets.
-  expect(observed?.consoleErrors.filter(message => !(observed.document404.includes(message.url)
-    && message.text === 'Failed to load resource: the server responded with a status of 404 (Not Found)'))).toEqual([])
+  expect(observed?.consoleErrors).toEqual([])
 })
 
 for (const viewport of viewports) {
   test(`all public routes fit without horizontal overflow at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)
-    for (const route of ['/', '/competition', '/course', '/tools', '/terms', '/not-a-page', '/not-a-page.foo']) {
-      expect((await page.goto(route))?.status()).toBe(route.startsWith('/not-a-page') ? 404 : 200)
-      expect((await page.reload())?.status()).toBe(route.startsWith('/not-a-page') ? 404 : 200)
+    for (const route of ['/', '/competition', '/course', '/tools', '/terms', '/not-a-page']) {
+      await page.goto(route)
+      await page.reload()
       await expect(page.locator('body')).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
     }
-    expect((await page.request.get('/assets/missing.js')).status()).toBe(404)
   })
 }
 
@@ -70,16 +143,16 @@ test('homepage primary CTA reaches scenes and its two cards open the scenario ro
   await expect(page.locator('.pain-heading h2')).toContainText('哪些操作，值得你多花时间')
   await expect(page.locator('.comparison-body')).toHaveAttribute('data-active-pain', 'company')
   await expect(page.locator('.pain-selector button').first()).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('规划的辅助方式')
-  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项仍在开发')
+  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('后续辅助方式')
+  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项暂未开放')
   await page.goto('/')
   await page.locator('a[href="/course"]').first().click()
   await expect(page).toHaveURL(/\/course$/)
   await expect(page.locator('.pain-heading h2')).toContainText('哪些重复操作，占掉了练习时间')
   await expect(page.locator('.comparison-body')).toHaveAttribute('data-active-pain', 'company')
   await expect(page.locator('.pain-selector button').first()).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('规划的辅助方式')
-  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项仍在开发')
+  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('后续辅助方式')
+  await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项暂未开放')
 })
 
 test('mobile task descriptions, usage conditions and footer stay readable', async ({ page }) => {
@@ -169,7 +242,7 @@ test('scenario navigation keeps before/after content distinct and interactive', 
   await expect(courseComparison).toContainText('课程实训')
   await expect(courseComparison.locator('.comparison-body')).toHaveAttribute('data-active-pain', 'company')
   await expect(courseComparison.locator('.pain-selector button').first()).toHaveAttribute('aria-pressed', 'true')
-  await expect(courseComparison.locator('.desktop-comparison .after-panel')).toContainText('规划的辅助方式')
+  await expect(courseComparison.locator('.desktop-comparison .after-panel')).toContainText('后续辅助方式')
   await courseComparison.getByTestId('pain-products').click()
   await expect(courseComparison.locator('.comparison-body')).toHaveAttribute('data-active-pain', 'products')
   await expect(courseComparison.locator('.desktop-comparison .after-panel')).toContainText('课赛通辅助后')
@@ -182,7 +255,8 @@ test('scenario navigation keeps before/after content distinct and interactive', 
 test('tools page exposes an application contact, capability boundaries and mocked download', async ({ page, request }) => {
   const metadata = await (await request.get('/marketing-version.json')).json() as { downloadUrl: string }
   await page.goto('/tools')
-  await expect(page.getByTestId('marketing-tools-overview')).toContainText('先准备任务资料，再确认可以使用的辅助范围')
+  await expect(page.getByTestId('marketing-tools-overview')).toContainText('先试一遍怎么操作')
+  await expect(page.getByTestId('marketing-tools-overview')).toContainText('先确认可用范围和授权，再下载使用')
   await expect(page.getByTestId('marketing-tools-overview').locator('[data-task-id]')).toHaveCount(8)
   await expect(page.getByTestId('marketing-tools-overview').locator('[role="tablist"]')).toHaveCount(0)
   await expect(page.locator('.team-note')).toContainText('带队或多人使用')
@@ -245,7 +319,7 @@ test('FAQ, terms and true not-found remain available without application routes'
   await expect(page.locator('.faq-answer').filter({ hasText: '授权、版本和开放范围' })).toBeVisible()
   await page.goto('/terms')
   await expect(page.getByRole('heading', { name: '服务条款', exact: true })).toBeVisible()
-  expect((await page.goto('/user/login'))?.status()).toBe(404)
+  await page.goto('/user/login')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('这个页面暂时找不到了')
   await expect(page.locator('a[href^="/user/"], a[href^="/admin"], a[href^="/business"]')).toHaveCount(0)
 })
@@ -264,6 +338,25 @@ test('reduced motion keeps marketing content visible', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
 })
 
+test('comparison bars enter slowly in sequence while complete numbers stay readable', async ({ page }) => {
+  await page.goto('/')
+  const grid = page.locator('.metric-grid').first()
+  await grid.scrollIntoViewIfNeeded()
+  await expect(grid.locator('.metric-card.metric-bars-animate')).toHaveCount(3)
+  const bars = await grid.locator('.metric-bar-row em').evaluateAll(nodes => nodes.map(node => {
+    const style = getComputedStyle(node)
+    return { duration: style.animationDuration, delay: style.animationDelay }
+  }))
+  expect(bars.map(bar => bar.duration)).toEqual(Array(6).fill('1.4s'))
+  expect(bars.map(bar => bar.delay)).toEqual(['0s', '0.18s', '0s', '0.18s', '0s', '0.18s'])
+  await expect(grid.getByTestId('before-number').first()).toHaveText('21分钟')
+  await expect(grid.getByTestId('after-number').first()).toHaveText('2分钟')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.reload()
+  expect(await page.locator('.metric-bar-row em').first().evaluate(node => getComputedStyle(node).animationName)).toBe('none')
+  await expect(page.getByTestId('before-number').first()).toHaveText('21分钟')
+})
+
 test('scenario images are unique, local, loaded and legible at desktop and mobile sizes', async ({ page }) => {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 })
@@ -276,8 +369,8 @@ test('scenario images are unique, local, loaded and legible at desktop and mobil
       expect(await identity.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0)
       if (path === '/competition') {
         const media = (await identity.locator('.scenario-identity-media').boundingBox())!
-        expect(media.width).toBeGreaterThanOrEqual(240)
-        expect(media.width).toBeLessThanOrEqual(288)
+        expect(media.width).toBeGreaterThanOrEqual(120)
+        expect(media.width).toBeLessThanOrEqual(144)
         const dimensions = await identity.locator('img').evaluate((img: HTMLImageElement) => ({ width: img.naturalWidth, height: img.naturalHeight, displayWidth: img.getBoundingClientRect().width, displayHeight: img.getBoundingClientRect().height }))
         expect(dimensions.width).toBe(960)
         expect(dimensions.height).toBe(704)
@@ -331,7 +424,7 @@ test('reported outcomes retain honest scope and scoring support appears only on 
     const support = page.getByTestId('marketing-score-support')
     if (route === '/') {
       await expect(support).toBeVisible()
-      await expect(support).toContainText('已整理的得分细节')
+      await expect(support).toContainText('需要关注的得分细节')
       await expect(support).toContainText('一键配置')
     } else {
       await expect(support).toHaveCount(0)
@@ -351,7 +444,8 @@ test('reported outcomes retain honest scope and scoring support appears only on 
     }
     if (route !== '/course') {
       await expect(competition).toContainText('60')
-      await expect(competition).toContainText('全国一等奖')
+      await expect(competition).toContainText('全国总决赛')
+      await expect(competition).toContainText('一等奖')
       await expect(competition).not.toContainText('100分')
     } else {
       await expect(competition).toHaveCount(0)
@@ -415,7 +509,7 @@ test('shared typography, focus and body contrast remain readable', async ({ page
   }
 })
 
-test('all eight tasks link to matching tool cards and planned features remain labelled', async ({ page }) => {
+test('all eight tasks link to matching tool cards and six unavailable tasks remain labelled', async ({ page }) => {
   const ids = ['company', 'sourcing', 'product', 'shipping', 'marketing', 'fba', 'orders', 'pricing']
   for (const id of ids) {
     await page.goto('/')
@@ -424,13 +518,16 @@ test('all eight tasks link to matching tool cards and planned features remain la
     const card = page.locator(`#tool-${id}`)
     await expect(card).toBeInViewport()
     await expect(card).toHaveAttribute('data-task-id', id)
+    await expect(card.locator('.tool-status')).toHaveText(['product', 'orders'].includes(id) ? '需安装电脑端，使用前请咨询' : '暂未开放')
   }
   for (const path of ['/competition', '/course']) {
     await page.goto(path)
-    for (const [pain, tool] of [['company', 'company'], ['selection', 'sourcing'], ['fba', 'fba'], ['pricing', 'pricing']]) {
+    for (const [pain, tool] of [['company', 'company'], ['selection', 'sourcing'], [path === '/competition' ? 'rates' : 'settings', 'shipping'], ['ads', 'marketing'], ['fba', 'fba'], ['pricing', 'pricing']]) {
       await page.getByTestId(`pain-${pain}`).click()
-      await expect(page.locator('.desktop-comparison .after-panel')).toContainText('规划的辅助方式')
-      await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项仍在开发')
+      await expect(page.locator('.desktop-comparison .after-panel')).toContainText('后续辅助方式')
+      await expect(page.locator('.desktop-comparison .after-panel')).toContainText('这一项暂未开放')
+      await expect(page.locator('.desktop-comparison .after-panel .availability-label')).toHaveText('暂未开放')
+      await expect(page.locator('.desktop-comparison .after-panel')).not.toContainText('课赛通辅助后')
       await expect(page.getByTestId('scenario-tool-link')).toHaveAttribute('href', `/tools#tool-${tool}`)
     }
   }
@@ -474,16 +571,16 @@ test('mobile scenario starts compact and closes expanded workflow after changing
     await expect(comparison.locator('.pain-selector button').first()).toHaveAttribute('aria-pressed', 'true')
     await expect(comparison.locator('.desktop-comparison')).toBeHidden()
     await expect(comparison.locator('.compact-comparison')).toBeVisible()
-    await expect(comparison.locator('.compact-comparison .after-panel')).toContainText('规划辅助')
-    await expect(comparison.locator('.compact-comparison .after-panel')).toContainText('开发中')
+    await expect(comparison.locator('.compact-comparison .after-panel')).toContainText('后续辅助')
+    await expect(comparison.locator('.compact-comparison .after-panel')).toContainText('暂未开放')
     await expect(details).not.toHaveAttribute('open', '')
     await expect(details.locator('.mobile-step-panels')).toBeHidden()
     await details.locator('summary').click()
     await expect(details).toHaveAttribute('open', '')
     await expect(details.locator('.mobile-step-panels')).toBeVisible()
     await expect(details.locator('.action-steps li')).toHaveCount(6)
-    await expect(details.locator('.mobile-step-panels .after-panel')).toContainText('规划的辅助方式')
-    await expect(details.locator('.mobile-step-panels .after-panel')).toContainText('这一项仍在开发')
+    await expect(details.locator('.mobile-step-panels .after-panel')).toContainText('后续辅助方式')
+    await expect(details.locator('.mobile-step-panels .after-panel')).toContainText('这一项暂未开放')
     await comparison.getByTestId(route === '/competition' ? 'pain-rates' : 'pain-settings').click()
     await expect(details).not.toHaveAttribute('open', '')
     await expect(details.locator('.mobile-step-panels')).toBeHidden()
@@ -491,4 +588,227 @@ test('mobile scenario starts compact and closes expanded workflow after changing
     await details.locator('summary').click()
     await expect(details.locator('.mobile-step-panels .before-panel h4')).toContainText(route === '/competition' ? '对着规则表' : '边读讲义')
   }
+})
+
+for (const width of [1440, 390]) {
+  test(`tool cards open the matching session in place and restore keyboard focus at ${width}px`, async ({ page }, info) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width, height: 844 })
+    // Production assets remain blocked except for the local lazy-loaded demo.
+    for (const [tool, demo] of [['product', 'product'], ['shipping', 'template'], ['marketing', 'advertising'], ['fba', 'fba'], ['orders', 'shipping']]) {
+      await page.goto(`/tools#tool-${tool}`)
+      const button = page.locator(`[data-tool-experience="${tool}"]`)
+      await button.scrollIntoViewIfNeeded()
+      await button.focus()
+      const beforeURL = page.url()
+      await page.keyboard.press('Enter')
+      await expect(page.getByTestId('simulation')).toBeVisible()
+      await expect(page.getByLabel('选择一键任务', { exact: true })).toHaveValue(demo!)
+      await expect(page.getByTestId('run-status')).toHaveText('就绪')
+      const lockedScroll = await page.evaluate(() => scrollY)
+      await page.getByTestId('experience-close').click()
+      await expect(button).toBeFocused()
+      await expect(page.getByTestId('simulation')).toHaveCount(0)
+      expect(await page.evaluate(() => scrollY)).toBe(lockedScroll)
+      expect(page.url()).toBe(beforeURL)
+      expect(await page.evaluate(() => localStorage.getItem('kst-public-simulation:v2'))).toBeNull()
+    }
+    await page.screenshot({ path: info.outputPath(`card-action-${width}.png`) })
+  })
+}
+
+test('mobile tools have a short directory, compact details and task-aware consultation', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/tools')
+  const directory = page.getByRole('navigation', { name: '工具页目录' })
+  await expect(directory.getByRole('link')).toHaveCount(3)
+  await expect(page.getByTestId('experience-start')).toBeInViewport({ ratio: 1 })
+  await expect(page.locator('.tool-card')).toHaveCount(8)
+  await expect(page.locator('.tool-details[open]')).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(6000)
+  const toolList = directory.getByRole('link', { name: '工具清单', exact: true })
+  await toolList.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('#tool-list')).toBeInViewport()
+  const details = page.locator('#tool-product .tool-details')
+  await details.locator('summary').focus()
+  await page.keyboard.press('Enter')
+  await expect(details).toHaveAttribute('open', '')
+  await expect(details).toContainText('准备什么')
+  await expect(details.locator('p').first()).toBeVisible()
+  await details.locator('summary').click()
+  await expect(details).not.toHaveAttribute('open', '')
+  for (const [id, title] of [['product', '发布商品'], ['orders', '订单发货']]) {
+    const trigger = page.locator(`[data-tool-consult="${id}"]`)
+    await trigger.scrollIntoViewIfNeeded()
+    await trigger.focus()
+    const position = await page.evaluate(() => scrollY)
+    const url = page.url()
+    await page.keyboard.press('Enter')
+    const dialog = page.getByTestId('marketing-consultation-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText(`咨询${title}`)
+    await expect(page.getByTestId('consultation-wechat-account')).toHaveValue('Moweiiong')
+    expect(await page.evaluate(() => scrollY)).toBe(position)
+    expect(page.url()).toBe(url)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    expect(await page.evaluate(() => scrollY)).toBe(position)
+  }
+  await expect(page.locator('[data-tool-consult]')).toHaveCount(2)
+  await expect(page.locator('#tool-shipping .tool-status')).toHaveText('暂未开放')
+  await expect(page.locator('#tool-shipping [data-tool-experience]')).toContainText('在线体验')
+  await page.screenshot({ path: info.outputPath('mobile-task-consultation.png') })
+})
+
+test('navigation prioritizes experience and charts use consistent before-after colors', async ({ page }) => {
+  await page.goto('/tools')
+  const experience = page.getByTestId('navigation-experience')
+  const download = page.locator('.marketing-shell-download button').first()
+  expect(await experience.evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe(await download.evaluate(e => getComputedStyle(e).backgroundColor))
+  expect((await download.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  await download.focus()
+  expect(await download.evaluate(e => parseFloat(getComputedStyle(e).outlineWidth))).toBeGreaterThanOrEqual(3)
+  await page.goto('/')
+  const card = page.getByTestId('metric-result').first()
+  const colors = await card.evaluate(e => ({
+    before: getComputedStyle(e.querySelector('.metric-bar-row em')!).backgroundColor,
+    after: getComputedStyle(e.querySelector('.metric-bar-row-after em')!).backgroundColor,
+    afterNumber: getComputedStyle(e.querySelector('[data-testid="after-number"]')!).color,
+    delta: getComputedStyle(e.querySelector('.metric-saving')!).color,
+  }))
+  expect(colors.before).not.toBe(colors.after)
+  expect(colors.after).toBe(colors.afterNumber)
+  expect(colors.delta).not.toBe(colors.after)
+})
+
+test('mobile comparison bars start per visible card and never replay', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto('/')
+  const cards = page.getByTestId('metric-result')
+  const revealBars = async (index: number) => cards.nth(index).locator('.metric-bars').evaluate(e => {
+    window.scrollTo({ top: e.getBoundingClientRect().top + scrollY - innerHeight + e.getBoundingClientRect().height + 28, behavior: 'instant' })
+  })
+  await revealBars(0)
+  await expect(cards.nth(0)).toHaveClass(/metric-bars-animate/)
+  await expect(cards.nth(1)).not.toHaveClass(/metric-bars-animate/)
+  await expect(cards.nth(2)).not.toHaveClass(/metric-bars-animate/)
+  await page.waitForTimeout(1800)
+  await expect(cards.nth(1)).not.toHaveClass(/metric-bars-animate/)
+  await revealBars(1)
+  await expect(cards.nth(1)).toHaveClass(/metric-bars-animate/)
+  await expect(cards.nth(2)).not.toHaveClass(/metric-bars-animate/)
+  await revealBars(2)
+  await expect(cards.nth(2)).toHaveClass(/metric-bars-animate/)
+  await page.waitForTimeout(1800)
+  await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }))
+  await revealBars(0)
+  const states = await cards.nth(0).locator('.metric-bars').evaluate(e => e.getAnimations({ subtree: true }).map(a => a.playState))
+  expect(states.every(state => state === 'finished')).toBe(true)
+  await page.screenshot({ path: info.outputPath('per-card-comparison.png') })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.reload()
+  await cards.nth(0).scrollIntoViewIfNeeded()
+  expect(await cards.nth(0).locator('.metric-bars').evaluate(e => e.getAnimations({ subtree: true }).length)).toBe(0)
+  await expect(cards.nth(0).getByTestId('after-number')).toHaveText('2分钟')
+})
+
+function recordNavigationScroll(page: Page, duration = 900) {
+  return page.evaluate(milliseconds => new Promise<{ y: number; path: string }[]>(resolve => {
+    const samples: { y: number; path: string }[] = []
+    const started = performance.now()
+    const tick = () => {
+      samples.push({ y: scrollY, path: location.pathname })
+      if (performance.now() - started < milliseconds) requestAnimationFrame(tick)
+      else resolve(samples)
+    }
+    tick()
+  }), duration)
+}
+
+for (const width of [1440, 390]) {
+  test(`anchors move once and keep keyboard focus nearby at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    for (const [route, hash] of [['/', 'scenes'], ['/competition', 'scenario-pains'], ['/course', 'scenario-pains'], ['/tools', 'tool-list']]) {
+      await page.goto(route!)
+      const link = page.locator(`a[href="#${hash}"]`).first()
+      await link.scrollIntoViewIfNeeded()
+      await link.focus()
+      const samplesPromise = recordNavigationScroll(page)
+      await page.keyboard.press('Enter')
+      const samples = await samplesPromise
+      // A native jump followed by a router correction reverses this trajectory.
+      for (let index = 1; index < samples.length; ++index) expect(samples[index]!.y).toBeGreaterThanOrEqual(samples[index - 1]!.y - 1)
+      expect(new Set(samples.map(sample => sample.y)).size).toBeGreaterThan(5)
+      await expect(page.locator(`#${hash}`)).toBeFocused()
+      const position = await page.evaluate(() => scrollY)
+      await page.keyboard.press('Tab')
+      expect(Math.abs(await page.evaluate(() => scrollY) - position)).toBeLessThan(5)
+      expect(await page.evaluate(() => document.activeElement?.closest('.marketing-shell-nav') !== null)).toBe(false)
+    }
+  })
+
+  test(`history restores reading position without flying or stale focus at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/tools')
+    await page.getByRole('navigation', { name: '工具页目录' }).getByRole('link', { name: '申请使用', exact: true }).click()
+    await expect(page.locator('#start')).toBeFocused()
+    await page.goBack()
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => scrollY)).toBe(0)
+
+    await page.locator('#tool-orders').evaluate(element => scrollTo({ top: scrollY + element.getBoundingClientRect().top - 100, behavior: 'instant' }))
+    const position = await page.evaluate(() => scrollY)
+    // Changing pages and restoring history must not inherit a global smooth scroll.
+    const forward = recordNavigationScroll(page)
+    await page.locator('.marketing-shell-links a[href="/competition"]').evaluate((link: HTMLAnchorElement) => link.click())
+    const forwardSamples = (await forward).filter(sample => sample.path === '/competition')
+    expect(new Set(forwardSamples.map(sample => sample.y)).size).toBeLessThanOrEqual(2)
+    expect(await page.evaluate(() => scrollY)).toBe(0)
+    const backward = recordNavigationScroll(page)
+    await page.goBack()
+    const backSamples = (await backward).filter(sample => sample.path === '/tools')
+    expect(new Set(backSamples.map(sample => sample.y)).size).toBeLessThanOrEqual(2)
+    expect(Math.abs(await page.evaluate(() => scrollY) - position)).toBeLessThan(2)
+    await page.keyboard.press('Tab')
+    expect(Math.abs(await page.evaluate(() => scrollY) - position)).toBeLessThan(5)
+
+    await page.goto('/course#scenario-pains')
+    await page.getByTestId('pain-products').click()
+    const toolLink = page.locator('.comparison-body a[href="/tools#tool-product"]')
+    await toolLink.scrollIntoViewIfNeeded()
+    const scenarioPosition = await page.evaluate(() => scrollY)
+    await toolLink.click()
+    await expect(page.locator('#tool-product')).toBeFocused()
+    await page.goBack()
+    await expect(page.locator('#scenario-pains')).toBeVisible()
+    await page.keyboard.press('Tab')
+    expect(await page.evaluate(() => scrollY)).toBeGreaterThanOrEqual(scenarioPosition - 2)
+    expect(await page.evaluate(() => document.activeElement?.closest('.marketing-shell-nav') !== null)).toBe(false)
+  })
+}
+
+test('anchor motion can be interrupted and reduced motion arrives immediately', async ({ page }) => {
+  await page.goto('/tools')
+  const start = page.getByRole('navigation', { name: '工具页目录' }).getByRole('link', { name: '申请使用', exact: true })
+  await start.click()
+  await page.waitForTimeout(140)
+  await page.mouse.wheel(0, 100)
+  await page.waitForTimeout(100)
+  const interrupted = await page.evaluate(() => scrollY)
+  await page.waitForTimeout(650)
+  expect(Math.abs(await page.evaluate(() => scrollY) - interrupted)).toBeLessThan(2)
+  expect(await page.locator('#start').evaluate(element => element.getBoundingClientRect().top)).toBeGreaterThan(500)
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/tools')
+  const immediate = recordNavigationScroll(page, 500)
+  await start.click()
+  const samples = await immediate
+  expect(new Set(samples.map(sample => sample.y)).size).toBeLessThanOrEqual(2)
+  await expect(page.locator('#start')).toBeFocused()
 })

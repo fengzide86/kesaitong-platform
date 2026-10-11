@@ -32,6 +32,10 @@
       </section>
     </div>
     <p class="directory-summary" role="status">{{ selectedTaskTitle }} · {{ filteredTools.length }} 项匹配工具<span v-if="onlyUsable"> · 已核对套餐、发布状态与本机能力</span></p>
+    <section v-if="!loading && !loadError && firstReadyTool" class="ready-next-step" aria-label="开始使用">
+      <div><strong>先准备「{{ firstReadyTool.name }}」</strong><p>当前授权与本机支持使用。先查看输入资料和使用条件，确认后再启动。</p></div>
+      <button type="button" @click="openDetails(firstReadyTool)">查看准备项 <ArrowRight :size="16" /></button>
+    </section>
 
     <div v-if="loading" class="tool-grid" aria-label="工具加载中">
       <div v-for="item in 6" :key="item" class="tool-card skeleton-card"></div>
@@ -42,6 +46,7 @@
       <h3>工具列表暂时无法加载</h3>
       <p>{{ loadError }}</p>
       <button type="button" @click="loadData">重新加载</button>
+      <button type="button" @click="openSupport('catalog-load')">联系支持核对</button>
     </div>
 
     <div v-else-if="filteredTools.length" class="tool-grid">
@@ -97,7 +102,8 @@
     <div v-else class="empty-state">
       <Wrench :size="44" :stroke-width="1.5" />
       <h3>{{ tools.length ? '没有符合条件的工具' : '当前平台尚无开放工具' }}</h3>
-      <p>{{ onlyUsable ? '当前可用同时要求套餐包含、工具已开放和本机支持；可取消筛选查看使用条件。' : '可先查看任务准备要求，或切换任务、搜索词与平台。不会以模拟流程替代真实功能。' }}</p>
+      <p>{{ tools.length ? onlyUsable ? '当前可用同时要求套餐包含、平台授权、工具已开放和本机支持；可取消筛选查看使用条件。' : '请调整任务或搜索词，也可查看使用条件。不会以模拟流程替代真实功能。' : '当前平台目录尚未向此账号开放工具。可先核对授权范围、准备资料或联系支持；升级套餐不代表工具自动开放。' }}</p>
+      <div class="empty-actions"><button v-if="tools.length" type="button" @click="clearDirectoryFilters">清除筛选</button><router-link to="/user/plans">核对授权信息</router-link><button type="button" @click="openSupport('tool-availability')">联系支持核对</button></div>
     </div>
 
     <el-drawer v-model="detailsVisible" direction="rtl" size="min(420px, 92vw)" class="tool-detail-drawer">
@@ -136,6 +142,7 @@
       <template #header>
         <div class="run-dialog-heading"><small>LIVE AUTOMATION</small><h3>{{ pendingTool?.name }}</h3><p>参数只会发送给本机执行器。</p></div>
       </template>
+      <p v-if="pendingTool" class="platform-account-confirmation" role="note" data-testid="platform-account-confirmation">请核对当前平台账号；KST 未自动核验平台身份。开始前请确认目标平台登录的是本次要操作的账号。</p>
       <el-form v-if="pendingTool" label-position="top" class="run-form">
         <el-form-item v-for="field in pendingTool.single_input_schema || []" :key="field.key" :label="field.label" :required="field.required">
           <el-input-number v-if="field.type === 'number'" :model-value="numberInput(field.key)" :controls="false" @update:model-value="value => setNumberInput(field.key, value)" />
@@ -161,7 +168,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 import {
   ArrowRight,
   BadgeDollarSign,
@@ -199,7 +206,7 @@ import { validateSingleToolInput } from '@/features/automation/input-validation'
 import { PRODUCT_TASKS, PRODUCT_TASK_GROUPS, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable, isToolIncluded, isToolInPlatformScope, isToolPublished, type ProductTaskId } from '@/features/tools/presentation'
 
 const router = useRouter() || { push: () => {} }
-const route = useRoute() || { query: {} }
+const route = useRoute() || { query: {} as LocationQuery }
 const appStore = useAppStore()
 const platformStore = usePlatformStore()
 const tools = ref<ToolCatalogItem[]>([])
@@ -237,6 +244,9 @@ const filteredTools = computed(() => tools.value.filter(tool => {
   const taskWords = PRODUCT_TASKS.filter(task => taskIds.includes(task.id)).map(task => `${task.title} ${task.intent}`).join(' ')
   return !query || `${tool.name} ${tool.description} ${tool.capability_key || ''} ${toolCapabilities(tool).join(' ')} ${taskWords}`.toLocaleLowerCase().includes(query)
 }))
+const firstReadyTool = computed(() => filteredTools.value.find(tool => isToolCurrentlyUsable(tool, currentUsability.value)))
+function clearDirectoryFilters(): void { searchQuery.value = ''; selectedTask.value = 'all'; onlyUsable.value = false }
+function openSupport(reason: string): void { void router.push({ path: '/user/ai-chat', query: { reason, task: selectedTask.value, platform: platformStore.currentPlatform } }) }
 watch(() => route.query?.task, value => { selectedTask.value = taskFilter(value) })
 let catalogSequence = 0
 let launchSequence = 0
@@ -416,9 +426,9 @@ function handleToolClick(rawTool: unknown) {
     void runTool(tool)
     return
   }
-  if (isLiveTool(tool) && tool.single_input_schema?.length) {
+  if (isLiveTool(tool)) {
     pendingTool.value = tool
-    runInput.value = Object.fromEntries(tool.single_input_schema.map(field => [field.key, undefined]))
+    runInput.value = Object.fromEntries((tool.single_input_schema || []).map(field => [field.key, undefined]))
     selectedFileNames.value = {}
     fileInputErrors.value = {}
     runDialogVisible.value = true
@@ -517,6 +527,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 </script>
 
 <style scoped>
+.ready-next-step{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;margin-bottom:18px;border:1px solid var(--color-primary-muted);border-radius:12px;background:var(--color-primary-soft)}.ready-next-step>div{min-width:0}.ready-next-step strong{color:var(--color-text);font-size:var(--type-control);overflow-wrap:anywhere}.ready-next-step p{margin:5px 0 0;color:var(--color-text-secondary);font-size:var(--type-meta);line-height:1.65}.ready-next-step button{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;min-height:40px;padding:9px 14px;border:0;border-radius:9px;background:var(--color-primary);color:#fff;font:inherit;font-size:var(--type-control);font-weight:700;cursor:pointer}.empty-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:8px}.empty-actions a{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--color-border);border-radius:9px;color:var(--color-primary);background:var(--color-surface);font-size:13px;font-weight:700;text-decoration:none}@media(max-width:620px){.ready-next-step{align-items:stretch;flex-direction:column}.ready-next-step button{justify-content:center}}
 .file-input{display:grid;gap:8px;width:100%;padding:12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface-soft)}.file-name{overflow-wrap:anywhere;color:var(--color-text)}.file-actions{display:flex;gap:8px;flex-wrap:wrap}.file-actions button{border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);color:var(--color-primary);padding:7px 12px;cursor:pointer}.file-actions button:disabled{opacity:.5;cursor:not-allowed}.file-input small{line-height:1.6;color:var(--color-text-secondary)}.file-input .file-error{margin:0;color:var(--color-danger);line-height:1.5}
 .directory-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 22px}.search-box{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.search-box input{width:100%;min-width:0;border:0;background:transparent;color:var(--color-text);font:inherit;outline:none}.search-box:focus-within{outline:2px solid var(--color-focus-ring)}.available-filter{display:flex;align-items:center;gap:6px;font-size:13px}.directory-filters>button{padding:9px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-text);cursor:pointer}.directory-filters>button[aria-pressed=true]{border-color:var(--color-primary);color:var(--color-primary)}.task-groups{display:grid;gap:16px;margin-bottom:20px}.task-group h3{margin:0 0 10px;font-size:14px;color:var(--color-text-secondary)}.task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.task-grid button{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}.task-grid button[aria-pressed=true]{border-color:var(--color-primary);background:var(--color-primary-soft)}.task-grid span{font-size:12px;line-height:1.6;color:var(--color-text-secondary)}.task-grid small{font-size:11px;color:var(--color-text-tertiary)}.directory-summary{font-size:13px;color:var(--color-text-secondary)}@media(max-width:760px){.task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.task-grid{grid-template-columns:1fr}}
 .toolbox-page {
@@ -664,6 +675,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 .run-dialog-heading small { color: var(--color-success); font-size: var(--type-micro); font-weight: 800; letter-spacing: .12em; }
 .run-dialog-heading h3 { margin: 5px 0 0; color: var(--color-text); }
 .run-dialog-heading p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: var(--type-meta); }
+.platform-account-confirmation { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 10px; color: var(--color-text-secondary); background: var(--color-surface-soft); font-size: var(--type-meta); line-height: 1.65; overflow-wrap: anywhere; }
 .run-form :deep(.el-input-number), .run-form :deep(.el-select) { width: 100%; }
 .run-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
@@ -710,6 +722,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
   line-height: 1.45;
 }
 .tool-operational-meta{display:grid!important;grid-template-columns:.8fr .7fr 1.35fr;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--color-border)}.tool-operational-meta>span{display:grid!important;gap:3px}.tool-operational-meta small{color:var(--color-text-tertiary);font-size:10px}.tool-operational-meta b{overflow:hidden;color:var(--color-text);font-size:var(--type-micro);font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.tool-operational-meta small{color:var(--color-text-secondary)}.tool-operational-meta b{white-space:normal;overflow-wrap:anywhere}.empty-state p{max-width:640px;line-height:1.75}.task-grid small{color:var(--color-text-secondary)}
 
 .tool-action {
   display: flex;

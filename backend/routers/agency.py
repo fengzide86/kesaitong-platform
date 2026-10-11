@@ -178,8 +178,8 @@ async def deliver(item_id: int, request: Request, service: OwnerService) -> dict
 
 
 @router.get("/licenses", response_model=AgencyLicensesEnvelope)
-async def licenses(service: Service, page: Page = 1, page_size: PageSize = 20, agency_id: AgencyId = None, status: Search = None, q: Search = None) -> dict[str, Any]:
-    return await service.licenses(page, page_size, agency_id, status, q)
+async def licenses(service: Service, page: Page = 1, page_size: PageSize = 20, agency_id: AgencyId = None, status: Search = None, q: Search = None, customer_id: AgencyId = None) -> dict[str, Any]:
+    return await service.licenses(page, page_size, agency_id, status, q, customer_id)
 
 
 @router.get("/licenses/{item_id}", response_model=AgencyLicenseEnvelope)
@@ -188,8 +188,8 @@ async def license(item_id: int, service: Service) -> dict[str, Any]:
 
 
 @router.get("/requests", response_model=AgencyRequestsEnvelope)
-async def requests(service: Service, page: Page = 1, page_size: PageSize = 20, agency_id: AgencyId = None, status: Literal["open", "resolved", "rejected"] | None = None, q: Search = None) -> dict[str, Any]:
-    return await service.requests(page, page_size, agency_id, status, q)
+async def requests(service: Service, page: Page = 1, page_size: PageSize = 20, agency_id: AgencyId = None, status: Literal["open", "resolved", "rejected"] | None = None, q: Search = None, customer_id: AgencyId = None) -> dict[str, Any]:
+    return await service.requests(page, page_size, agency_id, status, q, customer_id)
 
 
 @router.post("/requests", response_model=AgencyRequestEnvelope, status_code=201)

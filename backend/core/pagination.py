@@ -5,14 +5,12 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from fastapi import Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
-
-T = TypeVar("T")
 
 
 @dataclass
@@ -65,7 +63,7 @@ class PageInfo:
 
 
 @dataclass
-class PaginatedResult(Generic[T]):
+class PaginatedResult[T]:
     """分页查询结果"""
 
     items: list[T]

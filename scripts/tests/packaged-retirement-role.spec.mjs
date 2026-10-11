@@ -1,3 +1,7 @@
+/* global location, document, window, requestAnimationFrame, innerWidth, innerHeight */
+import process from 'node:process'
+import { Buffer } from 'node:buffer'
+import { URL } from 'node:url'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -167,7 +171,7 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
         } else {
           await expect(page).toHaveURL(/#\/agent\/overview$/)
           await expect(page.getByRole('navigation', { name: '代理导航' })).toBeVisible()
-          await expect(page.locator('.metrics strong').first()).toHaveText('0')
+          await expect(page.locator('.metrics strong').first()).toHaveText(process.env.KST_EXPERIENCE_VISUAL_FIXTURES === '1' ? '2' : '0')
           evidence.screenshots.push(await capture(application, page, 'agent-overview'))
           await navigate(page, '/agent/licenses')
           await expect(page.locator('.records-heading')).toContainText('授权')
@@ -187,11 +191,12 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
       for (const path of requiredPaths) {
         await expect.poll(() => evidence.requests.some(request => request.path === path && request.status === 200), { message: `${role}: ${path} must return 200` }).toBe(true)
       }
-      // Existing admin role has no customer announcement-feed permission. Keep this one
-      // non-blocking response visible; every other HTTP failure still fails retirement QA.
-      const isKnownAdminFeed = request => role === 'admin' && request.method === 'GET' && request.path === '/api/announcements/feed' && request.status === 403
-      evidence.knownNonBlockingResponses = evidence.requests.filter(isKnownAdminFeed)
-      expect(evidence.requests.filter(request => request.status >= 400 && !isKnownAdminFeed(request))).toEqual([])
+      // Staff has no customer-device identity. The shell must not request that
+      // feed, rather than treating its 403 as acceptable network noise.
+      if (role === 'admin' || role === 'agent') {
+        expect(evidence.requests.filter(request => request.path === '/api/announcements/feed')).toEqual([])
+      }
+      expect(evidence.requests.filter(request => request.status >= 400)).toEqual([])
       evidence.status = 'passed'
     } catch (error) {
       evidence.status = 'failed'

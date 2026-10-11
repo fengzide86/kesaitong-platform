@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIASGIMiddleware
 from slowapi.util import get_remote_address
 
 from app.lifecycle import lifespan
@@ -18,6 +19,8 @@ from app.middleware import request_tracking_middleware
 from core.cache import cache
 from core.config import settings
 from core.exceptions import register_exception_handlers
+from core.logging import redact_sensitive
+from core.rate_limit import RateLimitStorageUnavailable, limiter
 from core.security import configure_cors
 from core.tasks import task_manager
 from database import check_db_health, get_db_stats
@@ -53,14 +56,6 @@ from routers import (
 from routers import (
     settings as settings_router,
 )
-
-
-def _create_limiter() -> Limiter:
-    return Limiter(
-        key_func=get_remote_address,
-        default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"],
-        storage_uri=settings.REDIS_URL or "memory://",
-    )
 
 
 def _register_routers(app: FastAPI) -> None:
@@ -106,15 +101,23 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     configure_cors(app)
-    limiter = _create_limiter()
+    # Health diagnostics must remain available when the distributed limiter's
+    # Redis is offline. Keep a separate bounded, process-local probe limit.
+    probe_limiter = Limiter(key_func=get_remote_address, storage_uri="memory://")
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    async def limiter_unavailable(_request: Request, _error: RateLimitStorageUnavailable) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"success": False, "message": "限流服务暂不可用，请稍后重试"},
+                            headers={"Retry-After": "5"})
+
+    app.add_exception_handler(RateLimitStorageUnavailable, limiter_unavailable)
+    app.add_middleware(SlowAPIASGIMiddleware)
     register_exception_handlers(app)
     app.middleware("http")(request_tracking_middleware)
     _register_routers(app)
 
     async def readiness_snapshot() -> dict[str, Any]:
-        database = await check_db_health()
+        database = redact_sensitive({**await check_db_health(), "required": True})
         health: dict[str, Any] = {
             "status": "ok" if database["status"] == "ok" else "degraded",
             "version": settings.APP_VERSION,
@@ -122,27 +125,22 @@ def create_app() -> FastAPI:
             "release_id": settings.RELEASE_ID,
             "checks": {"database": database},
         }
-        if cache.redis:
-            try:
-                await cache.redis.ping()
-                health["checks"]["redis"] = {"status": "ok"}
-            except Exception as error:
-                health["checks"]["redis"] = {"status": "error", "error": str(error)}
-                health["status"] = "degraded"
-        elif settings.REDIS_URL:
-            health["checks"]["redis"] = {
-                "status": "error",
-                "error": cache.redis_error or "Redis 已配置但连接不可用",
-            }
+        redis = {**await cache.check_health(), "required": settings.REDIS_REQUIRED}
+        if settings.REDIS_REQUIRED and redis["status"] == "not_configured":
+            redis.update(status="error", error="Redis 是必需依赖但未配置")
+        health["checks"]["redis"] = redis
+        if redis["status"] == "error":
             health["status"] = "degraded"
-        else:
-            health["checks"]["redis"] = {"status": "not_configured"}
+        health["ready"] = database["status"] == "ok" and (
+            not settings.REDIS_REQUIRED or redis["status"] == "ok"
+        )
         health["checks"]["pool"] = (await get_db_stats()).get("pool", {})
         health["checks"]["tasks"] = {"pending": task_manager.pending_count}
         return health
 
     @app.get("/api/health/live")
-    @limiter.limit("60/minute")
+    @limiter.exempt
+    @probe_limiter.limit("60/minute")
     async def health_live(request: Request) -> dict[str, Any]:
         del request
         return {
@@ -155,18 +153,20 @@ def create_app() -> FastAPI:
     @app.get(
         "/api/health/ready",
         response_model=dict[str, Any],
-        responses={503: {"description": "数据库不可用，服务尚未就绪"}},
+        responses={503: {"description": "必需依赖不可用，服务尚未就绪"}},
     )
-    @limiter.limit("30/minute")
+    @limiter.exempt
+    @probe_limiter.limit("30/minute")
     async def health_ready(request: Request) -> Any:
         del request
         snapshot = await readiness_snapshot()
-        if snapshot["checks"]["database"]["status"] == "error":
+        if not snapshot["ready"]:
             return JSONResponse(status_code=503, content=snapshot)
         return snapshot
 
     @app.get("/api/health")
-    @limiter.limit("30/minute")
+    @limiter.exempt
+    @probe_limiter.limit("30/minute")
     async def health_check(request: Request) -> dict[str, Any]:
         del request
         return await readiness_snapshot()

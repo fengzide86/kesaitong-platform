@@ -71,6 +71,7 @@ import { executionRecordListSchema, executionRecordSchema, type ExecutionRecord 
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import RecoveryPanel from '@/features/recovery/RecoveryPanel.vue'
+import { prepareSupportContext } from '@/features/ai/supportHandoff'
 
 type RecordKind = 'demo' | 'live'
 interface RecordRow {
@@ -147,13 +148,12 @@ function useAgain(record: RecordRow) {
 }
 
 function contactSupport(record: RecordRow) {
-  localStorage.setItem('toolbox_support_context', JSON.stringify({
-    run_id: record.id,
-    tool_id: record.toolId,
+  prepareSupportContext({
     tool_name: record.toolName,
-    platform_key: platformStore.currentPlatform,
-    error_code: record.errorCode,
-  }))
+    problem_code: record.errorCode,
+    execution_mode: 'live',
+    run_status: record.status,
+  }, platformStore.currentPlatform)
   void router.push('/user/ai-chat')
 }
 

@@ -61,7 +61,8 @@ describe('Runner local upload authorization', () => {
       hostManager: { request: dispatch }, validateUpload,
       runnerFactory: (options: { onHostRequest: typeof onHostRequest }) => { onHostRequest = options.onHostRequest; return {} },
     })
-    coordinator.createRunner({ itemId: 'one' })
+    Object.assign(coordinator, { batch: { status: 'running' } })
+    coordinator.createRunner({ itemId: 'one', status: 'running', permit: { assert() {} } })
     await expect(onHostRequest('files.validate-upload', { filePath: 'D:\\unknown.csv' })).rejects.toThrow('LOCAL_FILE_UNREADABLE')
     await expect(onHostRequest('browser.action', { action: { kind: 'upload', inputKey: 'document' }, input: { document: 'D:\\unknown.csv' } })).rejects.toThrow('LOCAL_FILE_UNREADABLE')
     expect(validateUpload).toHaveBeenCalledTimes(2)
@@ -76,7 +77,8 @@ describe('Runner local upload authorization', () => {
     let onHostRequest!: (action: string, payload: Values) => Promise<unknown>
     const coordinator = new BatchCoordinator({ hostManager: { request: dispatch },
       runnerFactory: (options: { onHostRequest: typeof onHostRequest }) => { onHostRequest = options.onHostRequest; return {} } })
-    coordinator.createRunner({ itemId: 'one' })
+    Object.assign(coordinator, { batch: { status: 'running' } })
+    coordinator.createRunner({ itemId: 'one', status: 'running', permit: { assert() {} } })
     await expect(onHostRequest('files.validate-upload', { filePath: 'D:\\unknown.csv' })).rejects.toMatchObject({ code: 'LOCAL_FILE_UNAVAILABLE' })
     expect(dispatch).not.toHaveBeenCalled()
   })

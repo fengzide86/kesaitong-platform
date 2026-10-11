@@ -2,12 +2,10 @@
 统一响应格式模块
 提供标准化的 API 响应结构
 """
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
-
-ResponseDataT = TypeVar("ResponseDataT")
 
 # Explicit compatibility contract for legacy routes whose response body can be
 # a mapping, list, scalar, or ORM object.  FastAPI's normal no-model path uses
@@ -19,7 +17,7 @@ CompatibleResponse = Annotated[
 ]
 
 
-class APIResponse(BaseModel, Generic[ResponseDataT]):
+class APIResponse[ResponseDataT](BaseModel):
     """统一 API 响应格式"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -33,7 +31,7 @@ class APIResponse(BaseModel, Generic[ResponseDataT]):
     total_pages: int | None = Field(default=None, description="总页数")
 
 
-class PaginatedResponse(APIResponse[list[ResponseDataT]], Generic[ResponseDataT]):
+class PaginatedResponse[ResponseDataT](APIResponse[list[ResponseDataT]]):
     """带分页元数据的统一响应格式。"""
 
     total: int = Field(description="总数")

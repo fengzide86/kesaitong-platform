@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { EvidenceMetric } from '@/marketing/metric-contract'
+import type { EvidenceMetric } from '@/marketing/metric-evidence'
 
 const props = defineProps<{
   metrics: EvidenceMetric[]
@@ -10,7 +10,7 @@ const props = defineProps<{
 
 const componentId = `metric-comparison-${getCurrentInstance()?.uid ?? 0}`
 const resultGrid = ref<HTMLElement | null>(null)
-const animateBars = ref(false)
+const animatedMetrics = ref(new Set<number>())
 let visibilityObserver: IntersectionObserver | undefined
 
 function isValue(value: number | null): value is number {
@@ -86,11 +86,19 @@ onMounted(() => {
   if (!resultGrid.value || typeof IntersectionObserver !== 'function') return
   if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   visibilityObserver = new IntersectionObserver(entries => {
-    if (!entries.some(entry => entry.isIntersecting)) return
-    animateBars.value = true
-    visibilityObserver?.disconnect()
-  }, { threshold: 0.15 })
-  visibilityObserver.observe(resultGrid.value)
+    for (const entry of entries) {
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.5) continue
+      const index = Number((entry.target as HTMLElement).dataset.metricIndex)
+      if (!Number.isInteger(index) || animatedMetrics.value.has(index)) continue
+      animatedMetrics.value.add(index)
+      visibilityObserver?.unobserve(entry.target)
+    }
+  }, { threshold: 0.5 })
+  // Observe each chart rather than the whole grid. On a stacked mobile layout,
+  // later cards must not finish animating before their bars reach the viewport.
+  resultGrid.value.querySelectorAll<HTMLElement>('[data-metric-index]').forEach(chart => {
+    visibilityObserver?.observe(chart)
+  })
 })
 
 onBeforeUnmount(() => visibilityObserver?.disconnect())
@@ -107,15 +115,15 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
       <span v-if="hasReportedMetrics" class="metric-badge">用户提供案例</span>
     </header>
 
-    <div ref="resultGrid" class="metric-grid" :class="{ 'metric-bars-animate': animateBars }">
-      <article v-for="(metric, index) in visibleMetrics" :key="`${metric.metric}-${index}`" class="metric-card" :data-metric="metric.metric" data-testid="metric-result" :aria-labelledby="`${componentId}-task-${index}`">
+    <div ref="resultGrid" class="metric-grid">
+      <article v-for="(metric, index) in visibleMetrics" :key="`${metric.metric}-${index}`" class="metric-card" :class="{ 'metric-bars-animate': animatedMetrics.has(index) }" :data-metric="metric.metric" data-testid="metric-result" :aria-labelledby="`${componentId}-task-${index}`">
         <div class="metric-card-head"><strong :id="`${componentId}-task-${index}`">{{ taskScope(metric) || (metric.metric === 'time' ? '操作用时' : '任务得分') }}</strong><span v-if="metric.source !== 'reported'">{{ metric.paired ? '已实测' : '人工基线' }}</span></div>
         <div class="metric-value-row">
-          <div><small>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</small><b data-testid="before-number">{{ formatNumber(metric.before!) }}<span>{{ metric.unit }}</span></b></div>
+          <div class="metric-before"><small>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</small><b data-testid="before-number">{{ formatNumber(metric.before!) }}<span>{{ metric.unit }}</span></b></div>
           <div class="metric-arrow" aria-hidden="true">→</div>
           <div class="metric-after"><small>课赛通辅助{{ metric.metric === 'score' ? '后' : '' }}</small><b v-if="metric.after !== null" data-testid="after-number">{{ formatNumber(metric.after) }}<span>{{ metric.unit }}</span></b><b v-else class="metric-awaiting">待实测</b></div>
         </div>
-        <div class="metric-bars" aria-hidden="true"><div class="metric-bar-row"><span>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</span><i><em :style="{ width: width(metric, metric.before) }" /></i></div><div class="metric-bar-row metric-bar-row-after"><span>课赛通辅助</span><i><em :style="{ width: width(metric, metric.after) }" /></i></div></div>
+        <div class="metric-bars" :data-metric-index="index" aria-hidden="true"><div class="metric-bar-row"><span>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</span><i><em :style="{ width: width(metric, metric.before) }" /></i></div><div class="metric-bar-row metric-bar-row-after"><span>课赛通辅助</span><i><em :style="{ width: width(metric, metric.after) }" /></i></div></div>
         <div v-if="savedTime(metric) !== null" class="metric-saving"><span>少花</span><strong data-testid="delta-number">{{ formatNumber(savedTime(metric)!) }}</strong><span>分钟</span></div>
         <p v-if="delta(metric) && !metric.reported" class="metric-delta">变化 {{ delta(metric) }}</p>
         <p v-else-if="delta(metric) && savedTime(metric) === null" class="metric-delta">本案例变化 {{ delta(metric) }}</p>
@@ -124,7 +132,7 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
     </div>
 
     <footer class="metric-provenance">
-      <p v-if="hasReportedMetrics" class="metric-source">来源：用户提供案例。样本数、测试日期和计时范围待补充，实际用时因任务和操作方式而异。</p>
+      <p v-if="hasReportedMetrics" class="metric-source">来源：用户提供案例。实际用时因任务和操作方式而异。</p>
       <details v-if="provenanceMetrics.length" class="metric-source-details">
         <summary>查看计时来源</summary>
         <p v-for="(metric, index) in provenanceMetrics" :key="`${metric.metric}-${index}`" class="metric-source" data-testid="metric-provenance">
@@ -153,18 +161,20 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
 .metric-value-row small { display: block; color: var(--m-ink, #142b47); font-size: 16px; line-height: 1.5; }
 .metric-value-row b { display: flex; align-items: baseline; gap: 3px; margin-top: 6px; color: var(--m-ink, #142b47); font-size: clamp(44px, 4.2vw, 58px); line-height: 1.05; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -0.035em; }
 .metric-value-row b span { font-size: 15px; font-weight: 600; letter-spacing: 0; }
-.metric-after b { color: var(--m-orange, #a65316); }
+.metric-before b { color: var(--m-muted, #627084); }
+.metric-after b { color: var(--m-blue, #245eea); }
 .metric-value-row .metric-awaiting { font-size: 25px; letter-spacing: 0; }
 .metric-arrow { padding-bottom: 13px; color: var(--m-muted, #627084); font-size: 23px; }
 .metric-bars { display: grid; gap: 9px; margin-top: 22px; }
 .metric-bar-row { display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--m-ink, #142b47); font-size: 13px; line-height: 1.5; }
 .metric-bar-row i { display: block; height: 8px; overflow: hidden; border-radius: 99px; background: var(--m-surface, #f5f7fa); }
-.metric-bar-row em { display: block; height: 100%; border-radius: 99px; background: var(--m-blue, #245eea); transform-origin: left center; }
-.metric-bar-row-after em { background: var(--m-orange, #a65316); }
-.metric-bars-animate .metric-bar-row em { animation: metric-bar-enter 300ms ease-out both; }
+.metric-bar-row em { display: block; height: 100%; border-radius: 99px; background: var(--m-data-before, #66758a); transform-origin: left center; }
+.metric-bar-row-after em { background: var(--m-blue, #245eea); }
+.metric-bars-animate .metric-bar-row em { animation: metric-bar-enter 1400ms cubic-bezier(.2, .7, .2, 1) both; }
+.metric-bars-animate .metric-bar-row-after em { animation-delay: 180ms; }
 .metric-saving { display: flex; align-items: baseline; gap: 6px; margin-top: 22px; color: var(--m-orange, #a65316); font-size: 16px; font-weight: 650; }
 .metric-saving strong { font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; font-weight: 750; }
-.metric-delta { margin: 14px 0 0; color: var(--m-muted, #627084); font-size: 14px; }
+.metric-delta { margin: 14px 0 0; color: var(--m-orange, #a65316); font-size: 14px; }
 .metric-pending { color: var(--m-muted, #627084); }
 .metric-provenance { margin-top: 20px; }
 .metric-source { margin: 0; color: var(--m-muted, #627084); font-size: 14px; line-height: 1.7; }
@@ -185,11 +195,11 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
   .metric-bar-row { grid-template-columns: 78px minmax(0, 1fr); }
 }
 @media (max-width: 600px) {
-  .metric-comparison { margin-top: 36px; padding: 24px 18px; }
+  .metric-comparison { margin-top: 32px; padding: 22px 18px; }
   .metric-comparison-heading { display: block; }
   .metric-comparison-heading p:not(.metric-eyebrow) { font-size: 15px; }
   .metric-badge { display: inline-block; margin-top: 12px; }
-  .metric-grid { margin-top: 22px; }
+  .metric-grid { margin-top: 18px; }
   .metric-card { column-gap: 16px; padding: 16px; }
   .metric-card-head { font-size: 15px; gap: 8px; }
   .metric-card-head span { flex-shrink: 0; }
@@ -204,6 +214,7 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
   .metric-saving { gap: 4px; font-size: 15px; }
   .metric-saving strong { font-size: 30px; }
   .metric-source { font-size: 14px; }
+  .metric-provenance { margin-top: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .metric-bars-animate .metric-bar-row em { animation: none; } }
 </style>

@@ -62,5 +62,5 @@ async def update_profit_policy(
     db: AsyncSession = Depends(get_db),
     actor: dict[str, object] = Depends(require_super_admin),
 ) -> object:
-    policy = await ProfitService(db).update_policy(req.ratios, actor, request)
+    policy = await ProfitService(db).update_policy(req.ratios, actor, request, req.expected_version)
     return {"success": True, "message": "分润策略已更新", "data": policy}

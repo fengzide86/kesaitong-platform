@@ -3,14 +3,15 @@
     <PageHeader
       eyebrow="BUSINESS OPERATIONS"
       title="专业工作台"
-      description="管理 B 端演示入口、专业套餐与内部验证授权"
+      description="管理 B 端登录入口、专业套餐与内部验证授权"
     >
       <template #actions>
         <router-link class="secondary-link" to="/admin/authcodes?product=business">查看 B 端授权码</router-link>
       </template>
     </PageHeader>
 
-    <section :class="['release-hero', { enabled: workspaceEnabled }]">
+    <div v-if="sectionErrors.length" class="partial-error" role="alert">{{ sectionErrors.join('；') }}。未确认的数据不会作为关闭或零条处理。<button type="button" class="secondary-link" :disabled="loading" @click="loadData">重新加载</button></div>
+    <section :class="['release-hero', { enabled: settingsKnown && workspaceEnabled }]">
       <div class="hero-symbol"><BriefcaseBusiness :size="24" /></div>
       <div class="hero-copy">
         <span>当前开放状态</span>
@@ -18,13 +19,14 @@
         <p>{{ releaseStatusDescription }}</p>
       </div>
       <div v-if="canManageSettings" class="hero-switch">
-        <span>{{ workspaceEnabled ? 'B 端登录已开放' : 'B 端登录未开放' }}</span>
+        <span>{{ !settingsKnown ? '开放状态待确认' : workspaceEnabled ? 'B 端登录已开放' : 'B 端登录未开放' }}</span>
         <el-switch
           v-model="workspaceEnabled"
           :loading="switchSaving"
+          :disabled="!settingsKnown || loading"
           inline-prompt
-          active-text="开启"
-          inactive-text="关闭"
+          :active-text="settingsKnown ? '开启' : '待确认'"
+          :inactive-text="settingsKnown ? '关闭' : '待确认'"
           @change="saveWorkspaceEnabled"
         />
       </div>
@@ -34,18 +36,19 @@
     <section class="readiness-grid" aria-label="专业工作台准备状态">
       <article>
         <span class="card-icon premium"><BadgeCheck :size="20" /></span>
-        <div><span>专业套餐</span><strong>{{ activeBusinessPlan?.name || '尚未配置' }}</strong></div>
-        <small>{{ activeBusinessPlan ? '产品权限已经配置' : '需要先建立 B 端套餐' }}</small>
+        <div><span>专业套餐</span><strong>{{ !plansKnown ? '待确认' : activeBusinessPlan?.name || '尚未配置' }}</strong></div>
+        <small>{{ !plansKnown ? '套餐状态尚未读取成功' : activeBusinessPlan ? '产品权限已经配置' : '需要先建立 B 端套餐' }}</small>
       </article>
       <article>
         <span class="card-icon"><KeyRound :size="20" /></span>
-        <div><span>B 端授权码</span><strong>{{ businessCodes.length }} 个</strong></div>
-        <small>{{ businessCodes.length ? '可以用于内部登录验证' : '还没有内部验证授权' }}</small>
+        <div><span>本页 B 端授权码</span><strong>{{ codesKnown ? `${businessCodes.length} 个` : '待确认' }}</strong></div>
+        <small>{{ !codesKnown ? '授权状态尚未读取成功' : businessCodes.length ? '可以用于内部登录验证' : '本页没有内部验证授权，请在授权管理检索' }}</small>
       </article>
       <article>
         <span class="card-icon"><Boxes :size="20" /></span>
-        <div><span>可演示批量工具</span><strong>{{ batchTools.length }} 个</strong></div>
-        <small>{{ batchTools.length ? '全部按演示模式呈现' : '演示脚本将按验证范围逐个加入' }}</small>
+        <div><span>已开放批量工具</span><strong>{{ toolsKnown ? `${batchTools.length} 个` : '待确认' }}</strong></div>
+        <small>{{ !toolsKnown ? '工具状态尚未读取成功' : batchTools.length ? '目录已开放执行且支持真实批量操作' : '暂无已开放的真实批量工具' }}</small>
+        <small v-if="internalDemoTools.length">内部演示 {{ internalDemoTools.length }} 项，不计入客户可执行工具。</small>
       </article>
     </section>
 
@@ -68,7 +71,7 @@
           </div>
           <button
             type="button"
-            :disabled="!activeBusinessPlan || generating"
+            :disabled="!plansKnown || !activeBusinessPlan || generating || loading"
             @click="generateInternalCode"
           >
             <LoaderCircle v-if="generating" :size="16" class="spin" />
@@ -81,7 +84,7 @@
           <span class="step-number">02</span>
           <div>
             <strong>验证 B 端界面</strong>
-            <p>当前不开放批量工具，登录后会看到完整且真实的专业工作台准备状态。</p>
+            <p>{{ !toolsKnown ? '批量工具状态尚未确认，请先重新读取；确认后再核对授权范围、输入准备与支持入口。' : batchTools.length ? '使用内部验证授权核对已开放工具、输入准备与真实批次记录；执行仍受授权和本机条件约束。' : '当前目录没有开放的真实批量工具，登录后核对授权范围、输入准备与支持入口。' }}</p>
           </div>
           <router-link to="/admin/authcodes?product=business">进入授权管理</router-link>
         </article>
@@ -89,10 +92,10 @@
         <article>
           <span class="step-number">03</span>
           <div>
-            <strong>复核演示边界</strong>
-            <p>确认表格只在本地解析，队列结果仅作为流程案例，不访问真实平台。</p>
+            <strong>复核执行与数据边界</strong>
+            <p>确认原表只在本地解析，真实批次按执行证据记录；内部演示不混入客户业务记录。</p>
           </div>
-          <span class="operation-note">演示流程 · 不访问真实平台</span>
+          <span class="operation-note">真实执行与内部演示分开验收</span>
         </article>
       </div>
     </section>
@@ -115,15 +118,15 @@
       <div v-if="activeBusinessPlan" class="limits-grid">
         <article><span>套餐</span><strong>{{ activeBusinessPlan.name }}</strong><small>专业 B 端</small></article>
         <article><span>单批次上限</span><strong>{{ entitlementNumber('max_batch_rows', 50) }}</strong><small>有效导入行</small></article>
-        <article><span>并行演示槽位</span><strong>{{ entitlementNumber('max_open_sessions', 6) }}</strong><small>仅用于本地流程播放</small></article>
+        <article><span>本机会话上限</span><strong>{{ entitlementNumber('max_open_sessions', 6) }}</strong><small>实际执行受工具能力与授权约束</small></article>
       </div>
-      <div v-else class="empty-plan">还没有可用的 B 端套餐，请先在套餐设置中建立。</div>
+      <div v-else class="empty-plan">{{ plansKnown ? '还没有可用的 B 端套餐，请先在套餐设置中建立。' : '套餐状态待确认，请重新加载。' }}</div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   BadgeCheck, Boxes, BriefcaseBusiness, Check, Copy, KeyRound, LoaderCircle, LogIn,
@@ -148,12 +151,20 @@ import {
   type AdminPlan,
 } from '@/features/admin/model'
 import { toolCatalogSchema, type ToolCatalogItem } from '@/features/tools/model'
+import { getToolPresentation } from '@/features/tools/presentation'
 
 const router = useRouter()
 const loading = ref(false)
 const switchSaving = ref(false)
 const generating = ref(false)
 const workspaceEnabled = ref(false)
+const settingsKnown = ref(false)
+const plansKnown = ref(false)
+const codesKnown = ref(false)
+const toolsKnown = ref(false)
+const sectionErrors = ref<string[]>([])
+let loadSequence = 0
+onUnmounted(() => { loadSequence += 1 })
 const plans = ref<AdminPlan[]>([])
 const authCodes = ref<AdminAuthCode[]>([])
 const tools = ref<ToolCatalogItem[]>([])
@@ -162,11 +173,16 @@ const canManageSettings = computed(() => authService.isSuperAdmin())
 
 const businessPlans = computed(() => plans.value.filter(plan => plan.product_type === 'business'))
 const activeBusinessPlan = computed(() =>
-  businessPlans.value.find(plan => plan.status === 'active') || businessPlans.value[0] || null)
+  businessPlans.value.find(plan => plan.status === 'active') || null)
 const businessCodes = computed(() => authCodes.value.filter(code => code.product_type === 'business'))
-const batchTools = computed(() => tools.value.filter(tool => tool.supports_batch))
+const batchTools = computed(() => tools.value.filter(tool =>
+  tool.supports_live_batch && getToolPresentation(tool).action === 'execute'))
+const internalDemoTools = computed(() => tools.value.filter(tool =>
+  tool.availability === 'demo_only' && (tool.supports_demo_batch || tool.supports_batch)))
 const releaseStatusTitle = computed(() => {
-  if (!canManageSettings.value) return '内部演示授权准备'
+  if (!canManageSettings.value) return '内部验证授权准备'
+  if (!settingsKnown.value) return '开放状态待确认'
+  if (!plansKnown.value || !toolsKnown.value) return '业务状态待确认'
   if (!workspaceEnabled.value) return '等待内部开放'
   if (!activeBusinessPlan.value) return '还缺少专业套餐'
   if (!batchTools.value.length) return '内部验证中'
@@ -174,13 +190,15 @@ const releaseStatusTitle = computed(() => {
 })
 const releaseStatusDescription = computed(() => {
   if (!canManageSettings.value) return '运营可生成内部验证授权；全局入口状态由超级管理员控制。'
+  if (!settingsKnown.value || !plansKnown.value || !toolsKnown.value) return '部分信息尚未读取成功，请重新加载后再判断是否开放。'
   if (!workspaceEnabled.value) return 'B 端授权不会进入专业工作台，普通 C 端不受影响。'
   if (!activeBusinessPlan.value) return '开启状态已经保存，但仍需要一个有效的 B 端套餐。'
   if (!batchTools.value.length) return '授权与前端已经就绪，批量脚本会根据真实业务能力逐个接入。'
   return 'B 端授权可以登录，已开放的批量工具会出现在专业工作台。'
 })
 const nextActionTitle = computed(() => {
-  if (!canManageSettings.value) return activeBusinessPlan.value ? '生成内部演示授权' : '等待超级管理员配置专业套餐'
+  if (!plansKnown.value || !codesKnown.value || !toolsKnown.value || (canManageSettings.value && !settingsKnown.value)) return '先确认业务状态'
+  if (!canManageSettings.value) return activeBusinessPlan.value ? '生成内部验证授权' : '等待超级管理员配置专业套餐'
   if (!workspaceEnabled.value) return '开启 B 端内部验证'
   if (!activeBusinessPlan.value) return '配置一个有效的 B 端套餐'
   if (!businessCodes.value.length) return '生成第一个内部验证授权'
@@ -188,7 +206,8 @@ const nextActionTitle = computed(() => {
   return '使用真实授权验证批量业务路径'
 })
 const nextActionDescription = computed(() => {
-  if (!canManageSettings.value) return '运营账号可验证授权发放与演示入口，不可修改全局发布设置。'
+  if (sectionErrors.value.length) return '请先重新加载失败项目，避免依据不完整的数据建立或修改授权。'
+  if (!canManageSettings.value) return '运营账号可验证授权发放与登录入口，不可修改全局发布设置。'
   if (!workspaceEnabled.value) return '开启后也不会自动开放任何批量工具。'
   if (!activeBusinessPlan.value) return '套餐必须同时具备批量执行和多账号工作台权限。'
   if (!businessCodes.value.length) return '内部授权只用于验证，不对普通客户展示。'
@@ -201,35 +220,41 @@ function entitlementNumber(key: string, fallback: number): number {
 }
 
 async function loadData() {
+  const sequence = ++loadSequence
   loading.value = true
+  sectionErrors.value = []
+  settingsKnown.value = false
+  plansKnown.value = false
+  codesKnown.value = false
+  toolsKnown.value = false
   const results = await Promise.allSettled([
       getPlansAdmin({ page_size: 100 }),
       getAuthCodes(),
       canManageSettings.value ? getSettings() : Promise.resolve([]),
       getTools(),
   ])
-  try {
-    const [plansResult, codesResult, settingsResult, toolsResult] = results
-    if (plansResult.status === 'fulfilled') plans.value = adminPlansSchema.parse(plansResult.value)
-    if (codesResult.status === 'fulfilled') authCodes.value = adminAuthCodesSchema.parse(codesResult.value)
-    if (toolsResult.status === 'fulfilled') tools.value = toolCatalogSchema.parse(toolsResult.value)
-    if (canManageSettings.value && settingsResult.status === 'fulfilled') {
-      const settings = adminSettingsSchema.parse(settingsResult.value)
+  if (sequence !== loadSequence) return
+  const [plansResult, codesResult, settingsResult, toolsResult] = results
+  function apply(result: PromiseSettledResult<unknown>, label: string, assign: (value: unknown) => void) {
+    try { if (result.status === 'rejected') throw result.reason; assign(result.value) }
+    catch { sectionErrors.value.push(`${label}读取失败`) }
+  }
+  apply(plansResult, '专业套餐', value => { plans.value = adminPlansSchema.parse(value); plansKnown.value = true })
+  apply(codesResult, '授权码', value => { authCodes.value = adminAuthCodesSchema.parse(value); codesKnown.value = true })
+  apply(toolsResult, '工具目录', value => { tools.value = toolCatalogSchema.parse(value); toolsKnown.value = true })
+  if (canManageSettings.value) {
+    apply(settingsResult, '开放设置', value => {
+      const settings = adminSettingsSchema.parse(value)
       const setting = settings.find(item => item.key === 'business_workspace_enabled')
       workspaceEnabled.value = String(setting?.value || '').toLowerCase() === 'true'
-    }
-    if (results.slice(0, 2).every(result => result.status === 'rejected') && toolsResult.status === 'rejected') {
-      showToast('专业工作台状态加载失败', 'error')
-    }
-  } catch {
-    showToast('专业工作台状态加载失败', 'error')
-  } finally {
-    loading.value = false
+      settingsKnown.value = true
+    })
   }
+  loading.value = false
 }
 
 async function saveWorkspaceEnabled(rawValue: string | number | boolean) {
-  if (!canManageSettings.value) return
+  if (!canManageSettings.value || !settingsKnown.value || loading.value || switchSaving.value) return
   const enabled = rawValue === true
   switchSaving.value = true
   try {
@@ -238,7 +263,7 @@ async function saveWorkspaceEnabled(rawValue: string | number | boolean) {
       value: enabled ? 'true' : 'false',
       description: '专业批量工作台全局发布开关',
     })
-    showToast(enabled ? 'B 端内部验证已开放' : 'B 端入口已关闭', 'success')
+    showToast(enabled ? 'B 端登录已开放' : 'B 端入口已关闭', 'success')
   } catch {
     workspaceEnabled.value = !enabled
     showToast('开放状态保存失败', 'error')
@@ -248,7 +273,7 @@ async function saveWorkspaceEnabled(rawValue: string | number | boolean) {
 }
 
 async function generateInternalCode() {
-  if (!activeBusinessPlan.value) return
+  if (!plansKnown.value || !activeBusinessPlan.value || loading.value || generating.value) return
   generating.value = true
   try {
     const result = generatedAuthCodesSchema.parse(await batchGenerateAuthCodes({
@@ -287,6 +312,7 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.partial-error{padding:14px;border:1px solid var(--color-border);border-radius:12px;color:var(--color-danger);line-height:1.6}.partial-error button{margin-left:12px}
 .business-access-page { display: grid; gap: 20px; }
 .secondary-link { min-height: 38px; display: inline-flex; align-items: center; padding: 0 14px; border: 1px solid var(--color-border); border-radius: 10px; color: var(--color-text); background: var(--color-surface); font-size: var(--type-control); font-weight: 700; text-decoration: none; }
 .release-hero { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 18px; padding: 24px; border: 1px solid var(--color-border); border-radius: 18px; background: var(--color-surface); box-shadow: var(--shadow-low); }
@@ -306,7 +332,7 @@ onMounted(loadData)
 .readiness-grid article > div { display: grid; gap: 5px; }
 .readiness-grid article > div span { color: var(--color-text-secondary); font-size: var(--type-meta); }
 .readiness-grid strong { color: var(--color-text); font-size: var(--type-card); }
-.readiness-grid small { grid-column: 1/-1; align-self: end; color: var(--color-text-tertiary); font-size: var(--type-meta); }
+.readiness-grid small { grid-column: 1/-1; align-self: end; color: var(--color-text-secondary); font-size: var(--type-meta); line-height: 1.55; }
 .operations-surface,.limits-surface { overflow: hidden; border: 1px solid var(--color-border); border-radius: 17px; background: var(--color-surface); box-shadow: var(--shadow-low); }
 .operations-surface > header,.limits-surface > header { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 20px; border-bottom: 1px solid var(--color-border); }
 .operations-surface header div,.limits-surface header div { display: grid; gap: 4px; }
@@ -335,7 +361,7 @@ onMounted(loadData)
 .limits-surface header a { color: var(--color-primary); font-size: var(--type-meta); font-weight: 700; text-decoration: none; }
 .limits-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; padding: 18px; }
 .limits-grid article { min-height: 110px; display: grid; align-content: space-between; gap: 7px; padding: 17px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-surface-soft); }
-.limits-grid span,.limits-grid small { color: var(--color-text-tertiary); font-size: var(--type-meta); }
+.limits-grid span,.limits-grid small { color: var(--color-text-secondary); font-size: var(--type-meta); }
 .limits-grid strong { color: var(--color-text); font-size: 20px; }
 .empty-plan { padding: 38px 20px; text-align: center; color: var(--color-text-secondary); font-size: var(--type-control); }
 .spin { animation: spin .8s linear infinite; }

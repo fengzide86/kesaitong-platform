@@ -24,6 +24,7 @@ const { startSandboxServer } = require('./automation/sandbox-server.cjs');
 const { parseFreightWorkbook } = require('./freight/rate-pack.cjs');
 const { quoteFreight } = require('../src/shared/freight/rate-engine.js');
 const { resolveSignedAdapter } = require('./automation/adapter-loader.cjs');
+const { assertAllowedTarget } = require('./automation/target-policy.cjs');
 const {
   AUTOMATION_PROTOCOL_ERROR_CODE,
   hostRequestSchema,
@@ -616,12 +617,15 @@ class AutomationRuntime {
     if (grant.runnerApiVersion && grant.runnerApiVersion !== PROTOCOL_VERSION) throw this.runnerError('RUNNER_VERSION_MISMATCH', '工具与本地 Runner 协议版本不兼容');
     if (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now()) throw this.runnerError('GRANT_EXPIRED', '工具启动授权已过期，请重新打开工具');
 
-    const encodedToken = encodeURIComponent(grant.token);
     const endpoints = ['/api/tools/launch-grant/verify', '/api/tools/launch-token/verify'];
     let lastError;
     for (const endpoint of endpoints) {
       try {
-        const response = await fetch(`${CONTROL_API_BASE}${endpoint}?token=${encodedToken}`, { method: 'POST', headers: { 'X-Toolbox-Version': process.env.TOOLBOX_CLIENT_VERSION || 'unknown' } });
+        const response = await fetch(`${CONTROL_API_BASE}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Toolbox-Version': process.env.TOOLBOX_CLIENT_VERSION || 'unknown' },
+          body: JSON.stringify({ token: grant.token }),
+        });
         const body = asRecord(await response.json());
         const data = asRecord(body.data);
         if (response.status === 404 && endpoint.includes('launch-grant')) continue;
@@ -689,13 +693,7 @@ class AutomationRuntime {
   }
 
   assertAllowedTarget(targetUrl: string): void {
-    const url = new URL(targetUrl);
-    const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-    const allowed = (this.script.allowedHosts || []).some(host => hostname === host || hostname.endsWith(`.${host}`));
-    if (!allowed) throw this.runnerError('TARGET_HOST_NOT_ALLOWED', `当前适配器不允许访问该域名：${hostname}`);
-    if (/sellercentral\.amazon|sellercenter\.aliexpress/i.test(hostname)) {
-      throw this.runnerError('REAL_COMMERCE_HOST_BLOCKED', '比赛模拟平台适配器禁止在真实电商后台运行');
-    }
+    assertAllowedTarget(targetUrl, this.script.allowedHosts || []);
   }
 
   pause() { if (this.status !== 'running') return { status: this.status }; this.status = 'paused'; this.emit(EVENTS.RUN_PAUSED); return { status: this.status }; }

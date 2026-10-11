@@ -166,6 +166,7 @@ export const desktopIpcInvocationSchemas = {
   'automation:resume': z.tuple([]),
   'automation:complete-user-action': z.tuple([]),
   'automation:cancel': z.tuple([]),
+  'automation:prepare-browser': z.tuple([z.enum(['amazon', 'aliexpress'])]),
   'automation:register-browser': z.tuple([webContentsIdSchema]),
   'automation:unregister-browser': z.tuple([]),
   'batch:store-demo-import': z.tuple([batchStoreDemoImportRequestSchema]),

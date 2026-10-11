@@ -1,4 +1,4 @@
-// Shared public-site evidence type; no dependency on desktop or business data.
+// Historical unused metric prototype; current evidence uses metric-evidence.ts.
 export type EvidenceMetric = {
   metric: 'time' | 'score'
   before: number | null

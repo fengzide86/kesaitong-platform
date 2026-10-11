@@ -17,7 +17,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("backend/constraints-py310.txt"),
+        default=Path("backend/constraints-py312.txt"),
     )
     args = parser.parse_args()
 
@@ -32,7 +32,7 @@ def main() -> int:
         if item.get("metadata", {}).get("name") and item.get("metadata", {}).get("version")
     }
     lines = [
-        "# Generated for Python 3.10 from backend/requirements-dev.txt.",
+        "# Generated for Python 3.12 from backend/requirements-dev.txt.",
         "# Regenerate from a pip --dry-run JSON report before intentional dependency updates.",
         "",
         *(f"{name}=={version}" for name, version in (pins[key] for key in sorted(pins))),

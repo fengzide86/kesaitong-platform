@@ -1,0 +1,28 @@
+/* The KST demo controls sit outside the faithful platform navigation. */
+.v2-experience.has-demo-controls{padding-bottom:132px}
+.v2-experience-strip{min-height:62px;padding:10px 22px;gap:18px;border-bottom:1px solid #dce2eb;background:#fff;color:#52647a}
+.v2-experience-strip>.v2-demo-identity{display:flex;justify-content:flex-start;gap:11px;width:auto;white-space:normal}
+.v2-demo-brand-logo{display:block;width:128px;height:34px;object-fit:contain;flex-shrink:0}
+.v2-demo-identity>span{border-left:1px solid #dce2eb;padding-left:12px}
+.v2-demo-identity strong{display:block;font-size:13px;line-height:1.55;color:#23394f}
+.v2-demo-identity small{font-size:12px;color:#68788b;line-height:1.6}
+.v2-experience-strip>.v2-demo-entry-links{gap:18px;width:auto}
+.v2-demo-entry-links button,.v2-demo-entry-links a{color:#52647a;font-size:12px;min-height:34px}
+.v2-demo-entry-links button.v2-demo-entry{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;border-radius:6px;padding:7px 13px;background:#165eff;color:#fff;font-weight:600}
+.v2-demo-entry span{font-size:9px}
+.v2-demo-entry-links button.v2-demo-entry:hover{background:#0f4ed9}
+.v2-experience .v2-demo-target{outline:3px solid #4482ff!important;outline-offset:3px;box-shadow:0 0 0 6px #165eff12!important;scroll-margin-block:170px}
+.v2-experience.is-demo-paused .v2-demo-target{outline-color:#c89334!important;box-shadow:0 0 0 6px #c8933412!important}
+.v2-experience .v2-run-dock.kst-demo-dock{bottom:max(18px,var(--v2-demo-dock-clearance,0px))}
+.kst-freight-panel{position:fixed;z-index:65;right:22px;top:80px;bottom:130px;display:flex;flex-direction:column;width:min(780px,calc(100vw - 44px));background:#fff;border:1px solid #d6dce6;border-radius:8px;box-shadow:0 8px 30px #243b5329;overflow:hidden}
+.kst-freight-panel>header{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid #e0e6ef;color:#253349}.kst-freight-panel>header img{width:120px;height:30px;object-fit:contain}.kst-freight-panel>header strong{font-size:15px;font-weight:600}.kst-freight-panel>header button{margin-left:auto}.kst-freight-body{overflow-y:auto;overscroll-behavior:contain;padding:0 14px 18px}.kst-freight-body .v2-shipping-calculation{border:0;margin:0;padding:18px 4px}.kst-freight-selection{font-size:13px;line-height:1.8;color:#205942;background:#eff8f3;border:1px solid #c6dfd1;padding:10px 12px}
+@media(max-width:700px){
+  .v2-experience-strip{padding:9px 12px;gap:8px}
+  .v2-experience-strip>.v2-demo-entry-links{gap:14px;width:100%;justify-content:flex-end}
+  .v2-demo-entry-links button,.v2-demo-entry-links a{font-size:12px}
+  .v2-demo-entry-links button.v2-demo-entry{padding:6px 11px;min-height:32px}
+  .v2-demo-identity small{font-size:11px}
+  .v2-demo-brand-logo{width:112px;height:30px}
+  .v2-experience .v2-run-dock.kst-demo-dock{bottom:max(12px,env(safe-area-inset-bottom),var(--v2-demo-dock-clearance,0px))}
+  .kst-freight-panel{right:10px;top:130px;bottom:160px;width:calc(100vw - 20px)}.kst-freight-panel>header{gap:10px;padding:10px}.kst-freight-panel>header img{width:98px;height:28px}.kst-freight-panel>header strong{font-size:13px}.kst-freight-body{padding-inline:10px}
+}

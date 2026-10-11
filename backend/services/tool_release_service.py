@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -116,7 +116,7 @@ def create_release(payload: dict[str, Any], private_key_b64: str | None = None) 
         "channel": payload.get("channel", "canary"),
         "rollout_percentage": int(payload.get("rollout_percentage", 0)),
         "status": payload.get("status", "draft"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     if adapter is not None:
         release["adapter"] = adapter

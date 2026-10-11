@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
 
 class UserSummaryResponse(BaseModel):
     id: int
+    auth_code_id: int | None = None
     name: str | None = None
     phone: str | None = None
     device_id: str | None = None

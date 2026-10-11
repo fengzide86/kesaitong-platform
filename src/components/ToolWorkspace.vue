@@ -52,15 +52,15 @@
             </div>
 
             <webview
-              v-if="isDesktop"
+              v-if="isDesktop && browserPartition"
               class="workspace-webview"
               src="about:blank"
-              partition="persist:tool-workspace"
+              :partition="browserPartition"
               aria-label="应用内自动化浏览器"
               @dom-ready="registerWorkspaceBrowser"
             />
 
-            <div v-else class="runtime-unavailable" role="status">真实工具需要在 Windows 软件中运行；当前环境不会播放模拟流程。</div>
+            <div v-else-if="!isDesktop" class="runtime-unavailable" role="status">真实工具需要在 Windows 软件中运行；当前环境不会播放模拟流程。</div>
 
             <div v-if="interactionLocked && !browserLoading" class="interaction-shield">
               <div><LoaderCircle :size="16" class="spin" />{{ runningMessage }}</div>
@@ -105,6 +105,7 @@
             </button>
             <button class="secondary-action" type="button" @click="closeWorkspace">返回工具箱</button>
           </div>
+          <p v-if="preflightResult?.canStart" class="recovery-guidance" role="note" data-testid="platform-account-confirmation">请核对当前平台账号；KST 未自动核验平台身份。开始前请确认目标平台登录的是本次要操作的账号。</p>
           <small>当前不会填写、点击或提交任何业务数据。</small>
         </section>
 
@@ -222,6 +223,7 @@ import { useSingleAutomationRun } from '@/features/automation/useSingleAutomatio
 import RunEvidenceDrawer from '@/features/automation/RunEvidenceDrawer.vue'
 
 const {
+  browserPartition,
   currentRunId, recoveryRetryAllowed,
   browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
   platformName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,

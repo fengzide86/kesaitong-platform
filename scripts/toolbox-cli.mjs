@@ -738,6 +738,19 @@ function verifyPushedHead() {
   return { commitSha, upstream }
 }
 
+export function verifyResumeHead(state, readGit = gitOutput) {
+  const commitSha = readGit(['rev-parse', 'HEAD'])
+  if (!/^[0-9a-f]{40}$/.test(state.commitSha || '') || commitSha !== state.commitSha) {
+    fail('恢复发布的提交与原发布状态不一致')
+  }
+  try {
+    readGit(['merge-base', '--is-ancestor', commitSha, 'origin/main'])
+  } catch {
+    fail('恢复发布的原提交不在当前 origin/main 历史内；请核对分支历史，禁止改用其他提交续跑')
+  }
+  return { commitSha, upstream: 'origin/main' }
+}
+
 function verifyGithubCi(commitSha) {
   const repository = parseGithubRepository(gitOutput(['remote', 'get-url', 'origin']))
   let payload
@@ -761,6 +774,7 @@ function verifyGithubCi(commitSha) {
   if (!checks.length) fail(`GitHub 尚无 ${commitSha.slice(0, 12)} 的 CI 结果`)
   const requiredNames = [
     'Frontend and Electron contracts',
+    'Dependency security',
     'Backend domains and API',
     'MariaDB migrations and concurrency',
     'Responsive C B Admin smoke',
@@ -827,14 +841,15 @@ async function onlineDesktopVersion(controlUrl) {
   return latest
 }
 
-async function productionPreflight(version, { verifyCi = true, verifyOnline = true, allowCurrent = false } = {}) {
+async function productionPreflight(version, { verifyCi = true, verifyOnline = true, allowCurrent = false, resumeState } = {}) {
   verifyCleanWorktree()
   run('git', ['fetch', '--prune', 'origin'])
-  const { commitSha, upstream } = verifyPushedHead()
+  const { commitSha, upstream } = resumeState ? verifyResumeHead(resumeState) : verifyPushedHead()
   const mainSha = gitOutput(['rev-parse', 'origin/main'])
-  if (commitSha !== mainSha) {
+  if (!resumeState && commitSha !== mainSha) {
     fail(`生产发布只能从最新 origin/main 执行：HEAD ${commitSha.slice(0, 12)}，origin/main ${mainSha.slice(0, 12)}`)
   }
+  if (resumeState && resumeState.version !== version) fail('恢复发布的版本与原发布状态不一致')
   if (packageVersion() !== version) {
     fail(`生产发布版本必须已提交到 package.json：当前 ${packageVersion()}，请求 ${version}`)
   }
@@ -896,7 +911,7 @@ function deploymentArchive(version, commitSha, artifactDir) {
     'ops',
   ])
   const listing = output('tar', ['-tzf', archive])
-  for (const required of ['backend/main.py', 'backend/constraints-py310.txt', 'ops/deploy/deploy-backend.sh', 'ops/deploy/retire-web.py', 'ops/web-retired/sw.js', 'ops/nginx/amazon-toolbox.conf', 'package.json']) {
+  for (const required of ['backend/main.py', 'backend/constraints-py312.txt', 'ops/deploy/deploy-backend.sh', 'ops/deploy/retire-web.py', 'ops/web-retired/sw.js', 'ops/nginx/amazon-toolbox.conf', 'package.json']) {
     if (!listing.split(/\r?\n/).includes(required)) fail(`提交归档缺少必要文件：${required}`)
   }
   for (const shellScript of [
@@ -1121,6 +1136,33 @@ async function verifyPublishedRelease(state) {
   await verifyDesktopDownloadRange(state)
 }
 
+export async function reconcileBackendCheckpoint(state, {
+  assertLease,
+  readJson = getJson,
+  verifyWeb = verifyRetiredWeb,
+  saveState = writeReleaseState,
+}) {
+  if (state.stage !== 'prepared' || state.backendDeploymentStarted === false) return false
+  // An attempted deployment (or an older state without an attempt marker) is
+  // ambiguous after interruption. Never turn a failed probe into a redeploy.
+  assertLease()
+  const baseUrl = state.controlUrl
+  const live = await readJson(`${baseUrl}/api/health/live`, 30_000)
+  if (live.status !== 'ok' || live.version !== state.version || live.commit_sha !== state.commitSha || live.release_id !== state.releaseId) {
+    fail('恢复发布无法确认已尝试的后端部署结果；线上身份与原发布不一致，请人工核对，禁止自动重复部署')
+  }
+  const ready = await readJson(`${baseUrl}/api/health/ready`, 30_000)
+  if (ready.status !== 'ok' || ready.ready !== true) {
+    fail('恢复发布无法确认已尝试的后端已就绪；请人工核对，禁止自动重复部署')
+  }
+  await verifyWeb(baseUrl)
+  assertLease()
+  state.stage = 'backend_deployed'
+  saveState(state)
+  log(`已核实线上原发布并补记后端 checkpoint：${state.releaseId}`)
+  return true
+}
+
 async function verifyResumeCheckpoints(state) {
   const baseUrl = state.controlUrl
   if (hasReached(state, 'backend_deployed')) {
@@ -1184,6 +1226,7 @@ async function release(args) {
         verifyCi: false,
         verifyOnline: false,
         allowCurrent: Boolean(resumeId),
+        resumeState,
       })
       log(`生产发布 Git/远端标签预检通过：v${version} / ${preflight.commitSha.slice(0, 12)}（未执行 CI、线上健康或 SSH 检查）`)
       log(`正式执行阶段：${RELEASE_STAGES.join(' → ')}`)
@@ -1195,6 +1238,7 @@ async function release(args) {
         verifyCi: true,
         verifyOnline: true,
         allowCurrent: Boolean(resumeId),
+        resumeState,
       })
       if (process.env.TOOLBOX_AUTO_PUBLISH !== '1') {
         if (!process.stdin.isTTY) fail('非交互生产发布需要 TOOLBOX_AUTO_PUBLISH=1')
@@ -1210,6 +1254,9 @@ async function release(args) {
         if (state.version !== version || state.commitSha !== preflight.commitSha) {
           fail('恢复发布的版本或提交与当前 HEAD 不一致')
         }
+        if (!state.controlUrl || !state.deploymentTarget) {
+          fail('恢复发布状态缺少原控制面或服务器目标；禁止以当前配置推定原发布目标')
+        }
         if (state.controlUrl && state.controlUrl !== preflight.controlUrl) {
           fail(`恢复发布的控制面地址已变化：${state.controlUrl} -> ${preflight.controlUrl}`)
         }
@@ -1217,14 +1264,6 @@ async function release(args) {
           fail('恢复发布的服务器目标与原发布状态不一致')
         }
         let upgradedState = false
-        if (!state.controlUrl) {
-          state.controlUrl = preflight.controlUrl
-          upgradedState = true
-        }
-        if (!state.deploymentTarget) {
-          state.deploymentTarget = preflight.deploymentTarget
-          upgradedState = true
-        }
         if (!state.leaseToken) {
           state.leaseToken = crypto.randomUUID()
           upgradedState = true
@@ -1254,6 +1293,7 @@ async function release(args) {
           leaseToken: crypto.randomUUID(),
           leaseStatus: 'pending',
           artifactsPrepared: false,
+          backendDeploymentStarted: false,
           stage: 'prepared',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -1279,6 +1319,7 @@ async function release(args) {
           verifyCi: true,
           verifyOnline: true,
           allowCurrent: Boolean(resumeId),
+          resumeState: resumeId ? state : undefined,
         })
         if (
           lockedPreflight.commitSha !== state.commitSha
@@ -1298,15 +1339,22 @@ async function release(args) {
 
       if (!state.artifactsPrepared) {
         if (hasReached(state, 'backend_deployed')) fail('已部署的恢复状态缺少经过验证的发布产物')
+        if (state.backendDeploymentStarted === true) fail('已尝试后端部署的恢复状态缺少经过验证的发布产物')
         state.artifacts = await prepareRelease(state, lockedPreflight.ciAttestedSha)
         state.artifactsPrepared = true
+        state.backendDeploymentStarted = false
         writeReleaseState(state)
       }
       verifyPreparedArtifacts(state)
-      if (resumeId) await verifyResumeCheckpoints(state)
+      if (resumeId) {
+        await reconcileBackendCheckpoint(state, { assertLease: () => assertRemoteReleaseLease(state, connection) })
+        await verifyResumeCheckpoints(state)
+      }
 
       if (!hasReached(state, 'backend_deployed')) {
         assertRemoteReleaseLease(state, connection)
+        state.backendDeploymentStarted = true
+        writeReleaseState(state)
         await deployBackend(state, connection)
         assertRemoteReleaseLease(state, connection)
         state.stage = 'backend_deployed'

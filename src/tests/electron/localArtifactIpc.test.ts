@@ -62,7 +62,7 @@ function setup(options: { encryptionAvailable?: boolean; clearFails?: boolean; d
     electron,
     './embedded-browser-host.cjs': { EmbeddedBrowserHost: class { isReady() { return false } release() {} } },
     './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} async cleanup() {} async revokeSession() {} } },
-    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} dispose() {} } },
+    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} dispose() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
     './runner-client.cjs': { RunnerClient: class {
       constructor(private callbacks: { onEvent: (event: Record<string, unknown>) => void; onHostRequest: (action: string, payload: Record<string, unknown>) => Promise<unknown> }) {}
       start() { return start(this.callbacks) }
@@ -228,11 +228,11 @@ describe('local artifact actual IPC wiring', () => {
     expect(await invoke('artifacts:read', { runId: 'run_1', kind: 'screenshot' })).toMatchObject({ code: 'NOT_AVAILABLE' })
   })
 
-  it('preflight clears prior execution evidence without creating fake run IDs', async () => {
+  it('preflight cannot interrupt a live execution or clear its evidence', async () => {
     const { invoke } = setup()
     await invoke('automation:start', { id: 'tool_1' })
-    await invoke('automation:preflight', { id: 'tool_1' })
-    expect(await invoke('artifacts:read', { runId: 'run_1', kind: 'screenshot' })).toMatchObject({ code: 'NOT_AVAILABLE' })
+    await expect(invoke('automation:preflight', { id: 'tool_1' })).rejects.toThrow('RUN_ALREADY_ACTIVE')
+    expect(await invoke('artifacts:read', { runId: 'run_1', kind: 'screenshot' })).toMatchObject({ status: 'available' })
   })
 
   it('connects credential invalidation in the real application composition', () => {

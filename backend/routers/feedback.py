@@ -27,6 +27,7 @@ router = APIRouter()
 @router.get("", response_model=FeedbackListEnvelope, response_model_exclude_unset=True)
 async def get_feedback_list(
     status: str | None = Query(None, description="状态过滤"),
+    user_id: int | None = Query(None, ge=1),
     platform_key: str | None = Query(None, description="平台标识 (amazon/aliexpress)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -36,7 +37,7 @@ async def get_feedback_list(
     """获取工单列表（管理员，带分页）"""
     service = FeedbackService(db)
     pagination = PaginationParams(page=page, page_size=page_size)
-    return await service.get_feedback_list(status=status, platform_key=platform_key, pagination=pagination)
+    return await service.get_feedback_list(status=status, user_id=user_id, platform_key=platform_key, pagination=pagination)
 
 
 @router.get("/stats", response_model=FeedbackStatsEnvelope, response_model_exclude_unset=True)
@@ -68,12 +69,13 @@ async def get_my_feedback(
 @router.get("/{feedback_id}", response_model=FeedbackDetailEnvelope, response_model_exclude_unset=True)
 async def get_feedback(
     feedback_id: int,
+    platform_key: str | None = Query(None, pattern="^(amazon|aliexpress)$"),
     db: AsyncSession = Depends(get_db),
     _admin: dict[str, Any] = Depends(get_current_admin),
 ) -> dict[str, Any]:
     """获取工单详情"""
     service = FeedbackService(db)
-    return await service.get_feedback_by_id(feedback_id)
+    return await service.get_feedback_by_id(feedback_id, platform_key=platform_key)
 
 
 @router.post("", response_model=FeedbackItemEnvelope, response_model_exclude_unset=True)

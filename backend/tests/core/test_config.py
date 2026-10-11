@@ -65,3 +65,41 @@ def test_production_rejects_sqlite_and_unknown_database(monkeypatch) -> None:
     monkeypatch.setenv("DB_TYPE", "oracle")
     with pytest.raises(ValueError):
         Settings()
+
+
+@pytest.mark.parametrize("environment, required", [("test", False), ("development", False), ("internal", True), ("production", True)])
+def test_redis_required_default_tracks_deployment_role(monkeypatch, environment, required):
+    monkeypatch.setenv("APP_ENV", environment)
+    monkeypatch.setenv("DB_TYPE", "mysql")
+    monkeypatch.setenv("JWT_SECRET_KEY", "isolated-configuration-test-key-32-characters")
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.delenv("REDIS_REQUIRED", raising=False)
+    assert Settings().REDIS_REQUIRED is required
+
+
+@pytest.mark.parametrize("value, required", [("true", True), ("false", False)])
+def test_production_optional_redis_is_explicit(monkeypatch, value, required):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DB_TYPE", "mysql")
+    monkeypatch.setenv("JWT_SECRET_KEY", "isolated-configuration-test-key-32-characters")
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setenv("REDIS_REQUIRED", value)
+    assert Settings().REDIS_REQUIRED is required
+
+
+def test_invalid_redis_required_is_not_silently_optional(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DB_TYPE", "sqlite")
+    monkeypatch.setenv("REDIS_REQUIRED", "sometimes")
+    with pytest.raises(ValueError, match="REDIS_REQUIRED"):
+        Settings()
+
+
+@pytest.mark.parametrize("environment", ["internal", "production"])
+def test_production_missing_redis_url_does_not_silently_allow_degradation(monkeypatch, environment):
+    monkeypatch.setenv("APP_ENV", environment)
+    monkeypatch.setenv("DB_TYPE", "mysql")
+    monkeypatch.setenv("JWT_SECRET_KEY", "isolated-configuration-test-key-32-characters")
+    monkeypatch.delenv("REDIS_REQUIRED", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    assert Settings().REDIS_REQUIRED is True

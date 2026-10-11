@@ -46,6 +46,7 @@
             刷新可用工具
           </button>
           <router-link to="/business/license">查看授权信息</router-link>
+          <button type="button" class="ready-help" @click="helpOpen = true">准备与支持</button>
         </div>
         <small class="ready-note"><ShieldCheck :size="14" />工具未开放时不会自动启动任何平台任务</small>
         <div class="task-preparation"><article v-for="task in PRODUCT_TASKS" :key="task.id"><strong>{{ task.title }}</strong><p>{{ task.preparation }}</p></article></div>
@@ -249,6 +250,7 @@ onBeforeRouteLeave(async () => {
 @media(max-width:760px){.setup-stage-rail{grid-template-columns:1fr 1fr;gap:8px;padding:12px 20px}.setup-stage-rail>div::after{display:none}}
 .batch-webview{visibility:hidden}.batch-webview.active{visibility:visible}
 .help-entry{flex-shrink:0;white-space:nowrap}
+.ready-actions{flex-wrap:wrap}.ready-actions .ready-help{border:1px solid var(--color-border);color:var(--color-primary);background:var(--color-surface)}.ready-flow span,.section-copy span,.business-tools small{color:var(--color-text-secondary)}
 .workspace-privacy{width:min(1060px,100%);display:flex;align-items:flex-start;gap:7px;margin:0 auto 12px;color:var(--color-success);font-size:var(--type-meta);line-height:1.5}
 .workspace-privacy>svg{flex-shrink:0;margin-top:2px}
 .setup-section{grid-template-columns:38px 190px minmax(0,1fr)}

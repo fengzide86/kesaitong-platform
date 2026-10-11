@@ -94,6 +94,7 @@
                 type="text"
                 id="authCode"
                 v-model="authCode"
+              :disabled="isLoading"
                 placeholder="请输入您的授权码"
                 autocomplete="one-time-code"
                 autocapitalize="characters"

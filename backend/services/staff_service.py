@@ -16,6 +16,7 @@ from core.security import (
     hash_password_async,
     verify_password_fallback_async,
 )
+from core.transaction_locks import acquire_transaction_guard
 from models import Agency, Setting, StaffRole, StaffStatus, StaffUser
 from schemas.staff import (
     StaffAccountCreate,
@@ -75,12 +76,12 @@ def account_snapshot(staff: StaffUser) -> dict[str, object]:
 
 async def _active_super_admin_count(db: AsyncSession) -> int:
     result = await db.execute(
-        select(func.count(StaffUser.id)).where(
+        select(StaffUser.id).where(
             StaffUser.role == StaffRole.SUPER_ADMIN,
             StaffUser.status == StaffStatus.ACTIVE,
-        )
+        ).with_for_update()
     )
-    return int(result.scalar() or 0)
+    return len(result.scalars().all())
 
 
 async def change_password(
@@ -160,11 +161,16 @@ async def list_accounts(
     *,
     page: int,
     page_size: int,
+    keyword: str = "",
 ) -> tuple[list[StaffAccountResponse], int]:
-    total = int((await db.execute(select(func.count(StaffUser.id)))).scalar() or 0)
+    filters = []
+    if keyword.strip():
+        filters.append(StaffUser.username.contains(keyword.strip(), autoescape=True) | StaffUser.display_name.contains(keyword.strip(), autoescape=True))
+    total = int((await db.execute(select(func.count(StaffUser.id)).where(*filters))).scalar() or 0)
     accounts = (
         await db.execute(
             select(StaffUser)
+            .where(*filters)
             .order_by(StaffUser.id)
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -228,8 +234,21 @@ async def update_account(
     actor: dict[str, Any],
     request: Request,
 ) -> StaffUser:
+    await acquire_transaction_guard(db, "staff_roles")
+    current_actor = (await db.execute(
+        select(StaffUser).where(StaffUser.id == actor["staff_id"])
+        .with_for_update().execution_options(populate_existing=True)
+    )).scalar_one_or_none()
+    if (
+        not current_actor
+        or current_actor.status != StaffStatus.ACTIVE
+        or current_actor.role != StaffRole.SUPER_ADMIN
+        or current_actor.force_password_reset
+        or current_actor.token_version != actor.get("token_version")
+    ):
+        raise HTTPException(status_code=401, detail="后台账号凭证已失效，请重新登录")
     target = (
-        await db.execute(select(StaffUser).where(StaffUser.id == staff_id).with_for_update())
+        await db.execute(select(StaffUser).where(StaffUser.id == staff_id).with_for_update().execution_options(populate_existing=True))
     ).scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail="后台账号不存在")

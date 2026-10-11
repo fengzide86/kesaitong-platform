@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import hash_password
-from models import Agency, AuthCode, Plan, ProfitRecord, StaffUser
+from models import Agency, AgencyCommissionEntry, AuthCode, Plan, ProfitRecord, StaffUser
 from services.staff_service import create_staff_access_token
 
 
@@ -31,6 +31,53 @@ async def customer_and_order(client: AsyncClient, setup: dict, which: str = "a")
     response = await client.post("/api/agency/orders", headers=setup[which], json={"customer_id": customer["id"], "plan_id": setup["plan"].id, "platform_key": "amazon"})
     assert response.status_code == 201
     return customer, response.json()["data"]
+
+
+async def test_customer_journey_filters_and_details_keep_verified_relationships(client: AsyncClient, agency_setup: dict) -> None:
+    setup = agency_setup
+    customer, order = await customer_and_order(client, setup)
+    other, other_order = await customer_and_order(client, setup)
+    for item in (order, other_order):
+        await client.post(f"/api/agency/orders/{item['id']}/mark-paid", headers=setup["owner"])
+        await client.post(f"/api/agency/orders/{item['id']}/deliver", headers=setup["owner"])
+    requests = []
+    for person, item in ((customer, order), (other, other_order)):
+        response = await client.post("/api/agency/requests", headers=setup["a"], json={"customer_id": person["id"], "order_id": item["id"], "kind": "support", "content": "检查关联交付"})
+        requests.append(response.json()["data"])
+    for collection in ("orders", "licenses", "requests"):
+        response = await client.get(f"/api/agency/{collection}?customer_id={customer['id']}", headers=setup["a"])
+        assert response.json()["total"] == 1
+        assert response.json()["data"][0]["customer_id"] == customer["id"]
+        assert (await client.get(f"/api/agency/{collection}?customer_id={customer['id']}", headers=setup["b"])).json()["total"] == 0
+    license_id = (await client.get(f"/api/agency/orders/{order['id']}", headers=setup["a"])).json()["data"]["auth_code"]["id"]
+    for collection, item_id in (("customers", customer["id"]), ("licenses", license_id), ("requests", requests[0]["id"])):
+        detail = (await client.get(f"/api/agency/{collection}/{item_id}", headers=setup["a"])).json()["data"]
+        assert detail["agency_name"] == "甲代理"
+        if collection != "customers":
+            assert detail["customer_name"] == customer["name"]
+        assert (await client.get(f"/api/agency/{collection}/{item_id}", headers=setup["b"])).status_code == 404
+
+
+async def test_internal_order_details_expose_links_not_codes_and_separate_source(client: AsyncClient, agency_setup: dict) -> None:
+    setup = agency_setup
+    customer, order = await customer_and_order(client, setup)
+    direct = (await client.post("/api/orders", headers=setup["owner"], json={"plan_id": setup["plan"].id, "platform_key": "amazon"})).json()["data"]
+    await client.post(f"/api/agency/orders/{order['id']}/mark-paid", headers=setup["owner"])
+    delivered = (await client.post(f"/api/agency/orders/{order['id']}/deliver", headers=setup["owner"])).json()["data"]
+    detail_response = await client.get(f"/api/orders/{order['id']}?platform_key=amazon", headers=setup["owner"])
+    detail = detail_response.json()["data"]
+    assert detail["customer_id"] == customer["id"]
+    assert detail["customer_name"] == customer["name"]
+    assert detail["auth_code_id"] == delivered["auth_code"]["id"]
+    assert detail["auth_code_status"] == "unused"
+    assert delivered["auth_code"]["code"] not in detail_response.text
+    assert (await client.get(f"/api/orders/{order['id']}?platform_key=aliexpress", headers=setup["owner"])).status_code == 404
+    assert (await client.get(f"/api/orders/{order['id']}", headers=setup["a"])).status_code == 403
+    direct_detail = (await client.get(f"/api/orders/{direct['id']}", headers=setup["owner"])).json()["data"]
+    assert direct_detail["customer_id"] is None and direct_detail["auth_code_id"] is None
+    for source, expected in (("direct", direct["id"]), ("agency", order["id"])):
+        response = await client.get(f"/api/orders?source={source}", headers=setup["owner"])
+        assert [item["id"] for item in response.json()["data"]] == [expected]
 
 
 async def test_partner_delivery_requires_owner_payment_and_is_idempotent(client: AsyncClient, agency_setup: dict, db_session: AsyncSession) -> None:
@@ -252,6 +299,67 @@ async def test_refund_keeps_delivery_history_but_removes_order_from_current_deli
     assert (await client.get("/api/agency/orders?status=delivered", headers=setup["a"])).json()["total"] == 0
     assert (await client.get("/api/agency/summary", headers=setup["a"])).json()["data"]["delivered_orders"] == 0
     assert (await client.get("/api/agency/licenses", headers=setup["a"])).json()["total"] == 1
+
+
+@pytest.mark.parametrize("source,rate", [("direct", None), ("agency", None), ("agency", Decimal("0.20"))])
+async def test_refund_persists_order_and_ledgers_without_autoflush(client: AsyncClient, agency_setup: dict, db_session: AsyncSession, source: str, rate: Decimal | None) -> None:
+    """Match production sessions, including commission helpers that do not flush."""
+    setup = agency_setup
+    db_session.autoflush = False
+    license_id = None
+    if source == "agency":
+        setup["agencies"][0].commission_rate = rate
+        await db_session.commit()
+        _, order = await customer_and_order(client, setup)
+        assert (await client.post(f"/api/agency/orders/{order['id']}/mark-paid", headers=setup["owner"])).status_code == 200
+        delivered = (await client.post(f"/api/agency/orders/{order['id']}/deliver", headers=setup["owner"])).json()["data"]
+        license_id = delivered["auth_code"]["id"]
+    else:
+        order = (await client.post("/api/orders", headers=setup["owner"], json={"plan_id": setup["plan"].id})).json()["data"]
+        assert (await client.post(f"/api/orders/{order['id']}/mark-paid", headers=setup["owner"])).status_code == 200
+    path = f"/api/orders/{order['id']}"
+    response = await client.post(f"{path}/refund", headers=setup["owner"], json={"reason": "已核实线下退款"})
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["status"] == "refunded"
+    db_session.expire_all()
+    detail = (await client.get(path, headers=setup["owner"])).json()["data"]
+    assert detail["status"] == "refunded"
+    assert detail["refund_amount"] == 99
+    assert detail["refund_reason"] == "已核实线下退款"
+    assert detail["refunded_at"] is not None
+    ledger = (await db_session.execute(select(ProfitRecord).where(ProfitRecord.order_id == order["id"]))).scalar_one()
+    assert ledger.status == "reversed"
+    assert ledger.reversed_at is not None
+    commission = (await db_session.execute(select(AgencyCommissionEntry).where(AgencyCommissionEntry.order_id == order["id"]))).scalars().all()
+    assert sorted((entry.kind, entry.amount) for entry in commission) == ([] if rate is None else [("accrual", Decimal("19.80")), ("refund", Decimal("-19.80"))])
+    if license_id:
+        agency_detail = (await client.get(f"/api/agency/orders/{order['id']}", headers=setup["a"])).json()["data"]
+        assert agency_detail["status"] == "refunded"
+        assert agency_detail["auth_code"]["id"] == license_id
+        assert agency_detail["auth_code"]["status"] == "unused"
+    repeated = await client.post(f"{path}/refund", headers=setup["owner"], json={"reason": "重复退款请求"})
+    assert repeated.status_code == 409
+    assert (await db_session.execute(select(func.count(ProfitRecord.id)).where(ProfitRecord.order_id == order["id"]))).scalar_one() == 1
+    assert (await db_session.execute(select(func.count(AgencyCommissionEntry.id)).where(AgencyCommissionEntry.order_id == order["id"], AgencyCommissionEntry.kind == "refund"))).scalar_one() == (0 if rate is None else 1)
+
+
+@pytest.mark.parametrize("source", ["direct", "agency"])
+async def test_cancel_persists_without_autoflush(client: AsyncClient, agency_setup: dict, db_session: AsyncSession, source: str) -> None:
+    setup = agency_setup
+    db_session.autoflush = False
+    if source == "agency":
+        _, order = await customer_and_order(client, setup)
+    else:
+        order = (await client.post("/api/orders", headers=setup["owner"], json={"plan_id": setup["plan"].id})).json()["data"]
+    path = f"/api/orders/{order['id']}"
+    response = await client.post(f"{path}/cancel", headers=setup["owner"], json={"reason": "取消待付款测试订单"})
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "cancelled"
+    db_session.expire_all()
+    detail = (await client.get(path, headers=setup["owner"])).json()["data"]
+    assert detail["status"] == "cancelled"
+    assert detail["cancelled_at"] is not None
+    assert (await client.post(f"{path}/cancel", headers=setup["owner"], json={"reason": "重复取消"})).status_code == 409
 
 
 async def test_delivery_rechecks_customer_order_agency_after_locking(client: AsyncClient, agency_setup: dict, db_session: AsyncSession) -> None:

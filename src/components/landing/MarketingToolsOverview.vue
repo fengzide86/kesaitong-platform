@@ -1,13 +1,34 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ArrowRight, Check, Copy, UsersRound } from '@lucide/vue'
+import { ArrowRight, Check, Copy, Play, UsersRound } from '@lucide/vue'
+import MarketingConsultationDialog from '@/components/landing/MarketingConsultationDialog.vue'
 import MarketingDownloadAction from '@/components/landing/MarketingDownloadAction.vue'
-import { marketingTasks, statusLabels, taskGroups } from '@/marketing/task-catalog'
+import MarketingSimulationExperience from '@/components/landing/MarketingSimulationExperience.vue'
+import { marketingTasks, statusLabels, taskGroups, type MarketingTask } from '@/marketing/task-catalog'
+import type { DemoTask } from '@/marketing/demo/v2/demo-tasks'
 
 const contactWechat = 'Moweiiong'
 const copyState = ref<'idle' | 'copied' | 'manual'>('idle')
 const copyingWechat = ref(false)
+const experience = ref<InstanceType<typeof MarketingSimulationExperience> | null>(null)
+const consultation = ref<InstanceType<typeof MarketingConsultationDialog> | null>(null)
+const taskExperiences: Partial<Record<string, DemoTask>> = {
+  product: 'product',
+  shipping: 'template',
+  marketing: 'advertising',
+  fba: 'fba',
+  orders: 'shipping',
+}
+
+function openTaskExperience(taskId: string, event: Event) {
+  const demoTask = taskExperiences[taskId]
+  if (demoTask) void experience.value?.openExperience(demoTask, event)
+}
+
+function openConsultation(task: MarketingTask, event: Event) {
+  if (task.status === 'desktop-conditional') void consultation.value?.openConsultation(task.title, event)
+}
 
 async function copyWechat() {
   if (copyingWechat.value) return
@@ -34,42 +55,53 @@ function selectWechat(event: Event) {
     <header class="tools-overview-header">
       <div>
         <p class="tools-eyebrow">课赛通工具箱</p>
-        <h1 id="tools-overview-title">先看要完成什么，<br>再选合适的工具。</h1>
-        <p>从注册公司、选品到商品、物流、广告和发货，找到你现在要处理的一项。先准备任务资料，再确认可以使用的辅助范围。</p>
-        <p class="tools-scene">适用于亚马逊仿真比赛与课程实训；使用前需确认平台与版本。</p>
+        <h1 id="tools-overview-title">先体验，<br>再选适合的工具。</h1>
+        <p>商品发布、物流模板、广告、FBA、发货，先试一遍怎么操作。</p>
       </div>
     </header>
 
+    <nav class="tools-section-nav" aria-label="工具页目录">
+      <a href="#experience"><Play :size="16" aria-hidden="true" />在线体验</a>
+      <a href="#tool-list">工具清单</a>
+      <a href="#start">申请使用</a>
+    </nav>
+
+    <MarketingSimulationExperience ref="experience" />
+
     <section class="scoring-journey" aria-labelledby="scoring-journey-title">
-      <div class="scoring-journey-heading"><h2 id="scoring-journey-title">基础配置少反复，精力留给你的策略。</h2><p>支持的任务可一键套用已整理的得分配置，具体覆盖按任务确认。</p></div>
+      <div class="scoring-journey-heading"><h2 id="scoring-journey-title">基础配置少反复，精力留给你的策略。</h2><p>支持的任务可一键套用得分配置，把时间留给选品和策略。</p></div>
       <ol class="scoring-steps">
-        <li><span>1</span><div><strong>查看已整理的得分细节</strong><p>了解对应任务中容易遗漏的配置要求。</p></div></li>
-        <li><span>2</span><div><strong>对应任务一键配置</strong><p>在支持的工具中套用已整理的配置。</p></div></li>
+        <li><span>1</span><div><strong>关注任务的得分细节</strong><p>了解对应任务中容易遗漏的配置要求。</p></div></li>
+        <li><span>2</span><div><strong>对应任务一键配置</strong><p>在支持的工具中处理重复填写。</p></div></li>
         <li><span>3</span><div><strong>补充你的策略</strong><p>选品、定价和营销取舍，继续由你判断。</p></div></li>
       </ol>
-      <details class="scoring-details"><summary>得分配置的适用边界</summary><p>一键配置指处理已经整理、且当前任务支持的基础配置，不代表八项工具都已开放或覆盖所有得分点。平台规则与版本变化需重新确认，也不保证分数或比赛名次。</p></details>
+      <details class="scoring-details"><summary>得分配置适用于哪些任务</summary><p>一键配置适用于当前工具支持的任务，不代表八项工具都已开放或覆盖所有得分点。平台规则与版本变化需重新确认，也不保证分数或比赛名次。</p></details>
     </section>
 
-    <div class="tools-groups">
+    <div id="tool-list" class="tools-groups" tabindex="-1">
+      <header class="tools-list-heading"><h2>电脑端工具清单</h2><p>在线体验使用虚构样例；电脑端工具请按下方开放状态申请。</p></header>
       <section v-for="group in taskGroups" :key="group.id" class="tools-group" :aria-labelledby="`tools-group-${group.id}`">
         <div class="tools-group-heading">
           <h2 :id="`tools-group-${group.id}`">{{ group.title }}</h2>
           <p>{{ group.description }}</p>
         </div>
         <div class="tools-grid">
-          <article v-for="task in marketingTasks.filter(item => item.group === group.id)" :id="`tool-${task.id}`" :key="task.id" class="tool-card" :data-task-id="task.id">
-            <div class="tool-card-top"><span class="tool-index">{{ String(marketingTasks.indexOf(task) + 1).padStart(2, '0') }}</span><span class="tool-intent">{{ task.intent }}</span></div>
-            <div class="tool-card-title"><h3>{{ task.title }}</h3><span class="tool-status" :class="`status-${task.status}`">{{ statusLabels[task.status] }}</span></div>
-            <p class="tool-input"><strong>准备什么</strong>{{ task.inputHint }}</p>
-            <p class="tool-support"><strong>课赛通辅助</strong>{{ task.support }}</p>
-            <details class="tool-details"><summary>得分配置与使用说明</summary><p>{{ task.scoringNote }}</p><p><strong>这一步容易卡在：</strong>{{ task.pain }}</p></details>
+          <article v-for="task in marketingTasks.filter(item => item.group === group.id)" :id="`tool-${task.id}`" :key="task.id" class="tool-card" :class="{ 'is-upcoming': !taskExperiences[task.id] && task.status !== 'desktop-conditional' }" :data-task-id="task.id">
+            <div class="tool-card-title"><span class="tool-index">{{ String(marketingTasks.indexOf(task) + 1).padStart(2, '0') }}</span><h3>{{ task.title }}</h3></div>
+            <p class="tool-intent">{{ task.intent }}</p>
+            <div class="tool-availability"><span v-if="task.status !== 'desktop-conditional'" class="tool-platform">电脑端</span><span class="tool-status" :class="`status-${task.status}`">{{ statusLabels[task.status] }}</span></div>
+            <div v-if="taskExperiences[task.id] || task.status === 'desktop-conditional'" class="tool-card-actions">
+              <button v-if="taskExperiences[task.id]" type="button" :data-tool-experience="task.id" :aria-label="`在线体验${task.title}`" aria-haspopup="dialog" @click="openTaskExperience(task.id, $event)"><Play :size="16" aria-hidden="true" />在线体验</button>
+              <button v-if="task.status === 'desktop-conditional'" class="tool-consultation" type="button" :data-tool-consult="task.id" aria-haspopup="dialog" @click="openConsultation(task, $event)">咨询这个工具<ArrowRight :size="16" aria-hidden="true" /></button>
+            </div>
+            <details class="tool-details"><summary>准备资料与详细说明</summary><p class="tool-input"><strong>准备什么</strong>{{ task.inputHint }}</p><p class="tool-support"><strong>课赛通辅助</strong>{{ task.support }}</p><p>{{ task.scoringNote }}</p><p><strong>这一步容易卡在：</strong>{{ task.pain }}</p><p v-if="taskExperiences[task.id]">在线体验使用本机样例，不代表对应电脑端工具已经开放。</p></details>
           </article>
         </div>
       </section>
     </div>
 
     <div class="team-note"><UsersRound :size="18" aria-hidden="true" /><div><strong>带队或多人使用</strong><p>先列出团队要完成的任务，再联系我们确认开放工具、席位和设备安排。</p><details class="team-details"><summary>团队使用前还需确认什么</summary><p>批次、异常支持和执行方式需另行确认。团队使用不代表可以无人值守并发执行，各项工具仍以上方状态为准。</p></details></div></div>
-    <div id="start" class="tools-boundary"><Check :size="17" aria-hidden="true" /><div>
+    <div id="start" class="tools-boundary" tabindex="-1"><Check :size="17" aria-hidden="true" /><div>
       <p><strong>申请使用</strong>告诉我们你参加的比赛或课程，以及想处理的任务；先确认可用范围和授权，再下载使用。</p>
       <div class="wechat-contact" data-testid="marketing-wechat-contact">
         <label for="marketing-wechat-account">添加微信</label>
@@ -80,6 +112,7 @@ function selectWechat(event: Event) {
       <details class="start-details"><summary>授权与使用条件</summary><p class="authorization-copy">下载桌面端不等于自动开通。实际能力取决于工具状态、授权、设备和现场条件，不承诺下载后全部自动执行；遇到登录验证或最终提交时，需要由你接手。</p></details>
     </div></div>
     <div class="tools-actions"><RouterLink class="tools-cta" to="/terms">查看使用条款 <ArrowRight :size="17" aria-hidden="true" /></RouterLink><MarketingDownloadAction /></div>
+    <MarketingConsultationDialog ref="consultation" :wechat="contactWechat" />
   </section>
 </template>
 
@@ -87,7 +120,7 @@ function selectWechat(event: Event) {
 .tools-overview {
   width: min(var(--m-width), calc(100% - var(--m-gutter) * 2));
   margin: 0 auto;
-  padding: var(--m-section) 0;
+  padding: 40px 0 var(--m-section);
   color: var(--m-ink);
 }
 .tools-overview-header { max-width: 740px; }
@@ -95,6 +128,9 @@ function selectWechat(event: Event) {
 .tools-overview h1 { margin: 0; font-size: var(--m-h1); line-height: 1.3; letter-spacing: 0; }
 .tools-overview-header > div > p:not(.tools-eyebrow) { max-width: 660px; margin: 24px 0 0; color: var(--m-text); font-size: var(--m-body); line-height: 1.8; }
 .tools-overview-header > div > .tools-scene { margin-top: 14px; color: var(--m-muted); font-size: 14px; }
+.tools-section-nav { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 22px; }
+.tools-section-nav a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 4px 0; color: var(--m-blue-hover); font-size: 15px; font-weight: 700; text-decoration: none; }
+.tools-section-nav a:focus-visible, .tool-card-actions :is(button, a):focus-visible { outline: 3px solid var(--m-blue); outline-offset: 4px; border-radius: 4px; }
 .scoring-journey { margin-top: 40px; padding: 28px 32px; border-radius: var(--m-radius); background: var(--m-surface); }
 .scoring-journey-heading h2 { margin: 0; color: var(--m-ink); font-size: 24px; line-height: 1.45; }
 .scoring-journey-heading p { margin: 12px 0 0; color: var(--m-text); font-size: var(--m-body); line-height: 1.8; }
@@ -108,24 +144,36 @@ function selectWechat(event: Event) {
 .scoring-details summary:focus-visible, .tool-details summary:focus-visible, .team-details summary:focus-visible, .start-details summary:focus-visible { outline: 3px solid var(--m-blue); outline-offset: 4px; border-radius: 4px; }
 .scoring-details p, .tool-details p { margin: 0; color: var(--m-text); font-size: 15px; line-height: 1.8; }
 .tool-details p + p { margin-top: 12px; }
-.tools-groups { margin-top: 56px; }
+.tools-groups { margin-top: 56px; scroll-margin-top: 100px; }
+.tools-list-heading { margin-bottom: 28px; }
+.tools-list-heading h2 { margin: 0; color: var(--m-ink); font-size: var(--m-h2); line-height: 1.4; }
+.tools-list-heading p { margin: 12px 0 0; color: var(--m-text); font-size: var(--m-body); line-height: 1.7; }
 .tools-group + .tools-group { margin-top: 40px; }
 .tools-group-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 20px; }
 .tools-group-heading h2 { margin: 0; font-size: 24px; line-height: 1.4; letter-spacing: 0; }
 .tools-group-heading p { margin: 0; color: var(--m-muted); font-size: var(--m-body); line-height: 1.6; }
-.tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-.tool-card { min-width: 0; padding: 28px; border: 1px solid var(--m-border); border-radius: var(--m-radius); background: #fff; scroll-margin-top: 100px; }
-.tool-card:target { border-color: var(--m-blue); box-shadow: 0 0 0 3px var(--m-blue-soft); }
-.tool-card-top { display: flex; align-items: baseline; gap: 10px; }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 28px; }
+.tool-card { min-width: 0; padding: 24px 0 16px; border-top: 1px solid var(--m-border); scroll-margin-top: 100px; }
+.tool-card:target { border-color: var(--m-blue); background: var(--m-blue-soft); outline: 10px solid var(--m-blue-soft); border-radius: 4px; }
+.tool-card.is-upcoming { padding-top: 20px; }
 .tool-index { flex-shrink: 0; color: var(--m-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-.tool-intent { color: var(--m-text); font-size: var(--m-body); line-height: 1.7; }
-.tool-card-title { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 16px 0 24px; }
+.tool-intent { margin: 10px 0; color: var(--m-text); font-size: var(--m-body); line-height: 1.7; }
+.tool-card-title { display: flex; align-items: baseline; gap: 10px; }
 .tool-card h3 { margin: 0; font-size: 22px; line-height: 1.45; letter-spacing: 0; }
-.tool-status { display: inline-block; max-width: 100%; padding: 5px 10px; border-radius: 6px; color: var(--m-blue-hover); background: var(--m-blue-soft); font-size: 14px; line-height: 1.6; }
-.status-in-development { color: var(--m-muted); background: var(--m-surface); }
+.tool-card.is-upcoming h3 { font-size: 20px; }
+.tool-status { display: inline-block; max-width: 100%; color: var(--m-text); font-size: 14px; line-height: 1.7; }
+.tool-availability { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.tool-platform { color: var(--m-muted); font-size: 13px; line-height: 1.7; }
+.status-in-development, .status-controlled-validation { color: var(--m-muted); }
+.tool-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 16px; }
+.tool-card-actions :is(button, a) { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; font: inherit; font-size: 14px; font-weight: 700; line-height: 1.6; text-decoration: none; cursor: pointer; transition: color var(--m-duration), background var(--m-duration); }
+.tool-card-actions button { padding: 9px 13px; border: 1px solid #c4d5f5; border-radius: 7px; color: var(--m-blue-hover); background: var(--m-blue-soft); }
+.tool-card-actions .tool-consultation { padding: 7px 0; border-color: transparent; color: var(--m-blue-hover); background: transparent; }
+.tool-card .tool-details { margin-top: 12px; }
+.tool-details summary { color: var(--m-text); font-size: 15px; }
 .tool-input, .tool-support { margin: 0; color: var(--m-text); font-size: var(--m-body); line-height: 1.75; }
-.tool-input { padding-top: 20px; border-top: 1px solid var(--m-border); }
-.tool-support { margin-top: 18px; }
+.tool-input { padding-top: 4px; }
+.tool-support { margin-top: 12px; }
 .tool-input strong, .tool-support strong { display: block; margin-bottom: 5px; color: var(--m-ink); font-size: 14px; font-weight: 700; }
 .team-note { display: flex; align-items: flex-start; gap: 18px; margin-top: var(--m-section); padding-top: 32px; border-top: 1px solid var(--m-border); }
 .team-note > svg { flex-shrink: 0; margin-top: 3px; color: var(--m-blue); }
@@ -153,32 +201,45 @@ function selectWechat(event: Event) {
 .tools-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; margin-top: 28px; }
 .tools-cta { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--m-blue); font-size: 15px; font-weight: 700; text-decoration: none; transition: color var(--m-duration); }
 .tools-cta:focus-visible { outline: 3px solid var(--m-blue); outline-offset: 4px; border-radius: 4px; }
-@media (hover: hover) { .tools-cta:hover { color: var(--m-blue-hover); } .wechat-contact-actions button:hover:not(:disabled) { background: var(--m-blue-hover); } }
+@media (hover: hover) { .tools-cta:hover { color: var(--m-blue-hover); } .wechat-contact-actions button:hover:not(:disabled) { background: var(--m-blue-hover); } .tools-section-nav a:hover, .tool-card-actions .tool-consultation:hover { text-decoration: underline; text-underline-offset: 4px; } .tool-card-actions button:hover:not(.tool-consultation) { background: #dce8ff; } }
 @media (max-width: 960px) {
   .tools-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tool-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .tool-card { padding: 24px; }
+  .tool-card { padding: 22px 0 12px; }
   .tools-start-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-  .tools-groups { margin-top: 40px; }
-  .scoring-journey { margin-top: 32px; padding: 24px 20px; }
+  .tools-overview { padding-top: 28px; }
+  .tools-overview-header > div > p:not(.tools-eyebrow) { margin-top: 16px; }
+  .tools-section-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 18px; }
+  .tools-section-nav a { font-size: 14px; }
+  .tools-groups { margin-top: 32px; }
+  .tools-list-heading { margin-bottom: 22px; }
+  .scoring-journey { margin-top: 28px; padding: 20px 18px; }
   .scoring-journey-heading h2 { font-size: 22px; }
-  .scoring-steps { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .tools-group + .tools-group { margin-top: 32px; }
+  .scoring-steps { grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 18px; padding-top: 18px; }
+  .scoring-steps p { margin-top: 3px; }
+  .scoring-details { margin-top: 16px; }
+  .tools-group + .tools-group { margin-top: 24px; }
+  .tools-group-heading { margin-bottom: 12px; }
   .tools-group-heading h2, .team-note strong, .tools-boundary p > strong { font-size: 22px; }
-  .tools-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .tool-card { padding: 22px; }
+  .tools-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .tool-card { padding: 16px 0 4px; }
   .tool-card h3 { font-size: 21px; }
-  .team-note { gap: 12px; }
-  .tools-boundary { display: block; margin-top: 32px; padding: 24px 20px; }
+  .tool-card.is-upcoming { padding-top: 16px; }
+  .tool-card.is-upcoming h3 { font-size: 19px; }
+  .tool-card-actions { margin-top: 10px; }
+  .tool-card .tool-details { margin-top: 6px; }
+  .team-note { gap: 12px; margin-top: 32px; padding-top: 24px; }
+  .team-details { margin-top: 14px; }
+  .tools-boundary { display: block; margin-top: 28px; padding: 22px 18px; }
   .tools-boundary > svg { display: none; }
   .wechat-contact { padding: 18px 16px; }
   .wechat-contact-actions { flex-direction: column; align-items: stretch; }
   .wechat-contact-actions input { width: 100%; }
-  .tools-start-steps { gap: 24px 18px; }
+  .tools-start-steps { gap: 20px 18px; margin-top: 24px; padding-top: 20px; }
   .tools-actions { flex-direction: column; align-items: stretch; }
   .tools-cta { width: fit-content; }
 }
-@media (prefers-reduced-motion: reduce) { .tools-cta, .wechat-contact-actions button { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .tools-cta, .wechat-contact-actions button, .tool-card-actions :is(button, a) { transition: none; } }
 </style>

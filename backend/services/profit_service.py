@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.audit import log_admin_action
 from core.config import settings
 from core.exceptions import ConflictException, ValidationException
+from core.transaction_locks import acquire_transaction_guard
 from models import Order, ProfitRecord, ProfitStatus, Setting
 from schemas.profit import PROFIT_KEYS, ProfitRatios
 
@@ -29,9 +30,12 @@ class ProfitService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_policy(self) -> tuple[int, ProfitRatios]:
+    async def get_policy(self, *, locked: bool = False) -> tuple[int, ProfitRatios]:
+        query = select(Setting).where(Setting.key == "profit_ratios")
+        if locked:
+            query = query.with_for_update().execution_options(populate_existing=True)
         result = await self.db.execute(
-            select(Setting).where(Setting.key == "profit_ratios")
+            query
         )
         setting = result.scalar_one_or_none()
         if not setting or not setting.value:
@@ -55,8 +59,12 @@ class ProfitService:
         ratios: ProfitRatios,
         actor: dict,
         request: Request,
+        expected_version: int | None = None,
     ) -> dict:
-        current_version, current_ratios = await self.get_policy()
+        await acquire_transaction_guard(self.db, "profit_policy")
+        current_version, current_ratios = await self.get_policy(locked=True)
+        if expected_version is not None and expected_version != current_version:
+            raise ConflictException("分润策略已被其他管理员更新，请刷新后重试")
         new_version = current_version + 1
         document = {"version": new_version, "ratios": _serialize_ratios(ratios)}
         result = await self.db.execute(

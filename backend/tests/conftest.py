@@ -34,6 +34,10 @@ slowapi.Limiter.limit = _noop_limit
 from database import Base, get_db  # noqa: E402
 from main import app  # noqa: E402
 
+# Business fixtures intentionally disable throttling; the independent-process
+# scripts/tests/test_backend_security_live.py proves the real limiter boundary.
+app.state.limiter.enabled = False
+
 # 测试数据库 URL (使用 SQLite 内存数据库)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

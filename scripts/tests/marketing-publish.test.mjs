@@ -118,7 +118,7 @@ test('GitHub artifact keeps history, builds direct public routes and embeds brow
     assert.equal(fs.readFileSync(path.join(f.checkout, '.git/HEAD'), 'utf8'), 'preserve')
     assert.equal(fs.existsSync(path.join(f.checkout, 'assets/old-12345678.js')), false)
     assert.equal(fs.existsSync(path.join(f.checkout, '.nojekyll')), true)
-    for (const name of ['index.html', '404.html', 'terms/index.html', 'user/terms/index.html', 'competition/index.html', 'course/index.html', 'tools/index.html', 'demo/index.html']) assert.match(fs.readFileSync(path.join(f.checkout, name), 'utf8'), /connect-src 'none'/)
+    for (const name of ['index.html', '404.html', 'terms/index.html', 'user/terms/index.html', 'competition/index.html', 'course/index.html', 'tools/index.html']) assert.match(fs.readFileSync(path.join(f.checkout, name), 'utf8'), /connect-src 'none'/)
   } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
 })
 
@@ -134,6 +134,30 @@ test('GitHub artifact refuses unknown target or incoming files before changing a
   }
 })
 
+test('GitHub artifact preserves route-specific SEO, terms canonical alias and sitemap', () => {
+  const f = pagesFixture()
+  try {
+    for (const route of ['competition', 'course', 'tools', 'terms', 'user/terms']) {
+      fs.mkdirSync(path.join(f.artifact, route), { recursive: true })
+      const canonicalPath = route === 'user/terms' ? 'terms' : route
+      fs.writeFileSync(path.join(f.artifact, route, 'index.html'), `<html><head><title>${route}</title><link rel="canonical" href="${f.publicUrl}/${canonicalPath}/"></head><body>route</body></html>`)
+    }
+    const sitemap = '<?xml version="1.0"?><urlset><url><loc>https://kst.github.io/tools/</loc></url></urlset>'
+    fs.writeFileSync(path.join(f.artifact, 'sitemap.xml'), sitemap)
+    prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl)
+    for (const route of ['competition', 'course', 'tools', 'terms', 'user/terms']) {
+      const html = fs.readFileSync(path.join(f.checkout, route, 'index.html'), 'utf8')
+      assert.match(html, /connect-src 'none'/)
+      assert.ok(html.includes(`<title>${route}</title>`))
+      assert.ok(html.includes(`href="${f.publicUrl}/${route === 'user/terms' ? 'terms' : route}/"`))
+    }
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'sitemap.xml'), 'utf8'), sitemap)
+    fs.mkdirSync(path.join(f.artifact, 'tools', 'private'))
+    fs.writeFileSync(path.join(f.artifact, 'tools', 'private', 'index.html'), 'not a public route')
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl), /未知目录/)
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+})
+
 test('GitHub artifact rejects a different site and traversal without deleting the old build', () => {
   const f = pagesFixture()
   try {
@@ -141,6 +165,24 @@ test('GitHub artifact rejects a different site and traversal without deleting th
     assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, [...f.tracked, '../index.html'], f.publicUrl))
     assert.equal(fs.existsSync(path.join(f.checkout, 'index.html')), true)
   } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+})
+
+test('GitHub artifact accepts hashed certificate JPEG assets but rejects unhashed originals', () => {
+  const f = pagesFixture()
+  try {
+    fs.mkdirSync(path.join(f.artifact, 'assets'))
+    const publicName = 'assets/competition-award-2025-redacted-12345678.jpg'
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    fs.writeFileSync(path.join(f.artifact, publicName), bytes)
+    prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl)
+    assert.deepEqual(fs.readFileSync(path.join(f.checkout, publicName)), bytes)
+    fs.writeFileSync(path.join(f.artifact, 'assets/original.jpg'), bytes)
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, [...f.tracked, publicName, '.nojekyll'], f.publicUrl))
+  } finally {
+    assert.equal(path.dirname(f.root), path.resolve(os.tmpdir()))
+    assert.match(path.basename(f.root), /^kst-pages-test-/)
+    fs.rmSync(f.root, { recursive: true, force: true })
+  }
 })
 
 function setFixturePublicUrl(directory, publicUrl) {

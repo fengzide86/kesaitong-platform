@@ -5,9 +5,9 @@
 ## 固定运行环境
 
 - Node.js 使用 22 系列，版本入口为仓库根目录 `.node-version`，`package.json` 的 `engines` 会拒绝不兼容的大版本。
-- 后端以 Python 3.10 为生产兼容基准。安装开发依赖时，`backend/requirements-dev.txt` 会自动引用 `backend/constraints-py310.txt` 固定传递依赖。
-- npm 始终使用 `npm ci` 和已提交的 `package-lock.json`。
-- 只有在有意调整 Python 依赖时才重新生成约束文件，并用 Python 3.10 环境验证；不得顺带升级业务依赖的大版本。先让 pip 用 `--dry-run --python-version 3.10 --only-binary=:all: --report <report.json>` 解析 `backend/requirements-dev.txt`，再执行 `python scripts/generate_python_constraints.py --report <report.json>`。
+- 后端候选基线是 Python 3.12。开发依赖引用 `backend/constraints-py312.txt`；Docker、CI 和部署解释器必须同轮迁移，不能以本地通过宣称生产已迁移。
+- npm 12.2.0 使用 `npm ci` 和已提交的 `package-lock.json`，不在共享 junction 安装或更新。
+- 有意更新 Python 依赖时，在独立 Python 3.12 环境对运行依赖与开发依赖列表做 `pip install --dry-run --ignore-installed --report <report.json>` 解析（避免旧约束阻止目标升级），再执行 `python scripts/generate_python_constraints.py --report <report.json>`，用新约束干净安装、闭包检查、漏洞扫描及完整回归。其他时候不重解版本。
 
 ## OpenAPI 契约
 

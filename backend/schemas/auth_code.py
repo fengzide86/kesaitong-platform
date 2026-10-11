@@ -2,9 +2,9 @@
 授权码相关 Schema
 """
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DeviceResponse(BaseModel):
@@ -17,21 +17,50 @@ class DeviceResponse(BaseModel):
 
 
 class AuthCodeGenerate(BaseModel):
-    plan_id: int | None = None
-    count: int = 1
-    duration_days: int | None = None
-    max_devices: int | None = None
+    plan_id: int | None = Field(default=None, ge=1)
+    count: int = Field(default=1, ge=1, le=1000)
+    duration_days: int | None = Field(default=None, ge=1, le=3650)
+    max_devices: int | None = Field(default=None, ge=1, le=1000)
     platform_scope: str | None = "amazon"
-    scene_type: str | None = "competition"
-    seat_limit: int | None = None
+    scene_type: Literal["competition", "course", "operations"] | None = "competition"
+    seat_limit: int | None = Field(default=None, ge=1, le=1000)
+
+    @field_validator("platform_scope")
+    @classmethod
+    def validate_scope(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        platforms = list(dict.fromkeys(part.strip() for part in value.split(",") if part.strip()))
+        if not platforms or not set(platforms).issubset({"amazon", "aliexpress"}):
+            raise ValueError("平台范围必须为 amazon 或 aliexpress")
+        return ",".join(platforms)
 
 
 class AuthCodeUpdate(BaseModel):
-    status: str | None = None
+    status: Literal["unused", "active", "frozen", "expired", "deleted"] | None = None
     expires_at: str | None = None
-    device_id: str | None = None
-    device_name: str | None = None
-    max_devices: int | None = None
+    device_id: str | None = Field(default=None, max_length=200)
+    device_name: str | None = Field(default=None, max_length=200)
+    max_devices: int | None = Field(default=None, ge=1, le=1000)
+
+    @field_validator("expires_at")
+    @classmethod
+    def validate_expiry(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        parsed = datetime.fromisoformat(value)
+        # Existing terms use server-local wall time; offset-aware input is
+        # converted, not stripped and silently reinterpreted.
+        if parsed.tzinfo:
+            parsed = parsed.astimezone().replace(tzinfo=None)
+            return parsed.isoformat()
+        return value
+
+
+class AuthCodeExtend(BaseModel):
+    days: int = Field(ge=1, le=3650)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AuthCodeResponse(BaseModel):

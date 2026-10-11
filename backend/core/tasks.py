@@ -68,7 +68,7 @@ class TaskManager:
         # 等待任务完成
         try:
             await asyncio.wait_for(asyncio.gather(*self._tasks, return_exceptions=True), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"任务关闭超时 ({timeout}s)，强制结束")
 
         logger.info("任务管理器已关闭")

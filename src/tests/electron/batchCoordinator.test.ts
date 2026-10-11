@@ -44,6 +44,7 @@ describe('BatchCoordinator', () => {
     const { coordinator, runners } = createHarness('demo')
     await coordinator.startItem('one', {})
     runners[0].options.onEvent({ type: 'run.failed', error: { message: '失败' } })
+    await Promise.resolve() // release the execution lease only once stop settles
     await coordinator.startItem('two', {})
     runners[1].options.onEvent({ type: 'run.completed' })
     expect(coordinator.snapshot().status).toBe('completed')

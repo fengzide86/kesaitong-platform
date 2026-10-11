@@ -35,18 +35,23 @@ if not exist "%PYTHON%" (
     where py >nul 2>&1
     if not errorlevel 1 (
         echo [INFO] Creating Python virtual environment...
-        py -3 -m venv "%VENV_DIR%"
+        py -3.12 -m venv "%VENV_DIR%"
     ) else (
         where python >nul 2>&1
         if errorlevel 1 (
-            echo [ERROR] Python 3 was not found.
+            echo [ERROR] Python 3.12 was not found.
             goto :failed
         )
         echo [INFO] Creating Python virtual environment...
+        python -c "import sys; assert sys.version_info[:2] == (3, 12), 'Python 3.12 is required'"
+        if errorlevel 1 goto :failed
         python -m venv "%VENV_DIR%"
     )
     if errorlevel 1 goto :failed
 )
+
+"%PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 12), 'Use a separate Python 3.12 environment; existing environments will not be modified'"
+if errorlevel 1 goto :failed
 
 if not exist "%TOOLBOX_RUNTIME_DIR%" (
     mkdir "%TOOLBOX_RUNTIME_DIR%"
@@ -58,14 +63,14 @@ rem repaired whenever a newly required runtime dependency is missing.
 "%PYTHON%" -c "import main" >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Installing backend dependencies...
-    "%PYTHON%" -m pip install -r requirements.txt
+    "%PYTHON%" -m pip install -c constraints-py312.txt -r requirements.txt
     if errorlevel 1 goto :failed
 )
 
 "%PYTHON%" -m pip check >nul 2>&1
 if errorlevel 1 (
     echo [INFO] Repairing inconsistent backend dependencies...
-    "%PYTHON%" -m pip install -r requirements.txt
+    "%PYTHON%" -m pip install -c constraints-py312.txt -r requirements.txt
     if errorlevel 1 goto :failed
     "%PYTHON%" -m pip check >nul 2>&1
     if errorlevel 1 goto :failed

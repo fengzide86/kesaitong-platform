@@ -99,13 +99,15 @@ export class RecoveryStore {
     this.save([...this.records.map(row => consumed.has(row.id) ? { ...row, consumedBy: consumed.get(row.id)! } : row), ...rows])
     return rows.map(row => this.public(row))
   }
-  begin(owner: string, tool: Input, input: Input, options: { batchId?: string; itemId?: string; originalRow?: number; retryOf?: string } = {}): RecoveryRecord {
+  begin(owner: string, tool: Input, input: Input, options: { batchId?: string; itemId?: string; originalRow?: number; retryOf?: string; legacyInput?: Input } = {}): RecoveryRecord {
     this.assertAvailable()
     const inputHash = recoveryInputHash(input)
     const toolId = String(tool.id)
     const grant = (tool.launchGrant || {}) as Input
     const toolVersion = String(grant.toolVersion || tool.version || tool.tool_version || '1.0.0')
-    const prior = this.records.filter(row => row.owner === owner && row.toolId === toolId && row.inputHash === inputHash).at(-1)
+    // A pre-upgrade path-only record must not silently become a fresh attempt.
+    const legacyHash = options.legacyInput ? recoveryInputHash(options.legacyInput) : null
+    const prior = this.records.filter(row => row.owner === owner && row.toolId === toolId && (row.inputHash === inputHash || row.inputHash === legacyHash)).at(-1)
     if (prior?.executionStatus === 'queued' && options.retryOf !== prior.id) throw error('RECOVERY_REVIEW_REQUIRED', '相同输入仍在原批次排队，不能从其它入口重复执行。')
     if (prior && !retryable(prior)) throw error('RECOVERY_REVIEW_REQUIRED', prior.classification === 'verified' || prior.classification === 'manual_completed' ? '相同输入已有已完成记录，已阻止重复执行。' : '相同输入的结果尚待核对，请先核对平台状态。')
     if (options.retryOf && prior?.id !== options.retryOf) throw error('RECOVERY_INPUT_CHANGED', '原始输入与恢复记录不匹配，请重新选择原文件。')

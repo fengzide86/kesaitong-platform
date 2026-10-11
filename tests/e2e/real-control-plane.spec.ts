@@ -448,7 +448,9 @@ test('代理真实交付闭环：建档、提交订单、负责人收款发放�
     expect(support.order_id).toBe(order.id)
     await expect(page.locator('.el-table__row').filter({ hasText: supportContent })).toContainText('待处理')
 
-    await owner.getByRole('navigation', { name: '代理管理分区' }).getByRole('button', { name: '售后申请' }).click()
+    await owner.getByRole('navigation', { name: '管理工作区' }).getByRole('link', { name: '售后支持', exact: true }).click()
+    await owner.getByRole('navigation', { name: '售后支持页面' }).getByRole('link', { name: '代理售后', exact: true }).click()
+    await expect(owner).toHaveURL(/#\/admin\/agency\?section=requests/)
     await owner.locator('.el-table__row').filter({ hasText: supportContent }).getByRole('button', { name: '查看详情' }).click()
     ownerDrawer = owner.locator('.el-drawer:visible').last()
     await ownerDrawer.getByPlaceholder('说明实际处理情况，不把未完成的退款或延期描述为已完成。').fill(supportReply)

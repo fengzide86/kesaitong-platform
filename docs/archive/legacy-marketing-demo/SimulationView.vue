@@ -1,3 +1,4 @@
+<!-- Archived superseded prototype; not a current website entry or build input. -->
 <template>
   <MarketingShell>
     <div class="simulation" ref="root" data-testid="simulation">

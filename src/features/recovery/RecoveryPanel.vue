@@ -13,7 +13,7 @@
       </div>
       <p v-if="!record.retryAllowed" class="recovery-warning">当前不能重新执行：请先核对结果并记录结论。</p>
     </article>
-    <footer v-if="visibleRecords.length"><button type="button" :disabled="busy" @click="exportRows">导出失败及待核对行</button><button v-for="batchId in retryBatches" :key="batchId" type="button" :disabled="busy || workspace.isActive" @click="prepareBatch(batchId)">重新选择原文件，准备可重试行</button></footer>
+    <footer v-if="visibleRecords.length"><button type="button" :disabled="busy" @click="exportRows">导出失败及待核对行</button><button v-for="retryBatchId in retryBatches" :key="retryBatchId" type="button" :disabled="busy || workspace.isActive" @click="prepareBatch(retryBatchId)">重新选择原文件，准备可重试行</button></footer>
     <el-dialog v-model="reviewOpen" title="记录平台核对结论" width="min(500px, 94vw)">
       <p>请实际查看同一商品、订单或活动的列表/详情。这里记录的是你的核对结论，不是 Runner 验收成功。</p>
       <label class="review-check"><input v-model="checked" type="checkbox" />我已在平台查看同一业务对象的当前状态</label>

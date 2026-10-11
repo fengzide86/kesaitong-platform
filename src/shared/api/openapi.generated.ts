@@ -69,10 +69,11 @@ export interface components {
     "AnnouncementUpdate": { "app_version"?: string | null; "audience"?: "all" | "consumer" | "business" | null; "category"?: "system" | "update" | "activity" | "maintenance" | null; "content"?: string | null; "expires_at"?: string | null; "presentation"?: "banner" | "modal" | null; "priority"?: number | null; "severity"?: "info" | "important" | "critical" | null; "starts_at"?: string | null; "status"?: "draft" | "published" | "expired" | null; "title"?: string | null; "type"?: string | null }
     "AuthCodeBatchGenerateResponse": { "codes": Array<string>; "count": number; "success": boolean }
     "AuthCodeDeleteResponse": { "success": boolean }
-    "AuthCodeGenerate": { "count"?: number; "duration_days"?: number | null; "max_devices"?: number | null; "plan_id"?: number | null; "platform_scope"?: string | null; "scene_type"?: string | null; "seat_limit"?: number | null }
+    "AuthCodeExtend": { "days": number }
+    "AuthCodeGenerate": { "count"?: number; "duration_days"?: number | null; "max_devices"?: number | null; "plan_id"?: number | null; "platform_scope"?: string | null; "scene_type"?: "competition" | "course" | "operations" | null; "seat_limit"?: number | null }
     "AuthCodePageResponse": { "data": Array<components['schemas']["AuthCodeResponse"]>; "page": number; "page_size": number; "total": number }
     "AuthCodeResponse": { "code": string; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "device_used"?: number | null; "devices"?: Array<components['schemas']["DeviceResponse"]>; "entitlements"?: {  }; "expires_at"?: string | null; "id": number; "max_devices"?: number | null; "plan_id"?: number | null; "plan_name"?: string | null; "platform_scope"?: Array<string> | null; "product_type"?: string; "scene_type"?: string | null; "seat_limit"?: number | null; "seat_used"?: number | null; "status": string; "user_id"?: number | null }
-    "AuthCodeUpdate": { "device_id"?: string | null; "device_name"?: string | null; "expires_at"?: string | null; "max_devices"?: number | null; "status"?: string | null }
+    "AuthCodeUpdate": { "device_id"?: string | null; "device_name"?: string | null; "expires_at"?: string | null; "max_devices"?: number | null; "status"?: "unused" | "active" | "frozen" | "expired" | "deleted" | null }
     "AuthStatusResponse": { "data"?: components['schemas']["StaffContextResponse"] | components['schemas']["UserAuthStatusData"] | components['schemas']["LegacyAdminStatusData"] | null; "error_code"?: number | null; "message": string; "success": boolean }
     "BatchCreate": { "client_batch_id": string; "tool_id": string; "tool_name": string; "total_count": number }
     "BatchFinish": { "status": "completed" | "cancelled" | "interrupted" }
@@ -166,7 +167,6 @@ export interface components {
     "FAQListResponse": { "data": components['schemas']["FAQListData"]; "message": string; "success": true }
     "FeatureDisabledDetail": { "code": string; "message": string }
     "FeatureDisabledDetailResponse": { "code": string; "message": string; "reason"?: string | null }
-    "FeatureDisabledResponse-Output": { "detail": components['schemas']["FeatureDisabledDetail"] }
     "FeedbackCreate": { "content"?: string | null; "screenshot"?: string | null; "title"?: string | null; "user_id"?: number | null }
     "FeedbackDeleteEnvelope": { "data"?: null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "FeedbackDetailEnvelope": { "data"?: components['schemas']["FeedbackDetailResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
@@ -175,7 +175,7 @@ export interface components {
     "FeedbackListEnvelope": { "data"?: Array<components['schemas']["FeedbackSummaryResponse"]> | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "FeedbackStatsEnvelope": { "data"?: components['schemas']["FeedbackStatsResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "FeedbackStatsResponse": { "pending": number; "processing": number; "resolved": number; "total": number }
-    "FeedbackSummaryResponse": { "admin_reply"?: string | null; "capability_key"?: string | null; "content": string; "created_at"?: string | null; "id": number; "platform_key"?: string | null; "priority": string; "status": string; "title": string; "tool_id"?: string | null; "user_id"?: number | null }
+    "FeedbackSummaryResponse": { "admin_reply"?: string | null; "capability_key"?: string | null; "content": string; "created_at"?: string | null; "id": number; "platform_key"?: string | null; "priority": string; "replied_at"?: string | null; "status": string; "title": string; "tool_id"?: string | null; "updated_at"?: string | null; "user_id"?: number | null }
     "FeedbackUpdate": { "admin_reply"?: string | null; "status"?: string | null }
     "FreightRateManifestResponse": { "artifactSha256": string; "artifactUrl": string; "packId": components['schemas']["JsonValue"]; "resourceType": string; "schemaVersion": number; "version": components['schemas']["JsonValue"]; [key: string]: unknown }
     "FreightRateReleaseEnvelope": { "data": components['schemas']["FreightRateReleaseResponse"]; "message": string; "success": true }
@@ -201,6 +201,7 @@ export interface components {
     "LaunchGrantDataResponse": { "expires_at": string; "expires_in": number; "launch_data": components['schemas']["LaunchDataResponse"]; "token": string }
     "LaunchGrantSuccessResponse": { "data": components['schemas']["LaunchGrantDataResponse"]; "message": string; "success": true }
     "LaunchGrantVerifyDataResponse": { "auth_code_id": number; "client_batch_id": string | null; "client_item_id": string | null; "device_id": string; "execution_mode": string; "platform_key": string; "script_key": string; "tool_id": string; "user_id": number; "valid": true }
+    "LaunchGrantVerifyRequest": { "token": string }
     "LaunchGrantVerifySuccessResponse": { "data": components['schemas']["LaunchGrantVerifyDataResponse"]; "message": string; "success": true }
     "LegacyAdminStatusData": { "role": "admin" }
     "LegacyAdminUserInfoData": { "name": string; "role": "admin"; "user_id": number }
@@ -210,7 +211,7 @@ export interface components {
     "LogResponse": { "auth_code_id"?: number | null; "capability_key"?: string | null; "created_at"?: string | null; "detail"?: string | null; "device_id"?: string | null; "error_code"?: string | null; "id": number; "module"?: string | null; "platform_key"?: string | null; "script_key"?: string | null; "status"?: string | null; "tool_id"?: string | null; "tool_name"?: string | null; "user_id"?: number | null; "verification_state"?: string }
     "OrderCreate": { "amount"?: number | string | null; "channel"?: string | null; "plan_id": number; "platform_key"?: string | null; "responsible"?: string | null }
     "OrderPageResponse": { "data"?: Array<components['schemas']["OrderResponse"]> | null; "message"?: string; "page": number; "page_size": number; "success"?: boolean; "total": number; "total_pages"?: number | null }
-    "OrderResponse": { "amount": number; "cancel_reason"?: string | null; "cancelled_at"?: string | null; "channel"?: string | null; "created_at"?: string | null; "created_by_staff_id"?: number | null; "id": number; "order_no": string; "paid_at"?: string | null; "plan_duration_days_snapshot": number; "plan_id"?: number | null; "plan_name_snapshot": string; "plan_price_snapshot": number; "platform_key"?: string | null; "refund_amount": number; "refund_reason"?: string | null; "refunded_at"?: string | null; "responsible"?: string | null; "status": string; "updated_at"?: string | null; "updated_by_staff_id"?: number | null }
+    "OrderResponse": { "agency_id"?: number | null; "agency_name"?: string | null; "amount": number; "auth_code_id"?: number | null; "auth_code_status"?: string | null; "cancel_reason"?: string | null; "cancelled_at"?: string | null; "channel"?: string | null; "created_at"?: string | null; "created_by_staff_id"?: number | null; "customer_id"?: number | null; "customer_name"?: string | null; "id": number; "order_no": string; "paid_at"?: string | null; "plan_duration_days_snapshot": number; "plan_id"?: number | null; "plan_name_snapshot": string; "plan_price_snapshot": number; "platform_key"?: string | null; "refund_amount": number; "refund_reason"?: string | null; "refunded_at"?: string | null; "responsible"?: string | null; "status": string; "updated_at"?: string | null; "updated_by_staff_id"?: number | null }
     "OrderTransitionRequest": { "reason": string }
     "OrderUpdate": { "amount"?: number | string | null; "channel"?: string | null; "plan_id"?: number | null; "platform_key"?: string | null; "responsible"?: string | null }
     "PaginatedDemoBatches": { "data": Array<components['schemas']["DemoBatchResponse"]>; "page": number; "page_size": number; "total": number }
@@ -229,7 +230,7 @@ export interface components {
     "PlanUpdate": { "code_prefix"?: string | null; "duration_days"?: number | null; "entitlements"?: {  } | null; "expected_price"?: number | string | null; "features"?: string | null; "name"?: string | null; "price"?: number | string | null; "product_type"?: "consumer" | "business" | null; "sort_order"?: number | null }
     "ProfitBreakdownResponse": { "coordination": number; "grand_total": number; "market": number; "product": number; "record": number; "service": number; "tech": number }
     "ProfitPolicyResponse": { "ratios": components['schemas']["ProfitRatios-Output"]; "version": number }
-    "ProfitPolicyUpdate": { "ratios": components['schemas']["ProfitRatios-Input"] }
+    "ProfitPolicyUpdate": { "expected_version"?: number | null; "ratios": components['schemas']["ProfitRatios-Input"] }
     "ProfitRatios-Input": { "coordination": number | string; "market": number | string; "product": number | string; "record": number | string; "service": number | string; "tech": number | string }
     "ProfitRatios-Output": { "coordination": string; "market": string; "product": string; "record": string; "service": string; "tech": string }
     "ProfitRecordPageResponse": { "data"?: Array<components['schemas']["ProfitRecordResponse"]> | null; "message"?: string; "page": number; "page_size": number; "success"?: boolean; "total": number; "total_pages"?: number | null }
@@ -270,16 +271,16 @@ export interface components {
     "UpdateReleaseResponse": { "files": Array<components['schemas']["UpdateFileResponse"]>; "is_latest"?: boolean | null; "manifest"?: {  } | null; "published_at"?: string | null; "staged_at"?: string | null; "status": string; "version": string }
     "UserAuthStatusData": { "business_workspace_enabled": boolean; "device_used": number; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "max_devices": number; "plan_code"?: string | null; "plan_name": string; "product_type": string; "role": "user"; "seat_limit": number; "seat_used": number }
     "UserDetailEnvelope": { "data"?: components['schemas']["UserDetailResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
-    "UserDetailResponse": { "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "last_active_at"?: string | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null; "updated_at"?: string | null }
+    "UserDetailResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "last_active_at"?: string | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null; "updated_at"?: string | null }
     "UserDevicesEnvelope": { "data"?: Array<components['schemas']["schemas__user__UserDeviceResponse"]> | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserInfoData": { "business_workspace_enabled": boolean; "device_id"?: string | null; "device_name"?: string | null; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "name": string; "plan_code"?: string | null; "plan_name": string; "product_type": string; "role": "user"; "user_id": number }
     "UserItemEnvelope": { "data"?: components['schemas']["UserSummaryResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserListEnvelope": { "data"?: Array<components['schemas']["UserSummaryResponse"]> | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserStatsEnvelope": { "data"?: components['schemas']["UserStatsResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserStatsResponse": { "active_users": number; "today_new": number; "total_users": number }
-    "UserSummaryResponse": { "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null }
+    "UserSummaryResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null }
     "UserUpdate": { "extra_devices"?: number | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null }
-    "ValidationError": { "loc": Array<string | number>; "msg": string; "type": string }
+    "ValidationError": { "ctx"?: {  }; "input"?: unknown; "loc": Array<string | number>; "msg": string; "type": string }
     "VerifyData": { "business_workspace_enabled": boolean; "code": string; "device_id"?: string | null; "device_used": number; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "max_devices": number; "plan_code"?: string | null; "plan_name": string; "platform_scope": Array<string>; "product_type": string; "scene_type"?: string | null; "seat_limit": number; "seat_used": number; "token": string; "user_id": number }
     "VerifyRequest": { "code": string; "device_id": string; "device_name": string }
     "VerifyResponse": { "data"?: components['schemas']["VerifyData"] | null; "error_code"?: number | null; "message": string; "success": boolean }
@@ -300,7 +301,7 @@ export interface operations {
   "get_business_batch_api_admin_business_batches__batch_id__get": {
     parameters: { "path": { "batch_id": number } }
     requestBody: never
-    responses: { "200": components['schemas']["FeatureDisabledResponse-Output"]; "409": components['schemas']["domains__platform__action_center_schemas__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
+    responses: { "200": components['schemas']["domains__platform__action_center_schemas__FeatureDisabledResponse"]; "409": components['schemas']["domains__platform__action_center_schemas__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "agencies_api_agency_agencies_get": {
     parameters: { "query": { "page"?: number; "page_size"?: number; "q"?: string | null; "status"?: "active" | "disabled" | null } }
@@ -373,7 +374,7 @@ export interface operations {
     responses: { "200": components['schemas']["CustomerEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "licenses_api_agency_licenses_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number; "agency_id"?: number | null; "status"?: string | null; "q"?: string | null } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "agency_id"?: number | null; "status"?: string | null; "q"?: string | null; "customer_id"?: number | null } }
     requestBody: never
     responses: { "200": components['schemas']["AgencyLicensesEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -418,7 +419,7 @@ export interface operations {
     responses: { "200": components['schemas']["AgencyPlansEnvelope"] }
   }
   "requests_api_agency_requests_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number; "agency_id"?: number | null; "status"?: "open" | "resolved" | "rejected" | null; "q"?: string | null } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "agency_id"?: number | null; "status"?: "open" | "resolved" | "rejected" | null; "q"?: string | null; "customer_id"?: number | null } }
     requestBody: never
     responses: { "200": components['schemas']["AgencyRequestsEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -558,7 +559,7 @@ export interface operations {
     responses: { "200": components['schemas']["APIResponse_AnnouncementReceiptResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_auth_codes_api_auth_codes_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number; "platform_key"?: string | null; "include_deleted"?: boolean } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "platform_key"?: string | null; "include_deleted"?: boolean; "keyword"?: string | null; "product_type"?: "consumer" | "business" | null; "status"?: "unused" | "active" | "frozen" | "expired" | "deleted" | null } }
     requestBody: never
     responses: { "200": components['schemas']["AuthCodePageResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -568,7 +569,7 @@ export interface operations {
     responses: { "200": components['schemas']["AuthCodeBatchGenerateResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_auth_code_detail_api_auth_codes__code_id__get": {
-    parameters: { "path": { "code_id": number } }
+    parameters: { "path": { "code_id": number }; "query": { "platform_key"?: string | null } }
     requestBody: never
     responses: { "200": components['schemas']["AuthCodeResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -581,6 +582,11 @@ export interface operations {
     parameters: { "path": { "code_id": number } }
     requestBody: never
     responses: { "200": components['schemas']["AuthCodeDeleteResponse"]; "422": components['schemas']["HTTPValidationError"] }
+  }
+  "extend_auth_code_api_auth_codes__code_id__extend_post": {
+    parameters: { "path": { "code_id": number } }
+    requestBody: components['schemas']["AuthCodeExtend"]
+    responses: { "200": components['schemas']["AuthCodeResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "admin_login_api_auth_admin_login_post": {
     parameters: never
@@ -868,7 +874,7 @@ export interface operations {
     responses: { "200": components['schemas']["APIResponse_ExpenseRecordResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_feedback_list_api_feedback_get": {
-    parameters: { "query": { "status"?: string | null; "platform_key"?: string | null; "page"?: number; "page_size"?: number } }
+    parameters: { "query": { "status"?: string | null; "user_id"?: number | null; "platform_key"?: string | null; "page"?: number; "page_size"?: number } }
     requestBody: never
     responses: { "200": components['schemas']["FeedbackListEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -888,7 +894,7 @@ export interface operations {
     responses: { "200": components['schemas']["FeedbackStatsEnvelope"] }
   }
   "get_feedback_api_feedback__feedback_id__get": {
-    parameters: { "path": { "feedback_id": number } }
+    parameters: { "path": { "feedback_id": number }; "query": { "platform_key"?: string | null } }
     requestBody: never
     responses: { "200": components['schemas']["FeedbackDetailEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -980,7 +986,7 @@ export interface operations {
   "retrieval_test_api_knowledge_retrieval_test_post": {
     parameters: never
     requestBody: components['schemas']["RetrievalTestRequest"]
-    responses: { "200": components['schemas']["FeatureDisabledResponse-Output"]; "409": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
+    responses: { "200": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"]; "409": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_stats_api_knowledge_stats_get": {
     parameters: never
@@ -990,7 +996,7 @@ export interface operations {
   "sync_to_vector_api_knowledge_sync_vector_post": {
     parameters: never
     requestBody: never
-    responses: { "200": components['schemas']["FeatureDisabledResponse-Output"]; "409": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"] }
+    responses: { "200": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"]; "409": components['schemas']["schemas__ai_chat__FeatureDisabledResponse"] }
   }
   "get_knowledge_api_knowledge__knowledge_id__get": {
     parameters: { "path": { "knowledge_id": number } }
@@ -1028,7 +1034,7 @@ export interface operations {
     responses: { "200": Array<string>; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_orders_api_orders_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number; "status"?: string | null; "plan_id"?: number | null; "platform_key"?: string | null } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "status"?: string | null; "plan_id"?: number | null; "platform_key"?: string | null; "source"?: "direct" | "agency" | null } }
     requestBody: never
     responses: { "200": components['schemas']["OrderPageResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1038,12 +1044,12 @@ export interface operations {
     responses: { "201": components['schemas']["APIResponse_OrderResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "export_orders_api_orders_export_get": {
-    parameters: { "query": { "status"?: string | null; "start_date"?: string | null; "end_date"?: string | null; "platform_key"?: string | null } }
+    parameters: { "query": { "status"?: string | null; "start_date"?: string | null; "end_date"?: string | null; "platform_key"?: string | null; "source"?: "direct" | "agency" | null } }
     requestBody: never
     responses: { "200": unknown; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_order_api_orders__order_id__get": {
-    parameters: { "path": { "order_id": number } }
+    parameters: { "path": { "order_id": number }; "query": { "platform_key"?: string | null } }
     requestBody: never
     responses: { "200": components['schemas']["APIResponse_OrderResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1163,7 +1169,7 @@ export interface operations {
     responses: { "200": Array<components['schemas']["SettingResponse"]> }
   }
   "list_accounts_api_staff_accounts_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "q"?: string } }
     requestBody: never
     responses: { "200": components['schemas']["StaffAccountListEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1253,13 +1259,13 @@ export interface operations {
     responses: { "200": components['schemas']["ConfigUpdateResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "verify_launch_token_api_tools_launch_grant_verify_post": {
-    parameters: { "query": { "token": string } }
-    requestBody: never
+    parameters: { "query": { "token"?: string | null } }
+    requestBody: components['schemas']["LaunchGrantVerifyRequest"] | null
     responses: { "200": components['schemas']["LaunchGrantVerifySuccessResponse"] | components['schemas']["ToolOperationErrorResponse"]; "409": components['schemas']["schemas__tools__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "verify_launch_token_api_tools_launch_token_verify_post": {
-    parameters: { "query": { "token": string } }
-    requestBody: never
+    parameters: { "query": { "token"?: string | null } }
+    requestBody: components['schemas']["LaunchGrantVerifyRequest"] | null
     responses: { "200": components['schemas']["LaunchGrantVerifySuccessResponse"] | components['schemas']["ToolOperationErrorResponse"]; "409": components['schemas']["schemas__tools__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_platforms_api_tools_platforms_get": {
@@ -1308,7 +1314,7 @@ export interface operations {
     responses: { "200": components['schemas']["APIResponse_NoneType_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_users_api_users_get": {
-    parameters: { "query": { "keyword"?: string | null; "page"?: number; "page_size"?: number } }
+    parameters: { "query": { "keyword"?: string | null; "platform_key"?: string | null; "auth_code_id"?: number | null; "page"?: number; "page_size"?: number } }
     requestBody: never
     responses: { "200": components['schemas']["UserListEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1318,7 +1324,7 @@ export interface operations {
     responses: { "200": components['schemas']["UserStatsEnvelope"] }
   }
   "get_user_api_users__user_id__get": {
-    parameters: { "path": { "user_id": number } }
+    parameters: { "path": { "user_id": number }; "query": { "platform_key"?: string | null } }
     requestBody: never
     responses: { "200": components['schemas']["UserDetailEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1482,6 +1488,9 @@ export interface paths {
     get: operations["get_auth_code_detail_api_auth_codes__code_id__get"]
     put: operations["update_auth_code_api_auth_codes__code_id__put"]
     delete: operations["delete_auth_code_api_auth_codes__code_id__delete"]
+  }
+  "/api/auth-codes/{code_id}/extend": {
+    post: operations["extend_auth_code_api_auth_codes__code_id__extend_post"]
   }
   "/api/auth/admin-login": {
     post: operations["admin_login_api_auth_admin_login_post"]

@@ -29,6 +29,18 @@ beforeEach(() => {
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
 describe('B support entry independent of execution', () => {
+  it('shows the real ticket number, state and reply timestamp for support follow-up', async () => {
+    mocks.getMyFeedbacks.mockResolvedValue([{ id: 42, title: '资料准备', status: 'processing', admin_reply: '请补充错误提示。', replied_at: '2026-10-11T03:30:00Z' }])
+    const wrapper = render()
+    await flushPromises()
+    const card = wrapper.get('article')
+    expect(card.text()).toContain('工单 #42')
+    expect(card.text()).toContain('处理中')
+    expect(card.text()).toContain('最近回复')
+    expect(card.text()).toContain('请补充错误提示。')
+    expect(card.text()).not.toContain('已解决')
+  })
+
   it('loads existing account replies and accepts a help request before importing or creating a batch', async () => {
     const wrapper = render()
     await flushPromises()

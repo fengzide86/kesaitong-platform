@@ -29,6 +29,7 @@ class ProfitRatios(BaseModel):
 
 class ProfitPolicyUpdate(BaseModel):
     ratios: ProfitRatios
+    expected_version: int | None = Field(default=None, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 

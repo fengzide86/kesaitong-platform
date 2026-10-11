@@ -22,7 +22,7 @@
           <el-icon><Search /></el-icon>
         </template>
       </el-input>
-      <template #summary>共 {{ filteredUsers.length }} 个用户</template>
+      <template #summary>共 {{ total }} 个用户 · 本页 {{ users.length }} 个</template>
     </DataToolbar>
 
     <el-card
@@ -120,6 +120,7 @@
               >
             </template>
             <template v-else>
+              <el-button size="small" @click="openUserDrawer(row, false)">详情</el-button>
               <el-button v-if="canWrite" size="small" @click="startEdit(row)"
                 >编辑</el-button
               >
@@ -131,13 +132,23 @@
           <div class="empty-state">暂无用户数据</div>
         </template>
       </el-table>
+      <div class="user-pagination"><el-pagination :current-page="page" :page-size="pageSize" :total="total" :pager-count="5" layout="prev, pager, next" @current-change="changePage" /></div>
     </el-card>
 
     <AdminDetailDrawer
       v-model="showUserDrawer"
       :title="drawerEditing ? '编辑用户' : '用户详情'"
+      @update:model-value="onDrawerVisibility"
     >
+      <div v-if="detailLoading" class="empty-state">正在读取用户…</div>
+      <div v-else-if="detailError" class="detail-error" role="alert">{{ detailError }}</div>
       <div v-if="detailUser" class="user-detail-list">
+        <div class="context-actions">
+          <span>用户 #{{ detailUser.id }}</span>
+          <el-button v-if="detailUser.auth_code_id" size="small" @click="openAuthorization">授权与设备</el-button>
+          <el-button size="small" @click="openFeedback">关联工单</el-button>
+          <span v-if="!detailUser.auth_code_id" class="readonly-label">未关联授权</span>
+        </div>
         <label
           ><span>用户名</span
           ><el-input v-if="drawerEditing" v-model="detailUser.name" /><strong
@@ -184,12 +195,15 @@
         >
       </div>
       <template #footer>
-        <el-button @click="showUserDrawer = false">{{
+        <el-button v-if="returnPath" @click="router.push(returnPath)">返回来源</el-button>
+        <el-button @click="closeDrawer">{{
           drawerEditing ? "取消" : "关闭"
         }}</el-button>
         <el-button
           v-if="drawerEditing && canWrite"
           type="primary"
+          :loading="isSaving"
+          :disabled="detailLoading || !!detailError"
           @click="saveDrawerUser"
           >保存</el-button
         >
@@ -199,8 +213,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { getUsers, updateUser } from "@/utils/api";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { useRouter } from "vue-router";
+import { getUsersPage, getUser, updateUser } from "@/utils/api";
+import { usePlatformStore } from "@/stores/platform";
+import { contextId, contextText, supportReturnPath, supportSourcePath } from "@/features/admin/supportContext";
 import { showToast } from "@/utils";
 import { Search } from "@element-plus/icons-vue";
 import DataToolbar from "@/components/DataToolbar.vue";
@@ -222,7 +239,22 @@ import {
 } from "@/features/async/state";
 
 const users = ref<AdminUser[]>([]);
-const searchText = ref("");
+const router = useRouter();
+const platformStore = usePlatformStore();
+const query = () => router?.currentRoute.value.query || {};
+const searchText = ref(contextText(query().keyword));
+const page = ref(contextId(query().page) || 1);
+const pageSize = 20;
+const total = ref(0);
+let loadSequence = 0;
+let detailSequence = 0;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let restoringQuery = false;
+const selectedUserId = ref<number | undefined>();
+const detailLoading = ref(false);
+const detailError = ref('');
+const isSaving = ref(false);
+const returnPath = computed(() => supportReturnPath(query().return_to, authService.getRole()));
 const editingUser = ref<AdminUser | null>(null);
 const isCompact = useCompactLayout();
 const showUserDrawer = ref(false);
@@ -234,17 +266,10 @@ const canWrite = computed(() =>
 const loadState = ref<AsyncDataState>("loading");
 const loadError = ref("");
 
-const filteredUsers = computed(() => {
-  if (!searchText.value) return users.value;
-  const q = searchText.value.toLowerCase();
-  return users.value.filter(
-    (u) =>
-      (u.name && u.name.toLowerCase().includes(q)) ||
-      (u.device_name && u.device_name.toLowerCase().includes(q)) ||
-      (u.device_id && u.device_id.toLowerCase().includes(q)) ||
-      (u.phone && u.phone.includes(q)),
-  );
-});
+const filteredUsers = computed(() => users.value);
+function scopeParams() { return platformStore.adminPlatform === 'all' ? {} : { platform_key: platformStore.adminPlatform }; }
+function syncQuery(extra: Record<string, string | undefined> = {}) { if (router) void router.replace({ path: '/admin/users', query: { ...query(), page: String(page.value), keyword: searchText.value || undefined, ...extra } }); }
+function changePage(value: number) { page.value = value; syncQuery(); void loadData(); }
 
 function formatTime(timeStr?: string | null) {
   if (!timeStr) return "-";
@@ -254,7 +279,7 @@ function formatTime(timeStr?: string | null) {
 
 function startEdit(user: unknown) {
   if (!canWrite.value) return;
-  editingUser.value = { ...adminUserSchema.parse(user) };
+  openUserDrawer(user, true);
 }
 
 async function saveUser(user: unknown) {
@@ -276,35 +301,78 @@ async function saveUser(user: unknown) {
 }
 
 function openUserDrawer(user: unknown, editing: boolean) {
-  detailUser.value = { ...adminUserSchema.parse(user) };
-  drawerEditing.value = editing && canWrite.value;
-  showUserDrawer.value = true;
+  const id = Number(adminUserSchema.parse(user).id);
+  syncQuery({ user_id: String(id) });
+  void openUser(id, editing);
 }
 
-async function saveDrawerUser() {
-  if (!canWrite.value || !detailUser.value) return;
+async function openUser(id: number, editing = false) {
+  const sequence = ++detailSequence;
+  selectedUserId.value = id;
+  detailUser.value = null;
+  detailError.value = '';
+  detailLoading.value = true;
+  isSaving.value = false;
+  drawerEditing.value = editing && canWrite.value;
+  showUserDrawer.value = true;
   try {
-    await updateUser(detailUser.value.id, {
+    const user = adminUserSchema.parse(await getUser(id, scopeParams()));
+    if (sequence !== detailSequence) return;
+    if (Number(user.id) !== id) throw new Error('用户编号不匹配，请重新读取');
+    detailUser.value = user;
+  } catch (error) {
+    if (sequence === detailSequence) detailError.value = error instanceof Error ? error.message : '无法读取用户，请核对权限与当前平台';
+  } finally { if (sequence === detailSequence) detailLoading.value = false; }
+}
+function closeDrawer() { detailSequence += 1; showUserDrawer.value = false; detailUser.value = null; selectedUserId.value = undefined; syncQuery({ user_id: undefined }); }
+function onDrawerVisibility(value: boolean) { if (!value) closeDrawer(); }
+function openAuthorization() { if (detailUser.value?.auth_code_id) void router.push({ path: '/admin/authcodes', query: { auth_code_id: String(detailUser.value.auth_code_id), return_to: supportSourcePath(router.currentRoute.value.fullPath) } }); }
+function openFeedback() { if (detailUser.value) void router.push({ path: '/admin/feedback', query: { user_id: String(detailUser.value.id), return_to: supportSourcePath(router.currentRoute.value.fullPath) } }); }
+
+async function saveDrawerUser() {
+  if (!canWrite.value || !detailUser.value || isSaving.value || detailLoading.value) return;
+  const sequence = detailSequence;
+  const id = detailUser.value.id;
+  isSaving.value = true;
+  try {
+    await updateUser(id, {
       name: detailUser.value.name,
       phone: detailUser.value.phone,
       total_seats: detailUser.value.total_seats,
       extra_devices: detailUser.value.extra_devices,
     });
-    showToast("用户信息已更新", "success");
-    showUserDrawer.value = false;
+    if (sequence !== detailSequence) return;
+    const updated = adminUserSchema.parse(await getUser(id, scopeParams()));
+    if (sequence !== detailSequence) return;
+    detailUser.value = updated;
+    drawerEditing.value = false;
+    showToast("用户信息已更新并回读", "success");
     await loadData();
   } catch {
-    showToast("更新失败", "error");
+    if (sequence === detailSequence) showToast("保存或回读失败，请重新读取用户后核对", "error");
+  } finally {
+    if (sequence === detailSequence) isSaving.value = false;
   }
 }
 
 async function loadData() {
+  const sequence = ++loadSequence;
   loadState.value = users.value.length ? "data" : "loading";
   loadError.value = "";
   try {
-    users.value = adminUsersSchema.parse((await getUsers()) || []);
+    const result = await getUsersPage({ ...scopeParams(), keyword: searchText.value || undefined, page: page.value, page_size: pageSize });
+    if (sequence !== loadSequence) return;
+    users.value = adminUsersSchema.parse(result.items);
+    total.value = result.total;
+    if (page.value > 1 && (page.value - 1) * pageSize >= total.value) {
+      page.value = Math.max(1, Math.ceil(total.value / pageSize));
+      syncQuery();
+      await loadData();
+      return;
+    }
     loadState.value = settledDataState(users.value.length);
   } catch (error) {
+    if (sequence !== loadSequence) return;
     loadError.value =
       error instanceof Error && error.message
         ? error.message
@@ -314,13 +382,31 @@ async function loadData() {
   }
 }
 
-onMounted(loadData);
+watch(searchText, () => { if (restoringQuery) return; if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; syncQuery(); void loadData(); }, 250); }, { flush: 'sync' });
+watch(() => [query().page, query().keyword], () => {
+  const nextPage = contextId(query().page) || 1;
+  const nextKeyword = contextText(query().keyword);
+  if (page.value === nextPage && searchText.value === nextKeyword) return;
+  if (searchTimer) clearTimeout(searchTimer);
+  restoringQuery = true;
+  page.value = nextPage;
+  searchText.value = nextKeyword;
+  restoringQuery = false;
+  void loadData();
+});
+watch(() => platformStore.adminPlatform, () => { loadSequence += 1; detailSequence += 1; users.value = []; detailUser.value = null; showUserDrawer.value = false; selectedUserId.value = undefined; editingUser.value = null; page.value = 1; syncQuery({ user_id: undefined, return_to: undefined }); void loadData(); });
+watch(() => query().user_id, value => { const id = contextId(value); if (id && id !== selectedUserId.value) void openUser(id); else if (!id && showUserDrawer.value) { detailSequence += 1; showUserDrawer.value = false; detailUser.value = null; selectedUserId.value = undefined; } });
+onMounted(() => { void loadData(); const id = contextId(query().user_id); if (id) void openUser(id); });
+onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; if (searchTimer) clearTimeout(searchTimer); });
 </script>
 
 <style scoped>
 .data-toolbar-v6 {
   margin-bottom: 1rem;
 }
+.user-pagination { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }
+.context-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.detail-error { color: var(--color-danger, #b42318); line-height: 1.6; }
 
 .table-card {
   background: var(--color-surface);

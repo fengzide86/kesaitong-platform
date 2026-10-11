@@ -9,13 +9,14 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import log_admin_action
 from core.cache import CacheKeys, cache
 from core.logging import get_logger
 from core.response import success_response
+from domains.access import effective_license_status_sql
 from models import AuthCode, Feedback, Order, Plan, RunLog, User
 from models.demo import DemoBatch, DemoRun
 from models.feedback import ExecutionVerification
@@ -29,13 +30,21 @@ class DashboardService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def _active_code_count(self, platform_key: str | None) -> int:
+        query = select(func.count(AuthCode.id)).where(effective_license_status_sql() == "active")
+        if platform_key:
+            query = query.where(or_(AuthCode.platform_scope.contains(platform_key), AuthCode.platform_scope.is_(None)))
+        return int((await self.db.execute(query)).scalar() or 0)
+
     async def get_dashboard_stats(self, platform_key: str | None = None) -> dict[str, Any]:
         """获取数据总览（带缓存）"""
         # 尝试缓存（按平台区分）
         cache_key = CacheKeys.dashboard_stats(platform_key)
         cached = await cache.get(cache_key)
         if cached:
-            return cached
+            # Expiry happens without a write/cache invalidation. Never let the
+            # 60-second dashboard cache disagree with authorization read models.
+            return {**cached, "data": {**cached["data"], "active_codes": await self._active_code_count(platform_key)}}
 
         # 真实执行只统计已核验记录；历史日志不进入真实业务指标。
         run_log_filter = [RunLog.verification_state == ExecutionVerification.VERIFIED]
@@ -54,14 +63,10 @@ class DashboardService:
 
         # 构建订单/授权码平台过滤条件
         order_filter = []
-        auth_code_filter = []
         if platform_key:
             from sqlalchemy import or_
 
             order_filter.append(or_(Order.platform_key == platform_key, Order.platform_key.is_(None)))
-            auth_code_filter.append(
-                or_(AuthCode.platform_scope.contains(platform_key), AuthCode.platform_scope.is_(None))
-            )
 
         # 订单总量和当前留存收款使用一条条件聚合查询。
         revenue_query = select(
@@ -74,11 +79,7 @@ class DashboardService:
         total_revenue, total_orders = revenue_result.one()
 
         # 活跃授权码数
-        active_codes_query = select(func.count(AuthCode.id)).where(AuthCode.status == "active")
-        for cond in auth_code_filter:
-            active_codes_query = active_codes_query.where(cond)
-        active_codes_result = await self.db.execute(active_codes_query)
-        active_codes = active_codes_result.scalar() or 0
+        active_codes = await self._active_code_count(platform_key)
 
         # 总用户数
         users_result = await self.db.execute(select(func.count(User.id)))

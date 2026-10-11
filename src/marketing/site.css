@@ -12,6 +12,7 @@
   --m-blue: #245eea;
   --m-blue-hover: #164ac4;
   --m-orange: #b34f0b;
+  --m-data-before: #66758a;
   --m-border: #dce3ed;
   --m-surface: #f5f7fa;
   --m-blue-soft: #eff4ff;
@@ -19,7 +20,7 @@
   --m-duration: 180ms;
   --m-ease: cubic-bezier(.2, .8, .2, 1);
 }
-html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+html { scroll-behavior: auto; scroll-padding-top: 90px; }
 body { margin: 0; background: #fff; color: var(--m-ink); font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; font-size: var(--m-body); }
 *, *::before, *::after { box-sizing: border-box; }
 #app { min-height: 100vh; }

@@ -64,6 +64,25 @@ describe('offline V2 seed and identities', () => {
 })
 
 describe('local draft and completion contract', () => {
+  it('keeps published edits published without reactivating stopped SKUs or permitting incomplete data', () => {
+    const state = createSeed(); const original = state.products[0]!
+    const edited = clone(original)
+    edited.title = '已发布商品的修改'; edited.variants[1]!.status = 'inactive'
+    expect(saveProduct(state, edited, false).ok).toBe(true)
+    const saved = state.products.find(item => item.id === original.id)!
+    expect(saved.status).toBe('active')
+    expect(saved.title).toBe('已发布商品的修改')
+    expect(saved.variants[1]!.status).toBe('inactive')
+    expect(saved.createdAt).toBe(original.createdAt)
+    const before = JSON.stringify(state)
+    const incomplete = clone(saved); incomplete.description = ''; incomplete.variants[0]!.price = 0
+    const rejected = saveProduct(state, incomplete, false)
+    expect(rejected.ok).toBe(false)
+    expect(rejected.errors.some(error => error.field === 'description')).toBe(true)
+    expect(rejected.errors.some(error => error.field.endsWith('.price'))).toBe(true)
+    expect(JSON.stringify(state)).toBe(before)
+  })
+
   it('allows an incomplete draft but reports field and tab errors for completion', () => {
     const state = createSeed(); const product = newProduct()
     const result = saveProduct(state, product, false)

@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app'
 import { useTaskRunStore } from '@/stores/taskRun'
 import { AUTOMATION_EVENT, MockAutomationAdapter } from '@/automation'
 import * as runtimeCapabilities from '@/runtime/capabilities'
+import { authService } from '@/utils/auth'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -130,6 +131,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
   })
 
   it('具备桌面执行器时明确显示真实执行，不展示旧沙盒或浏览器预览', async () => {
+    window.electronAPI = { automation: { prepareBrowser: vi.fn().mockResolvedValue({ partition: 'persist:kst-workspace-v1-fixture' }) } } as unknown as NonNullable<typeof window.electronAPI>
     const capability = vi.spyOn(runtimeCapabilities, 'getRuntimeCapabilities').mockReturnValue({
       ...runtimeCapabilities.resolveRuntimeCapabilities(undefined),
       kind: 'desktop', isDesktop: true, singleLive: true,
@@ -139,6 +141,21 @@ describe('ToolWorkspace 极简运行工作台', () => {
     expect(wrapper.get('[data-testid="execution-scope-note"]').text()).toContain('真实执行')
     expect(wrapper.text()).not.toContain('浏览器流程预览')
     expect(wrapper.find('webview').exists()).toBe(true)
+    expect(wrapper.get('webview').attributes('partition')).toBe('persist:kst-workspace-v1-fixture')
+    expect(window.electronAPI.automation.prepareBrowser).toHaveBeenCalledWith('amazon')
+    wrapper.unmount()
+    capability.mockRestore()
+  })
+
+  it('主进程拒绝浏览器授权时不挂载旧共享分区', async () => {
+    window.electronAPI = { automation: { prepareBrowser: vi.fn().mockRejectedValue(new Error('owner changed')) } } as unknown as NonNullable<typeof window.electronAPI>
+    const capability = vi.spyOn(runtimeCapabilities, 'getRuntimeCapabilities').mockReturnValue({
+      ...runtimeCapabilities.resolveRuntimeCapabilities(undefined), kind: 'desktop', isDesktop: true, singleLive: true,
+    })
+    const wrapper = mountWorkspace()
+    await flushPromises()
+    expect(wrapper.find('webview').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('persist:tool-workspace')
     wrapper.unmount()
     capability.mockRestore()
   })
@@ -324,6 +341,7 @@ describe('ToolWorkspace 极简运行工作台', () => {
       scriptKey: 'pending-script', scriptStatus: 'not_ready', canStart: false,
     })
     window.electronAPI = { automation: {
+      prepareBrowser: vi.fn().mockResolvedValue({ partition: 'persist:kst-workspace-v1-preflight-fixture' }),
       preflight, start: vi.fn(), pause: vi.fn(), resume: vi.fn(), completeUserAction: vi.fn(),
       cancel: vi.fn(), registerBrowser: vi.fn(), unregisterBrowser: vi.fn(), onEvent: vi.fn(),
     } }
@@ -371,13 +389,16 @@ describe('ToolWorkspace 极简运行工作台', () => {
   })
 
   it('联系客服只携带问题状态，不自动声称平台操作失败或传出截图和页面原文', async () => {
+    authService.setRole('user')
+    authService.setAuth({ token: 'test-token' })
+    authService.setUser({ id: 1, auth_code_id: 1 })
     const { wrapper, store } = mountStoppedLiveWorkspace()
     store.result = { screenshot: 'C:\\private\\client.png', pageText: '客户原文', token: 'sensitive' }
     await wrapper.get('.technical-details button').trigger('click')
     await flushPromises()
-    const context = JSON.parse(localStorage.getItem('toolbox_support_context') || '{}')
-    expect(context).toMatchObject({ run_status: 'failed', execution_mode: 'live', result_requires_review: true })
-    expect(Object.keys(context).sort()).toEqual(['error_code', 'execution_mode', 'platform_key', 'problem_code', 'record_pending', 'result_requires_review', 'run_id', 'run_status', 'tool_id', 'tool_name'])
+    const context = JSON.parse(sessionStorage.getItem('toolbox_support_handoff_v1') || '{}')
+    expect(context.draft).toContain('当前平台结果待核对')
+    expect(Object.keys(context).sort()).toEqual(['created', 'draft', 'owner', 'platform'])
     expect(JSON.stringify(context)).not.toMatch(/client\.png|客户原文|sensitive/)
     expect(mocks.push).toHaveBeenCalledWith('/user/ai-chat')
     wrapper.unmount()

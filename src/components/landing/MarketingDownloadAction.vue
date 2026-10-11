@@ -1,6 +1,6 @@
 <template>
   <div :class="['marketing-download-action', { compact }]">
-    <button :class="{ compact: props.compact }" type="button" :disabled="downloading" @click="download">
+    <button :class="{ compact: props.compact, secondary: props.variant === 'secondary' }" type="button" :disabled="downloading" @click="download">
       {{ downloading ? '获取中…' : '下载 Windows 桌面端' }}
     </button>
     <p v-if="message" class="download-message" role="status">{{ message }}</p>
@@ -13,7 +13,7 @@ import { ref } from 'vue'
 import LandingDesktopHandoff from '@/components/landing/LandingDesktopHandoff.vue'
 import { downloadDesktopInstaller, resolveDesktopInstallerUrl } from '@/runtime/desktop-download'
 
-const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
+const props = withDefaults(defineProps<{ compact?: boolean; variant?: 'primary' | 'secondary' }>(), { compact: false, variant: 'primary' })
 const downloading = ref(false)
 const message = ref('')
 const handoffOpen = ref(false)
@@ -42,15 +42,18 @@ async function download(): Promise<void> {
 
 <style scoped>
 .marketing-download-action { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.marketing-download-action button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px 20px; border: 0; border-radius: 8px; color: #fff; background: var(--m-blue); font: inherit; font-size: 15px; font-weight: 700; line-height: 1.5; cursor: pointer; transition: background var(--m-duration), transform var(--m-duration); }
+.marketing-download-action button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px 20px; border: 1px solid transparent; border-radius: 8px; color: #fff; background: var(--m-blue); font: inherit; font-size: 15px; font-weight: 700; line-height: 1.5; cursor: pointer; transition: background var(--m-duration), color var(--m-duration), border-color var(--m-duration), transform var(--m-duration); }
 .marketing-download-action button.compact { min-height: 44px; padding: 8px 13px; font-size: 14px; }
+.marketing-download-action button.secondary { border-color: var(--m-border); color: var(--m-text); background: transparent; font-weight: 650; }
 .marketing-download-action button:focus-visible { outline: 3px solid var(--m-blue); outline-offset: 4px; }
 .marketing-download-action button:disabled { color: #fff; background: #627084; cursor: wait; }
+.marketing-download-action button.secondary:disabled { border-color: var(--m-border); color: var(--m-muted); background: var(--m-surface); }
 .download-message { flex: 1 1 260px; margin: 0; color: var(--m-text); font-size: 14px; line-height: 1.7; }
 .marketing-download-action.compact { position: relative; }
 .compact .download-message { position: absolute; top: calc(100% + 12px); right: 0; width: min(320px, calc(100vw - 40px)); padding: 16px; border: 1px solid var(--m-border); border-radius: 8px; color: var(--m-text); background: #fff; box-shadow: 0 8px 24px #142b4714; }
 @media (hover: hover) {
   .marketing-download-action button:hover:not(:disabled) { transform: translateY(-1px); background: var(--m-blue-hover); }
+  .marketing-download-action button.secondary:hover:not(:disabled) { border-color: var(--m-blue); color: var(--m-blue-hover); background: var(--m-blue-soft); }
 }
 @media (max-width: 600px) {
   .marketing-download-action { align-items: flex-start; flex-direction: column; }

@@ -220,7 +220,7 @@ require_free_space() {
 
 require_commands \
   awk bash chmod chown cp curl date df du find grep install ln mkdir mktemp mv \
-  mysql mysqldump nginx python3 readlink rm rsync runuser seq sleep stat systemctl \
+  mysql mysqldump nginx python3 python3.12 readlink rm rsync runuser seq sleep stat systemctl \
   tar touch
 test -f "${ARCHIVE_PATH}"
 test -f "${APP_ROOT}/package.json"
@@ -314,7 +314,7 @@ test -f "${STAGING_DIR}/ops/deploy/restore-backup.sh"
 test -f "${STAGING_DIR}/ops/deploy/retire-web.py"
 test -f "${STAGING_DIR}/ops/web-retired/sw.js"
 test -f "${STAGING_DIR}/backend/requirements.txt"
-test -f "${STAGING_DIR}/backend/constraints-py310.txt"
+test -f "${STAGING_DIR}/backend/constraints-py312.txt"
 test -f "${STAGING_DIR}/backend/alembic.ini"
 
 # mktemp creates the staging root as root-only under umask 077. The release
@@ -325,12 +325,12 @@ chown root:toolbox "${STAGING_DIR}" "${STAGING_DIR}/backend"
 chmod 0750 "${STAGING_DIR}" "${STAGING_DIR}/backend"
 chown root:toolbox \
   "${STAGING_DIR}/backend/requirements.txt" \
-  "${STAGING_DIR}/backend/constraints-py310.txt"
+  "${STAGING_DIR}/backend/constraints-py312.txt"
 chmod 0640 \
   "${STAGING_DIR}/backend/requirements.txt" \
-  "${STAGING_DIR}/backend/constraints-py310.txt"
+  "${STAGING_DIR}/backend/constraints-py312.txt"
 runuser -u toolbox -- test -r "${STAGING_DIR}/backend/requirements.txt"
-runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py310.txt"
+runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py312.txt"
 # Application construction mounts this legacy static directory and creates it
 # when absent. The Git archive intentionally does not track the empty folder,
 # so provide a readable mount point without making staged source writable.
@@ -378,10 +378,10 @@ else
   fi
   VENV_BUILD_DIR="${VENV_RELEASE_DIR}"
   install -d -o toolbox -g toolbox -m 0755 "${VENV_BUILD_DIR}"
-  runuser -u toolbox -- python3 -m venv "${VENV_BUILD_DIR}"
+  runuser -u toolbox -- python3.12 -m venv "${VENV_BUILD_DIR}"
   runuser -u toolbox -- "${VENV_BUILD_DIR}/bin/python" -m pip install \
     --disable-pip-version-check --no-cache-dir \
-    -c "${STAGING_DIR}/backend/constraints-py310.txt" \
+    -c "${STAGING_DIR}/backend/constraints-py312.txt" \
     -r "${STAGING_DIR}/backend/requirements.txt"
   chown -R root:root "${VENV_BUILD_DIR}"
   # umask 077 makes venv subdirectories private while toolbox owns them.

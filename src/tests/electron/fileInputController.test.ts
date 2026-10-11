@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, writeFile, rm, unlink } from 'node:fs/promises'
+import { mkdtemp, writeFile, rm, unlink, copyFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, basename } from 'node:path'
 import { readFileSync } from 'node:fs'
@@ -56,6 +56,26 @@ describe('native local input files', () => {
     await invoke('files:select-input', { label: '资料' })
     expect(await invoke('files:select-input', { label: '资料' })).toBeNull()
     expect(await invoke('files:validate-input', { paths: [file] })).toEqual({ valid: true, issues: [] })
+  })
+  it('uses content identity across renamed files and checks changes again before mutation', async () => {
+    mocks.dialog.mockResolvedValue({ canceled: false, filePaths: [file] })
+    await invoke('files:select-input', { label: '资料' })
+    const first = await controller.snapshot(sender, { document: file, account: 'fixture' }, { document: file })
+    const copy = join(directory, '改名副本.csv')
+    await copyFile(file, copy)
+    mocks.dialog.mockResolvedValue({ canceled: false, filePaths: [copy] })
+    await invoke('files:select-input', { label: '资料' })
+    const second = await controller.snapshot(sender, { document: copy, account: 'fixture' }, { document: copy })
+    expect(second.input).toEqual(first.input)
+    expect(JSON.stringify(first.input)).not.toContain(directory)
+    await writeFile(file, 'modified')
+    await expect(controller.validateSnapshot(sender, first)).rejects.toThrow('LOCAL_FILE_CHANGED')
+    expect(await controller.validate(sender, [file])).toMatchObject({ valid: false })
+    mocks.dialog.mockResolvedValue({ canceled: false, filePaths: [file] })
+    await invoke('files:select-input', { label: '资料' })
+    expect((await controller.snapshot(sender, { document: file }, { document: file })).input.document).not.toEqual(first.input.document)
+    // Reselecting must not rewrite the already-running attempt's fingerprint.
+    await expect(controller.validateSnapshot(sender, first)).rejects.toThrow('LOCAL_FILE_CHANGED')
   })
   it('revalidates deletion and read failures before launch', async () => {
     mocks.dialog.mockResolvedValue({ canceled: false, filePaths: [file] })

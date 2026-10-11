@@ -57,7 +57,7 @@ export interface AutomationScript {
   requestedKey?: string | null;
 }
 
-const SIMULATION_HOSTS = ['idtrade.cn', 'localhost', '127.0.0.1'];
+const SIMULATION_HOSTS = ['idtrade.cn', 'www.bjysoft.cn', 'localhost', '127.0.0.1'];
 
 const field = (
   key: string,

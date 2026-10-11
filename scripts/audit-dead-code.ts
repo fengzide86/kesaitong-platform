@@ -50,6 +50,14 @@ function importsOf(file: string): string[] {
   for (const pattern of patterns) {
     for (const match of content.matchAll(pattern)) if (match[1]) specifiers.add(match[1])
   }
+  // Eager component smoke tests really import these modules. Treat their
+  // literal Vite globs as edges instead of incorrectly calling them orphans.
+  for (const match of content.matchAll(/import\.meta\.glob\(\s*(\[[\s\S]*?\]|['"][^'"]+['"])/g)) {
+    const globs = [...match[1]!.matchAll(/['"]([^'"]+)['"]/g)].map(item => item[1]!)
+    for (const imported of fs.globSync(globs, { cwd: path.join(root, path.posix.dirname(file)) })) {
+      specifiers.add(imported.replaceAll('\\', '/'))
+    }
+  }
   return [...specifiers]
 }
 

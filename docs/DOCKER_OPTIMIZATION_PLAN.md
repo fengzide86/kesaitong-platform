@@ -13,16 +13,18 @@
 - `/api/health/live` 只表示进程存活，`/api/health/ready` 继续检查 MySQL、Redis、连接池和后台任务。
 - 生产 Nginx、证书续期和 `/var/lib/amazon-toolbox/updates` 更新文件发布路径第一阶段保持在宿主机。
 
-## 2. 已确认的当前基线
+## 2. 历史基线与当前使用边界
 
-### 本地 Windows
+本节原始硬件、磁盘、版本和 SSH 观察是旧电脑/旧发布的历史快照，不是 2026-10-11 当前状态，不能据此安装软件、调整本机资源或连接旧运维入口。当前源码/工作区身份先看 `AI_GUIDE.md` 与共享 `current-status.md`，部署连接只读本机忽略提交的 `.env.deploy`；容器化仍是独立运维方案，不是已经完成的生产切换。
+
+### 旧电脑 Windows 历史快照（不作为当前资源配置）
 
 - Windows 11 家庭版，Intel i5-1240P，12 核 16 线程，硬件虚拟化和 SLAT 可用。
 - 内存约 16 GB；审计时空闲内存不足 2 GB，需要限制 WSL/Docker 资源。
 - C 盘审计时仅剩约 4.3 GB，D 盘约剩 89 GB。
 - 尚未安装现代 WSL 和 Docker Desktop。
 
-### 云服务器
+### 云服务器旧发布历史快照（需重新核验）
 
 - 公开接口当前报告应用版本 `1.8.0`。
 - 运行环境报告 Python 3.10.12、Linux 5.15 系列内核。
@@ -33,7 +35,7 @@
 - 发布脚本已包含数据库备份、代码备份、Alembic、健康探测和失败回滚。
 - 当前 SSH 80 端口入口从本机连接会被服务端立即关闭，因此本轮无法读取生产 journal/Nginx 原始日志。任何生产实施前必须先恢复受限 SSH 运维入口。
 
-公开健康接口只包含版本号，不包含 Git SHA 或镜像摘要，因此不能证明服务器正在运行某个具体提交。
+上述旧快照公开接口只有版本号；当前源码的 live/ready 已包含 `commit_sha`、`release_id`。2026-10-11 上一轮只读审计回读为 1.8.14 / `6593028`，且曾有一次 Redis degraded 后恢复；这不是本轮生产复验，更不是当前镜像身份、真实日志、资源或备份恢复证明。现有生产规程仍采用 systemd，不应将本地 Compose 当作生产容器化事实。
 
 ## 3. 目标架构
 
@@ -80,6 +82,8 @@ Docker 服务默认只把 API 映射到 `127.0.0.1`，数据库和 Redis 不发�
 
 建议的全局 WSL 资源上限：
 
+以下是旧 16 GB 机器的保守示例，并非本机当前推荐；安装前重新检查内存、磁盘、WSL 与已有应用负载。不要自动写入当前 `.wslconfig` 或根据旧快照执行 `wsl --shutdown`。
+
 ```ini
 [wsl2]
 memory=4GB
@@ -107,6 +111,8 @@ npm run docker:test:mariadb
 - readiness 中 MySQL、Redis 都是 `ok`。
 - MariaDB 20 并发确认收款测试得到 1 个成功、19 个冲突且只生成 1 条分润记录。
 - Electron 开发预览显式连接 `http://127.0.0.1:8000` 后行为与原本本地后端一致。
+
+健康策略：数据库始终必需；internal/production 默认 `REDIS_REQUIRED=true`，与 `REDIS_URL` 是否填写无关（分布式限流/撤销存储），缺少 URL 或故障均 ready=503。历史单机无 Redis 部署需经过单进程评估并显式设置 `REDIS_REQUIRED=false`；该可选模式的缓存故障则 ready=200 但 status=degraded，限流采用本机后备。容器检查使用 `core.healthcheck` 解析 ready/status/checks，严格拒绝 degraded，而不是仅 `urlopen()` 200 就算 healthy。配置示例与 Compose 透传同一开关；重新连接有界超时和短退避，不需要重启进程。当前修改只通过隔离客户端/loopback 故障测试，不替代真实 Redis 引擎、Docker 镜像或生产演练。
 
 ## 6. 测试与质量门禁优化
 

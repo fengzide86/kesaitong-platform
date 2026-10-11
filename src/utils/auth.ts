@@ -119,6 +119,9 @@ class AuthService {
 
   clear(): void {
     clearAllCache()
+    sessionStorage.removeItem('toolbox_support_handoff_v1')
+    sessionStorage.removeItem('toolbox_purchase_inquiry')
+    localStorage.removeItem('toolbox_support_context')
     sessionStorage.removeItem(AUTH_KEY)
     sessionStorage.removeItem(ROLE_KEY)
     sessionStorage.removeItem(TOKEN_KEY)

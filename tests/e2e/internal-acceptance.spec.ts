@@ -104,6 +104,14 @@ async function installApi(page: Page, responder?: ApiResponder): Promise<void> {
       await json(route, wrapped(actionCenter))
       return
     }
+    if (url.pathname === '/api/profit/policy') {
+      // The system work area opens Settings, whose policy contract is an object.
+      await json(route, wrapped({
+        version: 1,
+        ratios: { tech: 0.3, market: 0.25, product: 0.15, service: 0.15, coordination: 0.1, record: 0.05 },
+      }))
+      return
+    }
     if (url.pathname === '/api/orders' || url.pathname === '/api/plans' || url.pathname === '/api/updates/releases') {
       await json(route, wrapped([]))
       return
@@ -445,26 +453,36 @@ test('B 端桌面桥接契约接收脱敏预览，Live 批次只向业务 API �
 
 const roleExpectations: Array<{
   role: StaffRole
-  visible: string[]
-  hidden: string[]
-  forbiddenPath?: string
+  areas: string[]
+  sections: Array<{ area: string; visible: string[]; hidden: string[] }>
+  forbiddenPaths: string[]
 }> = [
   {
     role: 'super_admin',
-    visible: ['分润管理', '公账支出', '应用更新', '系统设置', '后台账号管理'],
-    hidden: [],
+    areas: ['行动中心', '客户与授权', '订单与代理', '售后支持', '经营财务', '产品与系统'],
+    sections: [
+      { area: '经营财务', visible: ['分润管理', '公账支出', '代理返佣'], hidden: [] },
+      { area: '产品与系统', visible: ['套餐与设置', '工作台开放', '公告管理', '应用更新', '物流费率', '后台账号'], hidden: [] },
+    ],
+    forbiddenPaths: [],
   },
   {
     role: 'operator',
-    visible: ['订单与套餐', '分润管理', '公账支出', '客服规则管理'],
-    hidden: ['应用更新', '系统设置', '后台账号管理'],
-    forbiddenPath: '/admin/settings',
+    areas: ['行动中心', '客户与授权', '订单与代理', '售后支持', '经营财务', '产品与系统'],
+    sections: [
+      { area: '经营财务', visible: ['分润管理', '公账支出'], hidden: ['代理返佣'] },
+      { area: '售后支持', visible: ['工单管理', '知识库管理', '客服规则'], hidden: ['代理售后'] },
+      { area: '产品与系统', visible: ['工作台开放', '公告管理'], hidden: ['套餐与设置', '应用更新', '物流费率', '后台账号'] },
+    ],
+    forbiddenPaths: ['/admin/settings', '/admin/updates', '/admin/staff-accounts', '/admin/freight-rates', '/admin/agency'],
   },
   {
     role: 'support',
-    visible: ['订单与套餐', '工单管理', '客服规则管理', '公告管理'],
-    hidden: ['专业工作台', '分润管理', '公账支出', '应用更新', '系统设置', '后台账号管理'],
-    forbiddenPath: '/admin/profit',
+    areas: ['行动中心', '客户与授权', '订单与代理', '售后支持', '产品与系统'],
+    sections: [
+      { area: '售后支持', visible: ['工单管理', '知识库管理', '客服规则'], hidden: ['代理售后'] },
+    ],
+    forbiddenPaths: ['/admin/profit', '/admin/expenses', '/admin/settings', '/admin/business-access', '/admin/updates', '/admin/staff-accounts', '/admin/agency'],
   },
 ]
 
@@ -475,11 +493,17 @@ for (const expectation of roleExpectations) {
     await page.goto('/#/admin/dashboard')
     const sidebar = page.getByRole('complementary', { name: '管理员导航' })
     await expect(sidebar).toBeVisible()
-    for (const label of expectation.visible) await expect(sidebar.getByText(label, { exact: true })).toBeVisible()
-    for (const label of expectation.hidden) await expect(sidebar.getByText(label, { exact: true })).toHaveCount(0)
-
-    if (expectation.forbiddenPath) {
-      await page.goto(`/#${expectation.forbiddenPath}`)
+    // Work areas are the first level; permitted modules live in the current area's second level.
+    await expect(sidebar.getByRole('link')).toHaveText(expectation.areas)
+    for (const section of expectation.sections) {
+      await sidebar.getByRole('link', { name: section.area, exact: true }).click()
+      const navigation = page.getByRole('navigation', { name: `${section.area}页面`, exact: true })
+      await expect(navigation).toBeVisible()
+      for (const label of section.visible) await expect(navigation.getByRole('link', { name: label, exact: true })).toBeVisible()
+      for (const label of section.hidden) await expect(navigation.getByRole('link', { name: label, exact: true })).toHaveCount(0)
+    }
+    for (const path of expectation.forbiddenPaths) {
+      await page.goto(`/#${path}`)
       await expect(page).toHaveURL(/#\/admin\/dashboard\?access=role-required$/)
     }
 
@@ -724,7 +748,7 @@ test('订单超过一页仍可翻页，状态筛选查询完整账本', async ({
   await expect(page.getByText('共 41 笔 · 本页 1 笔')).toBeVisible()
   await page.locator('.orders-pagination .number').filter({ hasText: /^2$/ }).click()
   await expect(page.getByText('PAGED-ORDER-2', { exact: true })).toBeVisible()
-  await page.getByRole('group', { name: '订单筛选' }).locator('.el-select').click()
+  await page.getByRole('group', { name: '订单筛选' }).locator('.el-select').filter({ hasText: /^全部状态$/ }).click()
   await page.getByRole('option', { name: '已收款', exact: true }).click()
   await expect(page.getByText('共 3 笔 · 本页 1 笔')).toBeVisible()
   expect(requests.at(-1)?.get('page')).toBe('1')

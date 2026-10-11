@@ -200,6 +200,8 @@ app.whenReady().then(async () => {
     mayOpenExternalUrl,
     getActivityState: () => automationController.activityState(),
     cancelActiveWork: () => automationController.cancelActiveForWindowClose(),
+    approveWebview: (partition, preferences) => automationController.browserSessions.approve(partition, preferences),
+    webviewAttached: guest => automationController.browserSessions.attached(guest),
     onClosed: () => {
       automationController.clearDemoActivity()
       mainWindow = null

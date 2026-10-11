@@ -1,12 +1,13 @@
 <template>
   <MarketingShell :show-download="false">
+    <main id="marketing-main-content" data-route-focus tabindex="-1">
     <section class="landing-hero" data-testid="marketing-hero">
       <div class="landing-width landing-hero-grid">
         <div class="landing-hero-copy">
           <p class="landing-kicker">课赛通 KST</p>
           <p class="landing-identity">跨境电商比赛与亚马逊仿真实训工具</p>
           <h1><span>按要求做完了，</span><em>分数还是上不去？</em></h1>
-          <p class="landing-lead">在已支持的任务中，一键处理商品、物流、广告和发货的重复步骤，套用已整理的得分配置。</p>
+          <p class="landing-lead">在已支持的任务中，一键处理商品、物流、广告和发货的重复步骤，把得分细节放进配置。</p>
           <div class="landing-actions">
             <a class="landing-primary" href="#scenes">
               看看适合我的场景
@@ -88,9 +89,13 @@
       <div class="landing-width">
         <p class="landing-kicker">课赛通 KST</p>
         <h2>先看你的场景，<br>再挑合适的工具。</h2>
-        <RouterLink class="landing-primary" to="/tools">看工具介绍 <ArrowRight :size="18" aria-hidden="true" /></RouterLink>
+        <div class="landing-final-actions">
+          <button class="landing-primary" type="button" aria-haspopup="dialog" @click="consultation?.openConsultation('', $event)">申请使用 <ArrowRight :size="18" aria-hidden="true" /></button>
+          <RouterLink class="landing-final-link" to="/tools">看工具介绍 <ArrowRight :size="18" aria-hidden="true" /></RouterLink>
+        </div>
       </div>
     </section>
+    </main>
 
     <footer class="landing-footer">
       <div class="landing-width">
@@ -106,10 +111,12 @@
         <small>© {{ year }} 课赛通 KST · 亚马逊比赛与课程实训效率工具</small>
       </div>
     </footer>
+    <MarketingConsultationDialog ref="consultation" wechat="Moweiiong" />
   </MarketingShell>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { ArrowDown, ArrowRight, Plus } from '@lucide/vue'
 import { RouterLink } from 'vue-router'
 import BrandLockup from '@/components/brand/BrandLockup.vue'
@@ -119,9 +126,11 @@ import ScenarioIdentity from '@/components/landing/ScenarioIdentity.vue'
 import MetricComparison from '@/components/landing/MetricComparison.vue'
 import MarketingCaseResults from '@/components/landing/MarketingCaseResults.vue'
 import MarketingScoreSupport from '@/components/landing/MarketingScoreSupport.vue'
+import MarketingConsultationDialog from '@/components/landing/MarketingConsultationDialog.vue'
 import { reportedTimeMetrics } from '@/marketing/impact-data'
 
 const year = new Date().getFullYear()
+const consultation = ref<InstanceType<typeof MarketingConsultationDialog> | null>(null)
 const painStages = [
   {
     number: '01',
@@ -142,7 +151,7 @@ const painStages = [
 const faq = [
   {
     question: '能帮我照顾到隐性得分细节吗？',
-    answer: '在支持的任务中，课赛通会把已整理的得分细节带入一键配置，减少自己反复摸索和填写。具体适用任务与当前开放范围见工具介绍。',
+    answer: '在支持的任务中，课赛通会把得分细节带入一键配置，减少自己反复摸索和填写。具体适用任务与当前开放范围见工具介绍。',
   },
   {
     question: '适用于哪个实训平台？',
@@ -236,13 +245,16 @@ const faq = [
   gap: 12px;
   min-height: 50px;
   padding: 12px 22px;
+  border: 0;
   border-radius: 10px;
   color: #fff;
   background: var(--m-blue);
+  font-family: inherit;
   font-size: var(--m-body);
   font-weight: 650;
   line-height: 1.5;
   text-decoration: none;
+  cursor: pointer;
   transition: background var(--m-duration) ease, transform var(--m-duration) ease;
 }
 
@@ -541,6 +553,10 @@ const faq = [
 .landing-final .landing-primary { color: var(--m-ink); background: #fff; }
 .landing-final .landing-primary:hover { background: var(--m-blue-soft); }
 .landing-final .landing-primary:focus-visible { outline-color: #fff; }
+.landing-final-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 28px; }
+.landing-final-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: #e0eaff; font-size: var(--m-body); font-weight: 650; text-decoration: none; }
+.landing-final-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.landing-final-link:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
 
 .landing-footer { padding: 36px 0 24px; background: #fff; }
 
@@ -625,7 +641,17 @@ const faq = [
   .landing-pain-stage strong { font-size: 16px; }
   .landing-pain-stage p { display: none; }
   .landing-primary { padding-inline: 18px; font-size: 15px; }
+  .landing-scene-grid { margin-top: 22px; }
+  .landing-scene-card { padding: 20px; }
+  .landing-scene-label { margin-bottom: 14px; }
   .landing-scene-card h3 { margin-top: 18px; }
+  .landing-scene-card p { margin-bottom: 10px; line-height: 1.7; }
+  .landing-faq summary { min-height: 60px; padding-block: 15px; }
+  .landing-faq-grid { gap: 20px; }
+  .landing-faq details p { margin-bottom: 18px; }
+  .landing-final h2 { margin-bottom: 22px; }
+  .landing-final-actions { gap: 10px 20px; }
+  .landing-footer { padding-top: 26px; }
   .landing-shift-card { padding: 24px; }
   .landing-shift-card h3 { font-size: 22px; }
   .landing-shift-card li { padding-left: 34px; }

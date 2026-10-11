@@ -15,12 +15,12 @@ export const NSIS_APP_GUID = '159e8ec2-4c1f-5b99-a3ea-a9467c2587ec'
 export const NSIS_UUID_NAMESPACE = '50e065bc-3134-11e6-9bab-38c9862bdaf3'
 
 export function readInstallerIdentity(metadata = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8'))) {
-  assert.equal(require('app-builder-lib/package.json').version, '26.8.1', 'Re-audit NSIS registry identity after changing the pinned builder')
+  assert.equal(require('app-builder-lib/package.json').version, '26.15.3', 'Re-audit NSIS registry identity after changing the pinned builder')
   assert.equal(metadata.build.appId, NSIS_APP_ID, 'Unexpected installation AppID')
   assert.equal(metadata.build.nsis?.guid, undefined, 'A custom NSIS GUID requires a separate reviewed registry contract')
   const guid = UUID.v5(NSIS_APP_ID, UUID.parse(NSIS_UUID_NAMESPACE))
   assert.equal(guid, NSIS_APP_GUID, 'Locked electron-builder UUID.v5 identity changed')
-  return { appId: NSIS_APP_ID, appGuid: guid, builderVersion: '26.8.1',
+  return { appId: NSIS_APP_ID, appGuid: guid, builderVersion: '26.15.3',
     uuidNamespace: NSIS_UUID_NAMESPACE, installKey: `Software\\${guid}`,
     uninstallKey: `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${guid}` }
 }

@@ -111,7 +111,8 @@
 .v2-error-summary > strong { display: block; margin-bottom: 6px; font-weight: 600; }
 .v2-error-summary > button { border: 0; padding: 2px 0; margin-right: 17px; color: #932626; background: transparent; font-size: 12px; text-align: left; text-decoration: underline; }
 .v2-editor-feedback { margin: 0; padding: 9px 14px; color: #5c684b; background: #f8faf5; border: 1px solid #ddd; border-top: 0; }
-.v2-editor-footer { position: sticky; bottom: 0; z-index: 4; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 18px; border: 1px solid #bcbcbc; border-top: 0; background: #f1f1f1; box-shadow: 0 -2px 4px rgb(0 0 0 / 4%); }
+/* Keep save actions after the active panel, not floating over its fields/tabs. */
+.v2-editor-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 18px; border: 1px solid #bcbcbc; border-top: 0; background: #f1f1f1; box-shadow: 0 -2px 4px rgb(0 0 0 / 4%); }
 .v2-editor-footer > span { color: #888; font-size: 12px; }
 .v2-editor-footer > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .v2-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }

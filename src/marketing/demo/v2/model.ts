@@ -1,5 +1,8 @@
 // Public, offline-only sample model. Do not import business APIs, credentials,
 // desktop stores, telemetry or Runner code into this module.
+import { createFbaData, validFbaData, type FbaData } from './fba-workflow'
+import { createAdvertisingData, validAdvertisingData, type AdvertisingData } from './advertising-workflow'
+import { createTemplateData, validTemplateData, type TemplateData } from './template-workflow'
 export const SIMULATION_STORAGE_KEY = 'kst-public-simulation:v2'
 export const STORAGE_KEY = SIMULATION_STORAGE_KEY
 export const MAX_IMAGE_BYTES = 1024 * 1024
@@ -47,8 +50,9 @@ export type WarehouseStage = '待分拣' | '待打包' | '待出库' | '已出�
 export interface Order {
   id: string; productId: string; variantId: string; quantity: number; country: string
   status: '未发货' | '已发货'; warehouseStage: WarehouseStage; carrier: string; tracking: string
+  shippingService?: string; shippingDate?: string
 }
-export interface State { version: 2; products: Product[]; templates: ShippingTemplate[]; orders: Order[] }
+export interface State { version: 2; products: Product[]; templates: ShippingTemplate[]; orders: Order[]; fba?: FbaData; advertising?: AdvertisingData; templateData?: TemplateData }
 export type SimulationState = State
 export interface Category { id: string; name: string; path: string; details: string[] }
 export const categories: Category[] = [
@@ -154,7 +158,7 @@ export function createSeed(): State {
     return product
   })
   return {
-    version: 2, products,
+    version: 2, products, fba: createFbaData(), advertising: createAdvertisingData(), templateData: createTemplateData(),
     templates: [
       { id: 'sample-standard', name: '样例标准配送', country: '美国', service: '标准配送', unit: 'kg', currency: 'USD', limit: 5, handling: 2, base: 3.5, perKg: 4 },
       { id: 'sample-economy', name: '样例经济配送', country: '美国', service: '经济配送', unit: 'kg', currency: 'USD', limit: 3, handling: 3, base: 2.5, perKg: 3 },
@@ -260,13 +264,17 @@ export function validateProduct(state: State, product: Product, complete = false
 }
 
 export function saveProduct(state: State, product: Product, complete = false): SaveResult {
-  const errors = validateProduct(state, product, complete)
+  // Saving edits is not an unpublish action. A published product must keep
+  // its publication state and pass the same checks as completion.
+  const existing = state.products.find(item => item.id === product.id)
+  const published = complete || existing?.status === 'active'
+  const errors = validateProduct(state, product, published)
   if (errors.length) return { ok: false, errors, id: product.id }
   const saved: Product = JSON.parse(JSON.stringify(product)) as Product
   saved.id ||= createId('product')
   saved.createdAt ||= new Date().toISOString()
   saved.title = saved.title.trim(); saved.brand = saved.brand.trim(); saved.parentSku = saved.parentSku.trim()
-  saved.status = complete ? 'active' : 'draft'
+  saved.status = published ? 'active' : 'draft'
   saved.variants.forEach(variant => { variant.id ||= createId('variant'); variant.sku = variant.sku.trim() })
   const index = state.products.findIndex(item => item.id === saved.id)
   if (index === -1) state.products.push(saved)
@@ -336,8 +344,13 @@ function validStoredState(value: unknown): value is State {
     if (!record(order) || !fields(order, ['id', 'productId', 'variantId', 'country', 'carrier', 'tracking'], 'string')
       || !Number.isInteger(order.quantity) || (order.quantity as number) <= 0 || !['未发货', '已发货'].includes(order.status as string)
       || !['待分拣', '待打包', '待出库', '已出库'].includes(order.warehouseStage as string)) return false
+    if (order.shippingService !== undefined && typeof order.shippingService !== 'string' || order.shippingDate !== undefined && typeof order.shippingDate !== 'string') return false
     const product = (value.products as Product[]).find(item => item.id === order.productId)
     if (!product?.variants.some(variant => variant.id === order.variantId)) return false
   }
+  const state = value as unknown as State
   return uniqueIds(value.orders as Order[])
+    && (value.fba === undefined || validFbaData(value.fba, state))
+    && (value.advertising === undefined || validAdvertisingData(value.advertising, state))
+    && (value.templateData === undefined || validTemplateData(value.templateData, state))
 }

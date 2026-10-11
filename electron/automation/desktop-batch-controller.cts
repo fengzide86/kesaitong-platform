@@ -9,6 +9,8 @@ import {
 import { copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RecoveryStore } from './recovery-store.cjs'
+import type { ExecutionLease } from './execution-lease.cjs'
+import type { ExecutionReportOutbox } from './execution-report-outbox.cjs'
 import type { RecoveryPrepare } from '../../src/shared/ipc/recovery-contract.js'
 
 import {
@@ -57,6 +59,8 @@ interface ActionNotification {
 }
 
 interface DesktopBatchControllerOptions {
+  executionLease?: ExecutionLease
+  reportOutbox?: ExecutionReportOutbox
   recoveryStore: RecoveryStore
   resolveOwner: (sender: Electron.WebContents) => Promise<string>
   validateUpload?: (sender: Electron.WebContents, filePath: unknown) => Promise<unknown>
@@ -85,6 +89,7 @@ export class DesktopBatchController {
   private selectedItem: string | null = null
   private sessionRevocation: Promise<void> | null = null
   private coordinatorEpoch = 0
+  private closing = false
 
   constructor(options: DesktopBatchControllerOptions) {
     this.options = options
@@ -201,17 +206,22 @@ export class DesktopBatchController {
     })
     register('batch:create', async (event: IpcMainInvokeEvent, payload: unknown) => {
       await this.sessionRevocation
+      const epoch = this.coordinatorEpoch
       const data = asRecord(payload)
       if (data.recordKind !== 'live') assertInternalDemo()
       const owner = data.recordKind === 'demo' ? null : await this.options.resolveOwner(event.sender)
+      this.assertEpoch(epoch)
       return this.getCoordinator().create({ ...data, owner })
     })
     register('batch:start', async (event: IpcMainInvokeEvent, payload: unknown) => {
       await this.sessionRevocation
+      const epoch = this.coordinatorEpoch
       const data = asRecord(payload)
       if (asRecord(data.tool).executionMode !== 'live') assertInternalDemo()
-      this.getCoordinator().assertOwner(await this.options.resolveOwner(event.sender))
-      return this.getCoordinator().startItem(String(data.itemId || ''), asRecord(data.tool))
+      const coordinator = this.getCoordinator()
+      coordinator.assertOwner(await this.options.resolveOwner(event.sender))
+      this.assertEpoch(epoch)
+      return coordinator.startItem(String(data.itemId || ''), asRecord(data.tool))
     })
     register('batch:fail-item', async (event: IpcMainInvokeEvent, payload: unknown) => {
       await this.authorizeBatch(event)
@@ -281,6 +291,8 @@ export class DesktopBatchController {
   }
 
   async cleanup(): Promise<void> {
+    this.closing = true
+    this.coordinatorEpoch += 1
     this.selectedItem = null
     this.selectedImportPath = null
     this.selectedImportOwner = null
@@ -307,16 +319,25 @@ export class DesktopBatchController {
 
   private async authorizeBatch(event: IpcMainInvokeEvent): Promise<void> {
     await this.sessionRevocation
+    const epoch = this.coordinatorEpoch
     if (this.getCoordinator().snapshot().recordKind === 'demo' && !app.isPackaged && process.env.TOOLBOX_INTERNAL_DEMO === '1') return
     this.getCoordinator().assertOwner(await this.options.resolveOwner(event.sender))
+    this.assertEpoch(epoch)
+  }
+
+  private assertEpoch(epoch: number): void {
+    if (this.closing || epoch !== this.coordinatorEpoch) throw new Error('SESSION_REVOKED: 原批次准备已失效，请重新打开工具。')
   }
 
   private getCoordinator(): CoordinatorLike {
+    this.assertEpoch(this.coordinatorEpoch)
     if (this.coordinator) return this.coordinator
     const epoch = this.coordinatorEpoch
     this.coordinator = new BatchCoordinator({
       scriptPath: join(__dirname, '..', 'automation-runner.cjs'),
-      env: this.options.runnerEnvironment(),
+      env: { ...this.options.runnerEnvironment(), TOOLBOX_PERSIST_REPORTS: '1' },
+      executionLease: this.options.executionLease,
+      reportOutbox: this.options.reportOutbox,
       recoveryStore: this.options.recoveryStore,
       authorizeMutation: async () => {
         if (epoch !== this.coordinatorEpoch) throw new Error('SESSION_REVOKED: 原批次现场已经退出。')

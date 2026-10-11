@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCustomerSupportChat } from '@/features/ai/useCustomerSupportChat'
 import { showToast } from '@/utils'
 import { confirmAction } from '@/shared/ui/confirm'
+import { prepareSupportContext, prepareSupportDraft } from '@/features/ai/supportHandoff'
+import { authService } from '@/utils/auth'
 
 const api = vi.hoisted(() => ({
   createChatSession: vi.fn(), sendChatMessage: vi.fn(), getChatSession: vi.fn(),
@@ -29,6 +31,10 @@ describe('customer support handoff errors', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
+    authService.setAuth({ token: 'test-token' })
+    authService.setRole('user')
+    authService.setUser({ id: 1, auth_code_id: 1 })
     api.createChatSession.mockResolvedValue({ session_id: 'session-1', welcome_message: '欢迎咨询' })
     api.getChatHistory.mockResolvedValue({ items: [] })
     vi.mocked(confirmAction).mockResolvedValue(true)
@@ -70,51 +76,52 @@ describe('customer support handoff errors', () => {
     wrapper.unmount()
   })
 
-  it.each(['failed', 'cancelled'])('携带 %s 客户端上下文时保留发送流程，但不断言平台业务未完成', async runStatus => {
-    localStorage.setItem('toolbox_support_context', JSON.stringify({
+  it.each(['failed', 'cancelled'])('携带 %s 上下文时生成可编辑草稿，不擅自发送', async runStatus => {
+    prepareSupportContext({
       tool_name: '平台工具', problem_code: 'ISSUE001', run_status: runStatus, result_requires_review: true,
-    }))
+    }, 'amazon')
     api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请先核对平台记录' })
     const { chat, wrapper } = harness()
     await flushPromises()
-    expect(api.sendChatMessage).toHaveBeenCalledWith('session-1', '平台工具本次客户端已停止，当前平台结果待核对，问题编号 ISSUE001，请帮我核对处理。', { platform_key: 'amazon' })
-    expect(chat.messages.value.find(item => item.role === 'user')?.content).not.toContain('本次操作未完成')
+    expect(api.sendChatMessage).not.toHaveBeenCalled()
+    expect(chat.inputMessage.value).toBe('平台工具本次客户端已停止，当前平台结果待核对，问题编号 ISSUE001，请帮我核对处理。')
     expect(localStorage.getItem('toolbox_support_context')).toBeNull()
     expect(confirmAction).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
   it('记录待同步的客服上下文不被改写成平台任务失败', async () => {
-    localStorage.setItem('toolbox_support_context', JSON.stringify({
+    prepareSupportContext({
       tool_name: '平台工具', run_status: 'completed', record_pending: true,
-    }))
+    }, 'amazon')
     api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请保持联网核对记录' })
     const { chat, wrapper } = harness()
     await flushPromises()
-    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe('平台工具本次执行记录仍待同步，请帮我核对处理。')
+    expect(chat.inputMessage.value).toBe('平台工具本次执行记录仍待同步，请帮我核对处理。')
     expect(confirmAction).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('旧支持上下文缺少结果字段时使用中性问题说明，不编造已核对结果', async () => {
+  it('丢弃无法证明账号归属的旧支持上下文', async () => {
     localStorage.setItem('toolbox_support_context', JSON.stringify({ tool_name: '平台工具', problem_code: 'OLD001' }))
     api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请说明遇到的问题' })
     const { chat, wrapper } = harness()
     await flushPromises()
-    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe('平台工具本次操作遇到问题，问题编号 OLD001，请帮我核对处理。')
+    expect(chat.inputMessage.value).toBe('')
+    expect(api.sendChatMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
   it.each([
     ['demo', '本次本地演示遇到问题'], ['preflight', '本次只读预检遇到问题'],
   ])('%s 支持上下文不被描述成真实平台业务待核对', async (executionMode, situation) => {
-    localStorage.setItem('toolbox_support_context', JSON.stringify({
+    prepareSupportContext({
       tool_name: '平台工具', execution_mode: executionMode, run_status: 'failed', result_requires_review: false,
-    }))
+    }, 'amazon')
     api.sendChatMessage.mockResolvedValue({ session_id: 'session-1', reply: '请查看问题详情' })
     const { chat, wrapper } = harness()
     await flushPromises()
-    expect(chat.messages.value.find(item => item.role === 'user')?.content).toBe(`平台工具${situation}，请帮我核对处理。`)
+    expect(chat.inputMessage.value).toBe(`平台工具${situation}，请帮我核对处理。`)
     wrapper.unmount()
   })
 
@@ -127,6 +134,46 @@ describe('customer support handoff errors', () => {
     await chat.startNewSession()
     expect(chat.sessionId.value).toBe('session-1')
     expect(chat.sessionError.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('consumes a draft before network failure and does not pass it to another account', async () => {
+    prepareSupportDraft('原账号的问题', 'amazon')
+    api.createChatSession.mockRejectedValueOnce(new Error('offline'))
+    const first = harness(); await flushPromises()
+    expect(sessionStorage.getItem('toolbox_support_handoff_v1')).toBeNull()
+    first.wrapper.unmount()
+    authService.setUser({ id: 2, auth_code_id: 2 })
+    const second = harness(); await flushPromises()
+    expect(second.chat.inputMessage.value).toBe('')
+    expect(api.sendChatMessage).not.toHaveBeenCalled()
+    second.wrapper.unmount()
+  })
+
+  it('keeps the same account draft during retry, but not when starting another question', async () => {
+    prepareSupportDraft('可编辑问题', 'amazon')
+    api.createChatSession.mockRejectedValueOnce(new Error('offline'))
+    const { chat, wrapper } = harness(); await flushPromises()
+    await chat.startNewSession()
+    expect(chat.inputMessage.value).toBe('可编辑问题')
+    await chat.startNewSession()
+    expect(chat.inputMessage.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('refreshes paginated history on open and preserves it with a retryable error', async () => {
+    api.getChatHistory.mockResolvedValueOnce({ items: [{ session_id: 'old', status: 'active' }], total: 21, page: 1 })
+    const { chat, wrapper } = harness(); await flushPromises()
+    chat.openHistory(); await flushPromises()
+    expect(api.getChatHistory).toHaveBeenCalledWith(1, 20)
+    api.getChatHistory.mockResolvedValueOnce({ items: [{ session_id: 'older', status: 'resolved' }], total: 21, page: 2 })
+    await chat.loadHistory(2)
+    expect(chat.historyPage.value).toBe(2)
+    expect(chat.historySessions.value[0]?.session_id).toBe('older')
+    api.getChatHistory.mockRejectedValueOnce(new Error('offline'))
+    await chat.loadHistory(1)
+    expect(chat.historySessions.value[0]?.session_id).toBe('older')
+    expect(chat.historyError.value).toContain('重试')
     wrapper.unmount()
   })
 

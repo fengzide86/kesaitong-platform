@@ -70,6 +70,7 @@ describe('component construction smoke', () => {
         props: {
           ...requiredProps(loaded.default),
           ...(filename.endsWith('/ScenarioPainComparison.vue') ? { kind: 'competition' } : {}),
+          ...(filename.endsWith('/LandingSceneChecklist.vue') ? { scene: 'competition' } : {}),
         },
         global: {
           plugins: [createPinia(), router],

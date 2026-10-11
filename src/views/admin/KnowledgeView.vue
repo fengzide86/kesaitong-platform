@@ -33,7 +33,7 @@
 
     <!-- 筛选 -->
     <DataToolbar v-if="loadState !== 'loading' && loadState !== 'error'" label="知识库筛选">
-      <el-select v-model="filterCategory" placeholder="全部分类" clearable @change="loadData" style="width: 200px;">
+      <el-select v-model="filterCategory" placeholder="全部分类" clearable @change="applyFilters" style="width: 200px;">
         <el-option 
           v-for="cat in categories" 
           :key="cat.name" 
@@ -45,7 +45,8 @@
         v-model="searchKeyword" 
         placeholder="搜索标题/内容..." 
         clearable
-        @keyup.enter="loadData"
+        @keyup.enter="applyFilters"
+        @clear="applyFilters"
         style="width: 250px;"
       >
         <template #prefix>
@@ -182,8 +183,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { getKnowledgeList, getKnowledgeCategories, getKnowledgeStats, createKnowledge, updateKnowledge, deleteKnowledge, syncKnowledgeVector, testKnowledgeRetrieval } from '@/utils/api'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { getKnowledgeList, getKnowledgeCategories, getKnowledgeStats, createKnowledge, updateKnowledge, deleteKnowledge } from '@/utils/api'
 import { showToast } from '@/utils'
 import { usePlatformStore } from '@/stores/platform'
 import { useCompactLayout } from '@/composables/useCompactLayout'
@@ -199,10 +200,7 @@ import {
   knowledgeItemSchema,
   knowledgeListSchema,
   knowledgeStatsSchema,
-  retrievalTestResultSchema,
-  vectorSyncResultSchema,
   type KnowledgeItem,
-  type RetrievalTestResult,
 } from '@/features/admin/model'
 
 const platformStore = usePlatformStore()
@@ -219,12 +217,7 @@ const stats = ref(knowledgeStatsSchema.parse({}))
 const showModal = ref(false)
 const editingId = ref<string | number | null>(null)
 const submitting = ref(false)
-const syncing = ref(false)
 const keywordsStr = ref('')
-const showRetrievalTest = ref(false)
-const retrievalLoading = ref(false)
-const retrievalResult = ref<RetrievalTestResult | null>(null)
-const retrievalForm = ref({ query: '', platform_key: '', capability_key: '', top_k: 5, min_score: 0.3 })
 const showDetailDrawer = ref(false)
 const detailItem = ref<KnowledgeItem | null>(null)
 const loadState = ref<AsyncDataState>('loading')
@@ -232,6 +225,11 @@ const loadError = ref('')
 const metaState = ref<AsyncDataState>('loading')
 const metaError = ref('')
 const metaHasLoaded = ref(false)
+let listSequence = 0
+let active = true
+function applyFilters() { page.value = 1; void loadData() }
+watch(() => platformStore.adminPlatform, applyFilters)
+onUnmounted(() => { active = false; listSequence += 1 })
 
 const allCategories = ['安装教程', '授权说明', '使用教程', '报错处理', '套餐说明', '退款规则', '比赛须知', '其他']
 
@@ -246,6 +244,7 @@ const form = ref({
 })
 
 async function loadData() {
+  const sequence = ++listSequence
   loadState.value = list.value.length ? 'data' : 'loading'
   loadError.value = ''
   try {
@@ -255,10 +254,14 @@ async function loadData() {
     const pk = platformStore.adminPlatform
     if (pk && pk !== 'all') params.platform_key = pk
     const result = knowledgeListSchema.parse(await getKnowledgeList(params))
+    if (!active || sequence !== listSequence) return
+    const lastPage = Math.max(1, Math.ceil(result.total / pageSize))
+    if (page.value > lastPage) { page.value = lastPage; await loadData(); return }
     list.value = result.items
     total.value = result.total
     loadState.value = settledDataState(result.items.length)
   } catch (error) {
+    if (!active || sequence !== listSequence) return
     loadError.value = error instanceof Error && error.message ? error.message : '知识库列表暂时无法加载'
     loadState.value = failedDataState(list.value.length > 0)
   }
@@ -329,7 +332,7 @@ async function submitForm() {
     }
     showModal.value = false
     await Promise.all([loadData(), loadMeta()])
-  } catch (err) {
+  } catch {
     showToast('保存失败', 'error')
   } finally {
     submitting.value = false
@@ -348,21 +351,8 @@ async function handleDelete(rawItem: unknown) {
     await deleteKnowledge(item.id)
     showToast('已删除', 'success')
     await Promise.all([loadData(), loadMeta()])
-  } catch (err) {
+  } catch {
     showToast('删除失败', 'error')
-  }
-}
-
-async function syncVector() {
-  syncing.value = true
-  try {
-    const result = vectorSyncResultSchema.parse(await syncKnowledgeVector())
-    showToast(`已同步 ${result.synced} 条`, 'success')
-    await loadMeta()
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '同步失败', 'error')
-  } finally {
-    syncing.value = false
   }
 }
 
@@ -374,33 +364,6 @@ function openKnowledgeDetail(rawItem: unknown) {
 function handleKnowledgeCommand(command: string, item: unknown) {
   if (command === 'edit') openEdit(item)
   if (command === 'delete') handleDelete(item)
-}
-
-function openRetrievalTest() {
-  const platform = platformStore.adminPlatform
-  retrievalForm.value.platform_key = platform && platform !== 'all' ? platform : ''
-  retrievalResult.value = null
-  showRetrievalTest.value = true
-}
-
-async function runRetrievalTest() {
-  if (!retrievalForm.value.query.trim()) {
-    showToast('请输入测试问题', 'warning')
-    return
-  }
-  retrievalLoading.value = true
-  try {
-    retrievalResult.value = retrievalTestResultSchema.parse(await testKnowledgeRetrieval({
-      ...retrievalForm.value,
-      query: retrievalForm.value.query.trim(),
-      platform_key: retrievalForm.value.platform_key || null,
-      capability_key: retrievalForm.value.capability_key || null,
-    }))
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '召回测试失败', 'error')
-  } finally {
-    retrievalLoading.value = false
-  }
 }
 
 onMounted(loadInitial)

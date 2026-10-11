@@ -367,10 +367,10 @@ export const api = {
 }
 
 export { verifyAuthCode, adminLogin, checkAuthStatus, getCurrentUser } from './auth'
-export { getAuthCodes, batchGenerateAuthCodes, updateAuthCode, deleteAuthCode } from './auth-codes'
+export { getAuthCodes, getAuthCodesPage, getAuthCode, batchGenerateAuthCodes, updateAuthCode, deleteAuthCode } from './auth-codes'
 export { getPlans, getPlansAdmin, createPlan, updatePlan, enablePlan, disablePlan, archivePlan } from './plans'
-export { getOrders, getOrdersPage, exportOrders, createOrder, updateOrder, markOrderPaid, cancelOrder, refundOrder } from './orders'
-export { getUsers, updateUser } from './users'
+export { getOrders, getOrder, getOrdersPage, exportOrders, createOrder, updateOrder, markOrderPaid, cancelOrder, refundOrder } from './orders'
+export { getUsers, getUser, getUsersPage, updateUser } from './users'
 export { getDevices, getMyDevices, unbindDevice, userUnbindDevice } from './devices'
 export { getKnowledgeList, getKnowledgeCategories, getKnowledgeStats, getKnowledge, createKnowledge, updateKnowledge, deleteKnowledge, batchImportKnowledge, syncKnowledgeVector, testKnowledgeRetrieval } from './knowledge'
 export { createChatSession, getChatSession, sendChatMessage, resolveChatSession, transferChatToHuman, rateChatSession, getChatHistory, getAIChatConfig, updateAIChatConfig, getAdminChatSessions, getAdminChatSession, getAIChatStats, debugAIChat } from './ai-chat'
@@ -378,7 +378,7 @@ export { getAnnouncements, getAnnouncementFeed, markAnnouncementRead, dismissAnn
 export { getTools, getToolCategories, updateTools, updateToolCategories, createToolLaunchGrant } from './tools'
 export { getToolReleases, createToolRelease, publishToolRelease, rollbackToolRelease } from './tool-releases'
 export { getFreightRateReleases, createFreightRateDraft, publishFreightRatePack, rollbackFreightRatePack, getCurrentFreightRatePack } from './freight-rates'
-export { getFeedbacks, getFeedbacksPage, getMyFeedbacks, createFeedback, updateFeedback } from './feedback'
+export { getFeedbacks, getFeedback, getFeedbacksPage, getMyFeedbacks, createFeedback, updateFeedback } from './feedback'
 export { getLogs, exportLogs, getLogTools, createLog } from './logs'
 export { createDemoRun, updateDemoRun, finishDemoRun, cancelDemoRun, getDemoRun, getDemoRuns, getDemoRunsPage, createDemoBatch, updateDemoBatch, updateDemoBatchItem, finishDemoBatch, getDemoBatches, getDemoBatchesPage, getDemoBatch } from './demo'
 export { getExecutions, getExecutionsPage, getExecution } from './executions'

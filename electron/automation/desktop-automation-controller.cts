@@ -29,7 +29,9 @@ import { DesktopBatchController } from './desktop-batch-controller.cjs'
 import { RunnerClient } from './runner-client.cjs'
 import { ExecutionReportOutbox } from './execution-report-outbox.cjs'
 import { LocalArtifactService } from './local-artifact-service.cjs'
-import { FileInputController } from './file-input-controller.cjs'
+import { FileInputController, type LocalFileSnapshot } from './file-input-controller.cjs'
+import { ExecutionLease, type ExecutionPermit } from './execution-lease.cjs'
+import { WorkspaceBrowserSessions } from './workspace-browser-sessions.cjs'
 import type { LocalArtifactReadRequest, LocalArtifactReadResult } from '../../src/shared/ipc/artifact-contract.js'
 
 type UnknownRecord = Record<string, unknown>
@@ -98,6 +100,7 @@ function installBusyError(message: string): Error & { code: 'INSTALL_BUSY' } {
  * composition only asks whether work is active and requests quiescence.
  */
 export class DesktopAutomationController {
+  readonly browserSessions = new WorkspaceBrowserSessions()
   private readonly options: DesktopAutomationControllerOptions
   private readonly embeddedBrowserHost = new EmbeddedBrowserHost()
   private readonly batchController: DesktopBatchController
@@ -108,14 +111,20 @@ export class DesktopAutomationController {
   private readonly reportOutbox: ExecutionReportOutbox
   private readonly artifacts: LocalArtifactService
   private readonly recovery: RecoveryStore
-  private singleRecovery: { owner: string; id: string; sender: WebContents } | null = null
+  private singleRecovery: { owner: string; id: string; sender: WebContents; files: LocalFileSnapshot } | null = null
+  private readonly executionLease: ExecutionLease
+  private singlePermit: ExecutionPermit | null = null
+  private singleReceipt: string | null = null
+  private closing = false
   private readonly fileInputs: FileInputController
   private pendingArtifactOwner: { owner: WebContents; generation: number } | null = null
   private runnerEpoch = 0
+  private runnerSerial = 0
   private sessionRevocation: Promise<void> | null = null
 
   constructor(options: DesktopAutomationControllerOptions) {
     this.options = options
+    this.executionLease = new ExecutionLease(options.onActivityChanged)
     this.recovery = new RecoveryStore(join(app.getPath('userData'), 'recovery-metadata'))
     this.fileInputs = new FileInputController(options.getWindow)
     this.artifacts = new LocalArtifactService({ directory: join(app.getPath('userData'), 'automation-artifacts') })
@@ -134,6 +143,8 @@ export class DesktopAutomationController {
       recoveryStore: this.recovery,
       resolveOwner: (sender: WebContents) => this.resolveRecoveryOwner(sender),
       validateUpload: (sender: WebContents, filePath: unknown) => this.fileInputs.validateUpload(sender, filePath),
+      executionLease: this.executionLease,
+      reportOutbox: this.reportOutbox,
     })
   }
 
@@ -161,7 +172,7 @@ export class DesktopAutomationController {
   activityState(): DesktopActivityState {
     return {
       batchActive: this.batchController.isActive(),
-      singleRunActive: this.singleRunActive,
+      singleRunActive: this.singleRunActive || this.singleStartInFlight || this.executionLease.busy,
       demoActive: this.demoActivityTokens.size > 0,
     }
   }
@@ -184,16 +195,25 @@ export class DesktopAutomationController {
 
   async cancelActiveForWindowClose(): Promise<void> {
     await this.batchController.cancelActiveForWindowClose()
-    await this.runner?.cancel().catch(() => undefined)
-    this.singleRunActive = false
+    await this.cancelSingle()
   }
 
   async cleanup(): Promise<void> {
+    this.closing = true
+    this.runnerEpoch += 1
+    this.executionLease.close()
+    this.singlePermit = null
+    this.singleStartInFlight = false
+    if (this.singleRecovery) {
+      try { this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, { type: 'run.interrupted' }) }
+      catch { /* Always stop the Runner even when the recovery disk is unavailable. */ }
+    }
     this.artifacts.clear()
     this.pendingArtifactOwner = null
     this.reportOutbox.dispose()
     this.embeddedBrowserHost.release()
-    const cleanupTasks: Promise<unknown>[] = [this.batchController.cleanup()]
+    this.browserSessions.revoke()
+    const cleanupTasks: Promise<unknown>[] = [(async () => { await this.batchController.cleanup(); await this.reportOutbox.drain?.() })()]
     if (this.runner) cleanupTasks.push(this.runner.stop())
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -220,6 +240,40 @@ export class DesktopAutomationController {
     this.singleRunActive = false
   }
 
+  private assertEpoch(epoch: number): void {
+    if (this.closing || epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 原执行准备已失效，请重新打开工具。')
+  }
+
+  private releaseSinglePermit(): void { this.singlePermit?.release(); this.singlePermit = null }
+
+  private releaseUnusedReceipt(record = this.singleRecovery, receipt = this.singleReceipt): void {
+    if (!record || !receipt) return
+    try {
+      if (this.recovery.list(record.owner).find(row => row.id === record.id)?.classification === 'not_submitted') {
+        void this.reportOutbox.releaseReservation(receipt).catch(() => { /* retain reservation on storage failure */ })
+      }
+    } catch { /* Unknown evidence must retain its reserved slot. */ }
+  }
+
+  private async cancelSingle(): Promise<void> {
+    this.runnerEpoch += 1
+    const runner = this.runner
+    const record = this.singleRecovery
+    this.runner = null
+    this.singleRecovery = null
+    this.pendingArtifactOwner = null
+    if (record) {
+      try { this.recovery.observe(record.owner, record.id, { type: 'run.cancelled' }); this.releaseUnusedReceipt(record) }
+      catch { /* Always stop; the prior mutation marker still prevents blind retry. */ }
+    }
+    // A stopping Runner retains ownership until it has stopped; stale requests
+    // are rejected by epoch, including a launch suspended in auth/file I/O.
+    await runner?.stop()
+    this.releaseSinglePermit()
+    this.singleRunActive = false
+    this.options.onActivityChanged()
+  }
+
   private runnerEnvironment(): NodeJS.ProcessEnv {
     return {
       TOOLBOX_CONTROL_API_URL: this.options.controlApiBase,
@@ -235,11 +289,13 @@ export class DesktopAutomationController {
   private getRunner(): RunnerLike {
     if (this.runner) return this.runner
     const epoch = this.runnerEpoch
+    const serial = ++this.runnerSerial
+    let ended = false
     this.runner = new RunnerClient({
       scriptPath: join(__dirname, '..', 'automation-runner.cjs'),
       env: { ...this.runnerEnvironment(), TOOLBOX_PERSIST_REPORTS: '1' },
       onEvent: (rawEvent: unknown) => {
-        if (epoch !== this.runnerEpoch) return
+        if (ended || epoch !== this.runnerEpoch || serial !== this.runnerSerial) return
         let event = parseDesktopIpcEvent('automation:event', rawEvent)
         if (this.singleRecovery) {
           try { this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, event) }
@@ -254,7 +310,13 @@ export class DesktopAutomationController {
         }
         this.artifacts.observe(event)
         if (event.type === 'run.started' || event.type === 'run.preparing') this.singleRunActive = true
-        if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) this.singleRunActive = false
+        if (event.type === 'user.action_required') this.releaseSinglePermit()
+        if (['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+          ended = true
+          this.singleRunActive = false
+          this.releaseSinglePermit()
+          this.releaseUnusedReceipt()
+        }
         this.options.onActivityChanged()
         const window = this.options.getWindow()
         if (window && !window.isDestroyed()) window.webContents.send('automation:event', event)
@@ -268,7 +330,12 @@ export class DesktopAutomationController {
         }
       },
       onHostRequest: async (action: string, payload: UnknownRecord) => {
-        if (epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 原授权现场已经退出，已禁止继续操作。')
+        if (ended || epoch !== this.runnerEpoch || serial !== this.runnerSerial) throw new Error('SESSION_REVOKED: 原授权现场已经退出，已禁止继续操作。')
+        const requestPermit = this.singlePermit
+        if (action !== 'execution.report') {
+          if (!requestPermit) throw new Error('EXECUTION_REVOKED: 当前任务正在等待人工操作，尚未取得执行许可。')
+          requestPermit.assert()
+        }
         if (action === 'files.validate-upload' || (action === 'browser.action' && asRecord(payload.action).kind === 'upload')) {
           const record = this.singleRecovery
           if (!record || await this.resolveRecoveryOwner(record.sender) !== record.owner || epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('授权已变化，已禁止上传本机文件。')
@@ -277,16 +344,24 @@ export class DesktopAutomationController {
             : typeof upload.inputKey === 'string' ? asRecord(payload.input)[upload.inputKey] : upload.value
           const result = await this.fileInputs.validateUpload(record.sender, filePath)
           if (epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('SESSION_REVOKED: 原授权上传已经退出。')
+          requestPermit!.assert()
           if (action === 'files.validate-upload') return result
         }
         if (action === 'recovery.before-mutation') {
           const record = this.singleRecovery
           if (!record) throw new Error('缺少本机恢复记录，已禁止提交。')
           if (await this.resolveRecoveryOwner(record.sender) !== record.owner || epoch !== this.runnerEpoch || this.singleRecovery !== record) throw new Error('授权已变化，已禁止继续提交。')
+          await this.fileInputs.validateSnapshot(record.sender, record.files)
+          this.assertEpoch(epoch)
+          requestPermit!.assert()
           this.recovery.mutation(record.owner, record.id)
           return { saved: true }
         }
-        return action === 'execution.report' ? this.reportOutbox.submit(payload) : this.embeddedBrowserHost.request(action, payload)
+        if (action === 'execution.report') {
+          if (!this.singleReceipt) throw new Error('RECEIPT_RESERVATION_MISSING: 缺少本次执行回执预留')
+          return this.reportOutbox.submit(payload, this.singleReceipt)
+        }
+        return this.embeddedBrowserHost.request(action, payload)
       },
     }) as RunnerLike
     return this.runner
@@ -358,6 +433,7 @@ export class DesktopAutomationController {
     register('automation:start', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
       if (this.sessionRevocation) await this.sessionRevocation
       const epoch = this.runnerEpoch
+      this.assertEpoch(epoch)
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
       if (tool.executionMode !== 'live' && !(tool.executionMode === 'demo' && !app.isPackaged && process.env.TOOLBOX_INTERNAL_DEMO === '1')) {
@@ -370,25 +446,41 @@ export class DesktopAutomationController {
       if (this.singleStartInFlight || this.singleRunActive) {
         throw Object.assign(new Error('当前任务尚未结束，请先停止或等待结束。'), { code: 'RUN_ALREADY_ACTIVE' })
       }
+      const permit = this.executionLease.acquire()
       this.singleStartInFlight = true
+      this.singlePermit = permit
+      this.options.onActivityChanged()
       const pending = { owner: event.sender, generation: this.artifacts.begin(event.sender) }
       this.pendingArtifactOwner = pending
+      let receipt: string | null = null
+      let runnerStarted = false
       try {
         this.singleRecovery = null
+        this.singleReceipt = null
         // Renderer keys are display hints only. The verified control catalog is
         // authoritative, including when the renderer omits or empties its list.
         const session = tool.executionMode === 'live' ? await this.resolveRecoverySession(event.sender) : null
-        const paths = session ? await this.trustedFilePaths(event.sender, session.token, tool.id, input) : []
-        const validation = await this.fileInputs.validate(event.sender, paths)
-        if (epoch !== this.runnerEpoch) throw new Error('SESSION_REVOKED: 授权已经退出，请重新打开工具。')
-        if (!validation.valid) throw new Error(`LOCAL_FILE_UNREADABLE: ${validation.issues[0]?.message || '本机文件无法读取'}`)
+        this.assertEpoch(epoch)
+        if (session && this.embeddedBrowserHost.isReady() && !this.browserSessions.matches(session.owner, tool.platformKey === 'aliexpress' ? 'aliexpress' : 'amazon')) {
+          throw new Error('BROWSER_OWNER_CHANGED: 请重新打开工具，以隔离当前平台账号。')
+        }
+        const fields = session ? await this.trustedFilePaths(event.sender, session.token, tool.id, input) : {}
+        this.assertEpoch(epoch)
+        const files = await this.fileInputs.snapshot(event.sender, input, fields)
+        this.assertEpoch(epoch)
         if (session) {
           if (event.sender.isDestroyed() || this.options.getWindow()?.webContents !== event.sender || await event.sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== session.token) throw new Error('授权在文件验证期间已变化，请重新打开工具。')
+          this.assertEpoch(epoch)
+          receipt = await this.reportOutbox.reserve(asRecord(tool.launchGrant).token)
+          this.assertEpoch(epoch)
+          this.singleReceipt = receipt
           const owner = session.owner
-          const context = asRecord(tool.executionContext)
-          const record = this.recovery.begin(owner, tool, asRecord(context.input))
-          this.singleRecovery = { owner, id: record.id, sender: event.sender }
+          const record = this.recovery.begin(owner, tool, files.input, { legacyInput: input })
+          this.singleRecovery = { owner, id: record.id, sender: event.sender, files }
         }
+        permit.assert()
+        if (this.runner) { await this.runner.stop(); this.assertEpoch(epoch); this.runner = null }
+        runnerStarted = true
         const result = await this.getRunner().start({
           ...tool,
           browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',
@@ -397,33 +489,88 @@ export class DesktopAutomationController {
         this.artifacts.registerRun(pending.owner, pending.generation, asRecord(result).runId)
         return result
       } catch (cause) {
-        if (this.singleRecovery) this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, { type: 'run.failed', error: { code: 'START_FAILED' } })
+        if (epoch === this.runnerEpoch && this.singleRecovery) this.recovery.observe(this.singleRecovery.owner, this.singleRecovery.id, { type: 'run.failed', error: { code: 'START_FAILED' } })
+        if (runnerStarted && epoch === this.runnerEpoch) {
+          await this.runner?.stop()
+          this.runner = null
+          this.runnerEpoch += 1
+          this.singleRunActive = false
+        }
+        if (receipt && !runnerStarted) await this.reportOutbox.releaseReservation(receipt)
+        permit.release()
+        if (this.singlePermit === permit) this.singlePermit = null
         throw cause
       } finally {
         this.singleStartInFlight = false
         if (this.pendingArtifactOwner === pending) this.pendingArtifactOwner = null
+        this.options.onActivityChanged()
       }
     })
     register('automation:preflight', async (event: IpcMainInvokeEvent, rawTool: unknown) => {
       if (this.sessionRevocation) await this.sessionRevocation
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
-      this.resetArtifactsForOwner(event.sender.id)
-      return this.getRunner().preflight({
+      this.assertEpoch(this.runnerEpoch)
+      if (this.singleRunActive) throw new Error('RUN_ALREADY_ACTIVE: 请先结束当前任务')
+      const permit = this.executionLease.acquire()
+      this.singlePermit = permit
+      const epoch = this.runnerEpoch
+      try {
+        if (this.embeddedBrowserHost.isReady()) {
+          const owner = await this.resolveRecoveryOwner(event.sender)
+          this.assertEpoch(epoch)
+          if (!this.browserSessions.matches(owner, tool.platformKey === 'aliexpress' ? 'aliexpress' : 'amazon')) throw new Error('BROWSER_OWNER_CHANGED: 请重新打开工具')
+        }
+        permit.assert()
+        return await this.getRunner().preflight({
         ...tool,
         browserMode: this.embeddedBrowserHost.isReady() ? 'embedded-cdp' : 'playwright',
-      })
+      }) } finally { permit.release(); if (this.singlePermit === permit) this.singlePermit = null }
     })
-    register('automation:pause', () => this.getRunner().pause())
-    register('automation:resume', () => this.getRunner().resume())
-    register('automation:complete-user-action', () => this.getRunner().completeUserAction())
-    register('automation:cancel', () => this.getRunner().cancel())
-    register('automation:register-browser', (event: IpcMainInvokeEvent, webContentsId: unknown) => {
+    register('automation:pause', () => this.runner?.pause())
+    const resume = async (complete: boolean) => {
+      this.assertEpoch(this.runnerEpoch)
+      if (!this.runner || !this.singleRunActive) throw new Error('当前任务已结束')
+      this.singlePermit ||= this.executionLease.acquire()
+      this.singlePermit.assert()
+      try { return await (complete ? this.runner.completeUserAction() : this.runner.resume()) }
+      catch (cause) { this.releaseSinglePermit(); throw cause }
+    }
+    register('automation:resume', () => resume(false))
+    register('automation:complete-user-action', () => resume(true))
+    register('automation:cancel', () => this.cancelSingle())
+    register('automation:prepare-browser', async (event: IpcMainInvokeEvent, platform: string) => {
+      if (this.sessionRevocation) await this.sessionRevocation
+      let epoch = this.runnerEpoch
+      this.assertEpoch(epoch)
+      const owner = await this.resolveRecoveryOwner(event.sender)
+      this.assertEpoch(epoch)
+      if (!this.browserSessions.matches(owner, platform)) {
+        // Changing a verified owner retires old browser scenes. Opening another
+        // tool for the same owner must not silently cancel a live batch.
+        const changedOwner = this.browserSessions.hasGrant && !this.browserSessions.isOwner(owner)
+        if (changedOwner) { await this.revokeSession(); epoch = this.runnerEpoch }
+        else {
+          if (this.hasActiveWork()) throw new Error('RUN_ALREADY_ACTIVE: 请先结束当前任务')
+          this.embeddedBrowserHost.release()
+        }
+      }
+      this.assertEpoch(epoch)
+      if (await this.resolveRecoveryOwner(event.sender) !== owner) throw new Error('授权已变化，请重新打开工具')
+      this.assertEpoch(epoch)
+      return this.browserSessions.prepare(owner, platform)
+    })
+    register('automation:register-browser', async (event: IpcMainInvokeEvent, webContentsId: unknown) => {
+      const epoch = this.runnerEpoch
+      const owner = await this.resolveRecoveryOwner(event.sender)
+      this.assertEpoch(epoch)
       const guest = webContents.fromId(Number(webContentsId))
       if (!guest || guest.getType?.() !== 'webview') throw new Error('无法注册工作区浏览器')
-      if (guest.hostWebContents && guest.hostWebContents.id !== event.sender.id) {
+      if (guest.hostWebContents?.id !== event.sender.id) {
         throw new Error('工作区浏览器归属校验失败')
       }
+      this.browserSessions.assertGuest(guest, owner)
+      if (this.singleRunActive || this.singleStartInFlight) throw new Error('RUN_ALREADY_ACTIVE: 任务执行期间不能替换浏览器')
       return this.embeddedBrowserHost.register(guest)
     })
     register('automation:unregister-browser', () => this.embeddedBrowserHost.release())
@@ -449,7 +596,7 @@ export class DesktopAutomationController {
     return (await this.resolveRecoverySession(sender)).owner
   }
 
-  private async trustedFilePaths(sender: WebContents, token: string, toolId: unknown, input: UnknownRecord): Promise<string[]> {
+  private async trustedFilePaths(sender: WebContents, token: string, toolId: unknown, input: UnknownRecord): Promise<Record<string, string>> {
     const response = await net.fetch(`${this.options.controlApiBase}/api/tools`, {
       headers: { Authorization: `Bearer ${token}`, 'X-Toolbox-Version': app.getVersion() }, signal: AbortSignal.timeout(15000),
     })
@@ -458,7 +605,7 @@ export class DesktopAutomationController {
     const tool = catalog.map(asRecord).find(row => row.id === toolId)
     if (!tool || !Array.isArray(tool.single_input_schema)) throw new Error('TOOL_SCHEMA_UNAVAILABLE: 未找到有效工具参数配置')
     if (sender.isDestroyed() || this.options.getWindow()?.webContents !== sender || await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== token) throw new Error('授权在参数验证期间已变化，请重新打开工具。')
-    const paths: string[] = []
+    const paths: Record<string, string> = {}
     for (const rawField of tool.single_input_schema) {
       const field = asRecord(rawField)
       if (field.type !== 'file') continue
@@ -467,15 +614,15 @@ export class DesktopAutomationController {
       if (value === undefined || value === null || value === '') {
         if (field.required !== false) throw new Error('LOCAL_FILE_REQUIRED: 请先选择工具所需的本机文件')
       } else if (typeof value !== 'string') throw new Error('LOCAL_FILE_REQUIRED: 文件参数必须来自本机文件选择')
-      else paths.push(value)
+      else paths[field.key] = value
     }
     return paths
   }
 
-  private registerRecoveryIpc(): void {
-    const register = this.options.registerAutomationHandle
-    register('recovery:revoke-session', async () => {
+  private async revokeSession(): Promise<void> {
       this.runnerEpoch += 1
+      this.executionLease.invalidate()
+      this.singlePermit = null
       const prior = this.singleRecovery
       const runner = this.runner
       this.runner = null
@@ -485,6 +632,7 @@ export class DesktopAutomationController {
       const sender = this.options.getWindow()?.webContents
       if (sender) this.resetArtifactsForOwner(sender.id)
       this.embeddedBrowserHost.release()
+      this.browserSessions.revoke()
       if (prior) {
         try { this.recovery.observe(prior.owner, prior.id, { type: 'run.interrupted', error: { code: 'SESSION_REVOKED' } }) }
         catch { /* unavailable ledger keeps further execution fail-closed */ }
@@ -498,7 +646,11 @@ export class DesktopAutomationController {
       this.sessionRevocation = current
       await current
       if (this.sessionRevocation === current) this.sessionRevocation = null
-    })
+  }
+
+  private registerRecoveryIpc(): void {
+    const register = this.options.registerAutomationHandle
+    register('recovery:revoke-session', () => this.revokeSession())
     register('recovery:list', async (event: IpcMainInvokeEvent, query: RecoveryQuery) => this.recovery.list(await this.resolveRecoveryOwner(event.sender), query.batchId))
     register('recovery:review', async (event: IpcMainInvokeEvent, request: RecoveryReview) => this.recovery.review(await this.resolveRecoveryOwner(event.sender), request.id, request.revision, request.conclusion))
     register('recovery:prepare', async (event: IpcMainInvokeEvent, request: RecoveryPrepare) => this.batchController.prepareRecovery(await this.resolveRecoveryOwner(event.sender), request))

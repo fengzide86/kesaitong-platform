@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, JsonValue, RootModel
+from pydantic import BaseModel, Field, JsonValue, RootModel
 
 
 class ConfigJsonValue(RootModel[JsonValue]):
@@ -74,6 +74,11 @@ class LaunchGrantVerifyDataResponse(BaseModel):
     execution_mode: str
     client_batch_id: str | None
     client_item_id: str | None
+
+
+class LaunchGrantVerifyRequest(BaseModel):
+    """New clients keep the one-use grant out of URL and proxy access logs."""
+    token: str = Field(min_length=1, max_length=512)
 
 
 class LaunchGrantVerifySuccessResponse(BaseModel):

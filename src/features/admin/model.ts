@@ -34,6 +34,9 @@ export const adminFeedbackSchema = z.object({
   status: feedbackStatusSchema.catch('pending'),
   admin_reply: nullableText,
   created_at: nullableText,
+  replied_at: nullableText,
+  updated_at: nullableText,
+  platform_key: nullableText,
 }).passthrough()
 
 export const adminFeedbacksSchema = z.array(adminFeedbackSchema)
@@ -175,6 +178,16 @@ export const adminOrderSchema = z.object({
   status: z.string().default('pending'),
   refund_amount: z.coerce.number().default(0),
   created_at: nullableText,
+  agency_id: entityIdSchema.nullable().optional(),
+  customer_id: entityIdSchema.nullable().optional(),
+  customer_name: nullableText,
+  agency_name: nullableText,
+  auth_code_id: entityIdSchema.nullable().optional(),
+  auth_code_status: nullableText,
+  plan_name_snapshot: nullableText,
+  platform_key: nullableText,
+  paid_at: nullableText,
+  refunded_at: nullableText,
 }).passthrough()
 export const adminOrdersSchema = z.array(adminOrderSchema)
 export type AdminOrder = z.infer<typeof adminOrderSchema>

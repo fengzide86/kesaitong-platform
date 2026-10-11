@@ -2,7 +2,9 @@
 
 ## 日常开发
 
-唯一源码目录为 `D:\开发项目\amazon-toolbox-vue`；入口均从自身所在目录解析项目，不依赖打开终端的位置，也不复制源码到旧目录。
+主开发目录为 `D:\开发项目\课赛通-核心平台`，旧名 `D:\开发项目\amazon-toolbox-vue` 已迁移，不应重新创建。入口均从自身所在目录解析项目，不依赖打开终端的位置，也不复制源码到旧目录。
+
+本机工作区职责（2026-10-11 核对）：`kst-web-retirement` 是上轮已发布基线的独立工作区，`kst-local-experience` 是本地体验候选，`kst-experience-fixes` 是本轮修复与验收的独立工作区。目录存在不代表版本已上线；以根目录 `AI_GUIDE.md`、共享 `current-status.md`、实际 `git status` / HEAD 和发布记录交叉核对。不要合并或覆盖其他对话的未完成改动，也不要增加另一个“最新版”入口。
 
 第一次使用请先看根目录 `00_快捷入口说明.md`。保留全部原入口文件名，已有桌面快捷方式继续有效。
 
@@ -25,7 +27,15 @@
 
 GitHub CLI 优先验证 `TOOLBOX_GH_EXE`，然后依次检查 PATH、Windows 标准安装目录、D 盘工具链（按数值版本排序）；仅使用能实际运行 `gh --version` 的程序。选中的 Python、Node 和已有 GitHub CLI 仅加入本次进程 PATH，本地预览及管理员初始化也使用同一解释器，运行数据目录不变。中文、空格及 `&`、`!` 路径、带空格参数和非零退出码都有 Windows 回归测试。失败默认保留窗口，自动化设置 `TOOLBOX_NO_PAUSE=1` 可禁用暂停，原退出码不会被暂停覆盖。
 
-Node 使用 22 系列，CI 固定版本见 `.node-version`。Python CI 使用 3.10，并按 `backend/constraints-py310.txt` 验证生产依赖。使用 `npm ci` 保持依赖锁文件一致；本机其他 Python 版本的测试结果不替代 Python 3.10 CI。
+Node 使用 22 系列，当前 `.node-version` 固定为 `22.23.3`，五处 CI `setup-node` 均读取同一文件；`release:policy` 拒绝另写硬编码版本。2026-10-11 已在本机并列安装经官方 SHA256 核验的该补丁版本，旧运行时保留，未修改系统 PATH。
+
+本地候选已把 CI、Docker、约束、静态检查和部署解释器统一到 Python 3.12，使用 `backend/constraints-py312.txt`。部署会在停止服务前确认 `python3.12` 可用，不自动安装或改写服务器解释器。旧 `constraints-py310.txt` 仅保留历史参考。当前源码迁移与本机验证不代表服务器已升级或远端 CI 已通过，结果见 `docs/LOCAL_EXPERIENCE_ACCEPTANCE.md` 顶部。
+
+npm 固定使用 12.2.0（`packageManager`）；Node 22.23.3 自带旧 npm 在新版 peer 依赖解析中会报 `edgesOut`，不要通过 `--force` / `--legacy-peer-deps` 忽略。CI 显式安装固定 npm，本地可用 `npx --yes npm@12.2.0 ci`。Electron 新包安装通过根目录 `postinstall` 显式准备；构建期脚本只允许 package.json 中列出的精确版本。
+
+本轮独立 Node 依赖位于 `D:\AmazonToolboxData\validation\kst-hardening-npm\node_modules`，Python 位于 `D:\AmazonToolboxData\venvs\kst-hardening-py312`；工作树仅链接到它们，未改变 `kst-web-retirement` 原共享依赖。凭据扫描不替代依赖漏洞扫描：`security:dependencies:npm` 要求运行依赖零告警，构建期例外必须有明确理由与到期日；Python 锁定依赖由独立 pip-audit 2.10.1 检查。过期或新增告警阻止发布。
+
+使用固定 npm 的 `ci` 保持依赖锁文件一致，但先确认 `node_modules` 的 junction/symlink 目标。本轮已把 `kst-experience-fixes/node_modules` 切到上述独立目录；原链接保留为忽略提交的 `node_modules.before-hardening.link`，其原共享目标未改。后续升级同样必须使用独立依赖和 Python 环境，不运行 `npm audit fix --force`。多工作区共用 Playwright 缓存时，包装器默认 `PLAYWRIGHT_SKIP_BROWSER_GC=1`，避免升级时自动清理其他工作区仍需的浏览器。
 
 双击 `开发预览.bat`。它默认使用本地开发后端；如果 8000 端口尚未启动，脚本会自动启动 `backend/start.bat`，关闭 Electron 后再回收由它启动的后端进程。
 
@@ -53,6 +63,15 @@ npm run electron:dev
 Electron 会编译 TypeScript、构建前端并启动桌面程序。自动化测试使用隔离的本机配置；开发预览根据下述本地配置选择控制面。
 
 需要使用与 CI 一致的 MariaDB、Redis 和后端容器时，按 `docs/DOCKER_OPTIMIZATION_PLAN.md` 复制 `.env.docker.example` 并运行 `npm run docker:up`。Electron 与本地 Runner 仍然在 Windows 原生环境运行。
+
+### 健康与日志契约
+
+- `health/live` 只检查进程；`health/ready` 返回 `ready`、总体 `status` 及每项依赖的 `required`。数据库始终必需。internal/production 的 `REDIS_REQUIRED` 默认 true，与是否填写 `REDIS_URL` 无关，因为 Redis 同时承担分布式限流与认证撤销存储；缺少 URL 或必需依赖失败均返回 503。开发/测试默认可降级；历史单机无 Redis 部署必须在已确认的单进程边界显式设置 `REDIS_REQUIRED=false` 才允许降级（此时限流允许本机后备）。错误配置值启动时失败，不悄悄变成可选。
+- 可选 Redis 故障可返回 HTTP 200 / `ready=true` / `status=degraded`；监控必须解析 JSON，不能把 200 当作全部健康。容器 `python -m core.healthcheck` 采用严格健康策略：degraded 也失败并提示告警分类，不改变业务 HTTP 路由语义。健康探测使用独立本机限流，在 Redis 限流存储断连时仍可解释故障。
+- Redis 客户端配置有界连接/操作超时，启动失败或空闲断连保留同一连接池、短退避后重试；不会靠无限刷新或自动扩容掩盖错误。没有配置 Redis 时普通缓存是停用，不宣称存在并未实现的“内存缓存”。
+- 新 Runner 使用 POST JSON `{token}` 验证一次性启动授权并发送 `X-Toolbox-Version`。旧 launch-token 路径及 query token 协议保留至 1.9.0；必须先发布 JSON/query 双传输兼容后端，再发布新客户端。仅支持旧 query 的后端会拒绝新 JSON 请求（422），新 Runner 不回退把 token 放 URL。回滚后端仍须保留 JSON 兼容，或同时协调回滚客户端；不能只回滚至 query-only 后端。本地候选仅验证隔离的新后端，不证明旧生产环境已支持新 Runner。两条 verify 路由的 422 不回显输入凭据；冲突凭据拒绝且不消费授权；成功消费后重复验证继续拒绝。
+- 业务日志记录授权对象 ID，不记录授权码；人类/JSON 日志均过滤凭据、URL 认证信息和异常文本。Nginx 访问日志只含 method/path/protocol、request_id、状态和时延，不含 query、认证头或 Cookie。历史生产日志清理、权限核对需要独立运维实施，本轮本地改动不代表历史内容已清除。
+- HTTP 跳转与 HTTPS 两个 server 都显式使用安全 access 格式。Nginx 原生 error_log 无字段脱敏能力，会在上游故障时附旧 query；仅两个 launch verify 精确 location 在兼容窗口内改为 crit，安全 access 仍保留 upstream_status、request_id 和时延，其他 API 错误日志不降级。1.9.0 移除旧 query 协议时一并撤销这项临时错误细节策略；不是永久关闭全站故障诊断。
 
 如果 Playwright 自带浏览器尚未下载，可以临时复用已安装的 Chrome：
 
@@ -115,7 +134,8 @@ node scripts/toolbox-cli.mjs pack
 - HEAD 等于上游分支和最新 `origin/main`。
 - `package.json` 中版本等于请求版本，OpenAPI 等生成文件检查通过。
 - 请求版本高于线上桌面版本及远端最新版本标签；恢复发布则必须匹配原版本和提交。
-- 本机 `gh` 已登录，以下七项必需 CI 的最新结果均为当前 HEAD 的成功结果：
+- 本机 `gh` 已登录，以下八项必需 CI 的最新结果均为当前 HEAD 的成功结果：
+  - `Dependency security`
   - `Frontend and Electron contracts`
   - `Backend domains and API`
   - `MariaDB migrations and concurrency`
@@ -151,6 +171,12 @@ node scripts/toolbox-cli.mjs release --publish "--version=$releaseVersion" "--re
 ```
 
 **生产禁止 `--skip-verify` 和 `--skip-build`。** `--resume` 会验证原状态、产物哈希和已完成阶段的线上版本；后端部署后还会验证业务网页版持续下线。发布过程中保留服务器发布租约，失败后应按原 release ID 恢复，不要手动清理租约或另起一轮发布。历史 schemaVersion=1 记录保留原文件，但禁止自动迁移或续跑（含旧 `web_activated` 阶段），避免重新开放旧网页。先核对原发布是否完成及其租约归属，再按新的已审核版本建立 schemaVersion=2 发布；不得编辑历史状态伪装成新版。
+
+2026-10-11 的恢复修正规则：
+
+- 新发布仍要求最新 `origin/main`；续跑只允许原 HEAD、原版本、原控制面与服务器目标，且原 SHA 仍位于当前 `origin/main` 的历史中。main 正常前进不再阻塞原发布；历史被重写、缺少原目标或切到另一个 SHA 均拒绝。CI、产物哈希与租约校验不省略。
+- 真正部署前先持久化 `backendDeploymentStarted=true`，保存失败不部署。处于 `prepared` 且已尝试部署、或旧状态缺少尝试标记时，先读取线上身份，精确核对 version / commit SHA / release ID、严格就绪状态及业务网页下线，再次验证租约后才补记 `backend_deployed`。
+- 网络未知、已回滚、线上被其他发布覆盖、degraded、旧网页仍公开或租约失效，都停止并要求核对，不因没有 checkpoint 而自动重复部署。正常历史发布器先持久化 `artifactsPrepared=true` 才部署，因此原始最新记录的 false 可以继续产物准备；此保证不适用于手改状态或旧备份覆盖。不得通过编辑状态文件绕过恢复门禁。
 
 仅打包的低层命令如下；它不等同于完整门禁，也不部署或发布：
 

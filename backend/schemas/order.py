@@ -55,6 +55,12 @@ class OrderResponse(BaseModel):
     refunded_at: str | None = None
     cancelled_at: str | None = None
     updated_at: str | None = None
+    agency_id: int | None = None
+    customer_id: int | None = None
+    agency_name: str | None = None
+    customer_name: str | None = None
+    auth_code_id: int | None = None
+    auth_code_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

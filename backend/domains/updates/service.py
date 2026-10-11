@@ -6,11 +6,12 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -119,7 +120,7 @@ class UpdateReleaseService:
                 "status": "staged",
                 "files": staged,
                 "manifest": manifest,
-                "staged_at": datetime.now(timezone.utc).isoformat(),
+                "staged_at": datetime.now(UTC).isoformat(),
             }
             (temp / "stage.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
             with self._mutation_lock, self._file_lock():
@@ -181,19 +182,48 @@ class UpdateReleaseService:
                     "is_latest": True,
                 }
 
-        # 安装包和 blockmap 先就位；manifest 最后原子替换，客户端不会看到半发布状态。
+        # Published artifact names are immutable. Check every collision before
+        # copying anything: switching latest.yml last cannot protect an older
+        # manifest when a newer release overwrites the same installer name.
+        for item in verified_files:
+            if item["name"] == manifest_name:
+                continue
+            published_file = self.releases_dir / self._safe_name(item["name"])
+            if published_file.exists() or published_file.is_symlink():
+                if published_file.is_symlink() or not published_file.is_file():
+                    raise HTTPException(409, "公开更新文件名已被占用")
+                size, digest = self._hash_file(published_file)
+                if size != item["size"] or digest != item["sha512"]:
+                    raise HTTPException(409, "公开更新文件名已有不同内容，请使用带版本的新文件名")
+
+        # Install complete files without replacing any existing public name.
+        # A failed release can leave unreferenced immutable artifacts, but must
+        # never damage the currently advertised release or expose partial bytes.
         for item in verified_files:
             name = self._safe_name(item["name"])
             if name == manifest_name:
                 continue
             published_file = self.releases_dir / name
-            shutil.copy2(source / name, published_file)
-            os.chmod(published_file, 0o640)
+            if published_file.exists():
+                continue
+            descriptor, temporary_name = tempfile.mkstemp(prefix=".publishing-", dir=self.staging_dir)
+            temporary = Path(temporary_name)
+            os.close(descriptor)
+            try:
+                shutil.copy2(source / name, temporary)
+                os.chmod(temporary, 0o640)
+                with temporary.open("r+b") as prepared:
+                    os.fsync(prepared.fileno())
+                # Staging and public directories share a parent/filesystem.
+                # link is atomic and fails, rather than overwriting a collision.
+                os.link(temporary, published_file)
+            finally:
+                temporary.unlink(missing_ok=True)
         manifest_temp = self.releases_dir / ".latest.yml.tmp"
         shutil.copy2(source / manifest_name, manifest_temp)
         os.chmod(manifest_temp, 0o640)
         os.replace(manifest_temp, self.releases_dir / "latest.yml")
-        published_at = datetime.now(timezone.utc).isoformat()
+        published_at = datetime.now(UTC).isoformat()
         (source / "published.json").write_text(
             json.dumps({"version": version, "published_at": published_at}, ensure_ascii=False), encoding="utf-8"
         )

@@ -331,3 +331,52 @@ async def test_publish_uses_a_cross_process_file_lock(tmp_path):
     with first._file_lock(), pytest.raises(HTTPException) as error:
         second.publish("1.8.4")
     assert error.value.status_code == 409
+
+
+async def stage_fixture_release(service, version, name, content):
+    digest = base64.b64encode(hashlib.sha512(content).digest()).decode("ascii")
+    manifest = yaml.safe_dump({
+        "version": version,
+        "files": [{"url": name, "sha512": digest, "size": len(content)}],
+    }).encode()
+    await service.stage(version, release_uploads(name, content, manifest))
+
+
+@pytest.mark.asyncio
+async def test_different_version_cannot_overwrite_old_installer(tmp_path):
+    service = UpdateReleaseService(tmp_path / "updates")
+    await stage_fixture_release(service, "2.0.0", "setup.exe", b"old")
+    service.publish("2.0.0")
+    previous = {p.name: p.read_bytes() for p in service.releases_dir.iterdir()}
+    await stage_fixture_release(service, "2.0.1", "setup.exe", b"new")
+    with pytest.raises(HTTPException) as error:
+        service.publish("2.0.1")
+    assert error.value.status_code == 409
+    assert {p.name: p.read_bytes() for p in service.releases_dir.iterdir()} == previous
+
+
+@pytest.mark.asyncio
+async def test_interrupted_copy_preserves_old_release_and_retries(tmp_path, monkeypatch):
+    import domains.updates.service as module
+    service = UpdateReleaseService(tmp_path / "updates")
+    await stage_fixture_release(service, "2.0.0", "setup-2.0.0.exe", b"old")
+    service.publish("2.0.0")
+    previous = {p.name: p.read_bytes() for p in service.releases_dir.iterdir()}
+    await stage_fixture_release(service, "2.0.1", "setup-2.0.1.exe", b"new")
+    copy = module.shutil.copy2
+    def fail_blockmap(source, destination, *args, **kwargs):
+        if str(source).endswith(".blockmap"):
+            raise OSError("synthetic copy failure")
+        return copy(source, destination, *args, **kwargs)
+    with monkeypatch.context() as scoped:
+        scoped.setattr(module.shutil, "copy2", fail_blockmap)
+        with pytest.raises(OSError, match="synthetic"):
+            service.publish("2.0.1")
+    for name, content in previous.items():
+        assert (service.releases_dir / name).read_bytes() == content
+    assert not list(service.staging_dir.glob(".publishing-*"))
+    assert service.publish("2.0.1")["status"] == "published"
+    assert (service.releases_dir / "setup-2.0.1.exe").read_bytes() == b"new"
+    # A later stage-file corruption must not mutate the published copy.
+    (service.staging_dir / "2.0.1" / "setup-2.0.1.exe").write_bytes(b"changed")
+    assert (service.releases_dir / "setup-2.0.1.exe").read_bytes() == b"new"

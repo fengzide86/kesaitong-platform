@@ -11,6 +11,7 @@ from core.dependencies import get_current_admin
 from core.response import success_response
 from core.timestamps import utc_iso
 from database import get_db
+from domains.access import effective_license_status_sql
 from domains.commerce import ExpenseService
 from domains.commerce.agency import AgencyService
 from domains.platform.action_center_schemas import (
@@ -32,9 +33,9 @@ async def get_action_center(
     now = datetime.now()
     expiry_limit = now + timedelta(days=7)
     expiring_conditions = (
-        AuthCode.status.in_(["active", "unused"]),
+        effective_license_status_sql(now=now).in_(["active", "unused"]),
         AuthCode.expires_at.is_not(None),
-        AuthCode.expires_at >= now,
+        AuthCode.expires_at > now,
         AuthCode.expires_at <= expiry_limit,
     )
     expiring_count = int((await db.execute(select(func.count(AuthCode.id)).where(*expiring_conditions))).scalar() or 0)

@@ -1,4 +1,4 @@
-import type { EvidenceMetric } from './metric-contract'
+import type { EvidenceMetric } from './metric-evidence'
 
 /** Figures supplied by a user. Unknown measurement metadata stays unknown. */
 export const reportedTimeMetrics: EvidenceMetric[] = [

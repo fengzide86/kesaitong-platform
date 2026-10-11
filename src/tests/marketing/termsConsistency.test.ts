@@ -10,6 +10,7 @@ describe('官网与真实 Windows 工具说明一致', () => {
     expect(text).toContain('不访问真实平台')
     expect(text).toContain('当前浏览器')
     expect(text).toContain('Moweiiong')
+    expect(text).toContain('退出或刷新后恢复初始样例')
     expect(text).not.toContain('当前工具流程属于演示模式')
     expect(text).not.toContain('示意邮箱')
     expect(text).not.toContain('模拟咨询入口')

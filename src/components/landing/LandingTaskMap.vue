@@ -33,7 +33,7 @@ import { marketingTasks, taskGroups } from '@/marketing/task-catalog'
             <small>{{ task.homePain }}</small>
             <em>{{ task.homeSupport }}</em>
           </span>
-          <span class="landing-task-card-action">{{ task.status === 'in-development' ? '查看规划与进展' : '查看工具说明' }}<ArrowRight :size="17" aria-hidden="true" /></span>
+          <span class="landing-task-card-action">查看工具说明<ArrowRight :size="17" aria-hidden="true" /></span>
         </RouterLink>
       </div>
     </div>
@@ -111,7 +111,7 @@ import { marketingTasks, taskGroups } from '@/marketing/task-catalog'
 .landing-task-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  gap: 16px;
+  gap: 24px;
 }
 
 .landing-task-card {
@@ -120,23 +120,22 @@ import { marketingTasks, taskGroups } from '@/marketing/task-catalog'
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
-  padding: 22px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+  padding: 22px 8px;
+  border-top: 1px solid var(--m-border);
+  border-radius: 0 0 8px 8px;
   color: inherit;
-  background: var(--m-surface);
+  background: transparent;
   text-decoration: none;
-  transition: transform var(--m-duration) ease, border-color var(--m-duration) ease, background var(--m-duration) ease;
+  transition: border-color var(--m-duration) ease, background var(--m-duration) ease;
 }
 
 @media (hover: hover) {
   .landing-task-card:hover {
     border-color: var(--m-blue);
     background: var(--m-blue-soft);
-    transform: translateY(-2px);
   }
 }
-.landing-task-card:active { background: var(--m-blue-soft); transform: translateY(0); }
+.landing-task-card:active { background: var(--m-blue-soft); }
 
 .landing-task-card:focus-visible {
   outline: 3px solid var(--m-blue);
@@ -187,7 +186,7 @@ import { marketingTasks, taskGroups } from '@/marketing/task-catalog'
   grid-column: 2;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 44px;
   margin-top: 4px;
   color: var(--m-blue);
   font-size: 14px;
@@ -209,14 +208,16 @@ import { marketingTasks, taskGroups } from '@/marketing/task-catalog'
   .landing-task-group + .landing-task-group { margin-top: 24px; }
   .landing-task-group-heading { display: block; }
   .landing-task-group-heading p { margin-top: 4px; }
-  .landing-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .landing-task-card { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 16px; }
+  .landing-task-map-heading > p { margin-top: 14px; }
+  .landing-task-group-heading { margin-bottom: 12px; }
+  .landing-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+  .landing-task-card { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 14px 2px; }
   .landing-task-card:last-child:nth-child(odd) { grid-column: auto; }
   .landing-task-card-copy { grid-column: 1 / -1; }
   .landing-task-card-action { grid-column: 1 / -1; font-size: 14px; gap: 6px; margin-top: 0; }
   .landing-task-card strong { font-size: 16px; }
-  .landing-task-card small { margin-top: 8px; font-size: 15px; line-height: 1.65; }
-  .landing-task-card em { margin-top: 8px; font-size: 15px; line-height: 1.65; }
+  .landing-task-card small { margin-top: 6px; font-size: 15px; line-height: 1.65; }
+  .landing-task-card em { margin-top: 6px; font-size: 15px; line-height: 1.65; }
 }
 
 @media (prefers-reduced-motion: reduce) {

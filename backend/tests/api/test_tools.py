@@ -486,6 +486,81 @@ async def test_demo_mode_rejects_launch_grant_without_creating_state(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["launch-grant", "launch-token"])
+async def test_launch_verification_accepts_json_without_query_and_consumes_once(client, db_session, monkeypatch, endpoint):
+    monkeypatch.setattr(settings, "TOOL_EXECUTION_MODE", "live")
+    access_token, _ = await _seed_live_launch_access(db_session)
+    created = await client.post("/api/tools/live_tool/launch-grant", params={"platform_key": "amazon"},
+                                headers={"Authorization": f"Bearer {access_token}"})
+    token = created.json()["data"]["token"]
+    response = await client.post(f"/api/tools/{endpoint}/verify", json={"token": token},
+                                 headers={"X-Toolbox-Version": "1.8.15"})
+    assert response.status_code == 200
+    assert response.json()["data"]["valid"] is True
+    duplicate = await client.post(f"/api/tools/{endpoint}/verify", json={"token": token})
+    assert duplicate.json()["success"] is False
+    assert duplicate.json()["message"] == "Token 已使用"
+
+
+@pytest.mark.asyncio
+async def test_launch_verification_rejects_conflicting_credential_sources_without_consuming(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "TOOL_EXECUTION_MODE", "live")
+    access_token, _ = await _seed_live_launch_access(db_session)
+    created = await client.post("/api/tools/live_tool/launch-grant", params={"platform_key": "amazon"},
+                                headers={"Authorization": f"Bearer {access_token}"})
+    token = created.json()["data"]["token"]
+    conflict = await client.post("/api/tools/launch-grant/verify", params={"token": "different-token"}, json={"token": token})
+    assert conflict.status_code == 400
+    accepted = await client.post("/api/tools/launch-grant/verify", json={"token": token})
+    assert accepted.json()["data"]["valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_launch_verification_does_not_echo_missing_or_invalid_credentials(client, monkeypatch):
+    monkeypatch.setattr(settings, "TOOL_EXECUTION_MODE", "live")
+    missing = await client.post("/api/tools/launch-grant/verify")
+    assert missing.status_code == 422
+    invalid = await client.post("/api/tools/launch-grant/verify", json={"token": "private-invalid-token"})
+    assert invalid.status_code == 200
+    assert invalid.json()["success"] is False
+    assert "private-invalid-token" not in invalid.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["launch-grant", "launch-token"])
+@pytest.mark.parametrize("invalid_token", [
+    "private-validation-secret-" * 30,
+    {"private-validation-secret": "do-not-echo"},
+    ["private-validation-secret-do-not-echo"],
+])
+async def test_launch_validation_does_not_echo_token_input(client, endpoint, invalid_token):
+    response = await client.post(f"/api/tools/{endpoint}/verify", json={"token": invalid_token})
+    assert response.status_code == 422
+    assert "private-validation-secret" not in response.text
+    errors = response.json()["detail"]
+    assert errors[0]["loc"] == ["body", "token"]
+    assert errors[0]["type"] in {"string_too_long", "string_type"}
+    assert errors[0]["msg"]
+    assert "input" not in errors[0]
+    assert "url" not in errors[0]
+    if errors[0]["type"] == "string_too_long":
+        assert errors[0]["ctx"] == {"max_length": 512}
+
+
+@pytest.mark.asyncio
+async def test_launch_validation_filter_does_not_change_other_api_errors(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "TOOL_EXECUTION_MODE", "live")
+    access_token, _ = await _seed_live_launch_access(db_session)
+    response = await client.post(
+        "/api/tools/live_tool/launch-grant",
+        params={"platform_key": "amazon", "execution_mode": "invalid-mode-marker"},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["input"] == "invalid-mode-marker"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("original_name", "expected_success"), [("Y49 Live launch test", True), ("定制套餐", False)])
 async def test_live_and_legacy_launch_paths_use_fixed_identity_after_admin_rename(
     client, db_session, monkeypatch, auth_headers, original_name, expected_success,

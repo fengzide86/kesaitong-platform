@@ -46,7 +46,7 @@
         <ul>
           <li>专业工作台</li>
           <li>本地批量导入</li>
-          <li>多账号模拟批次</li>
+          <li>多账号任务管理</li>
         </ul>
       </div>
       <div class="generate-form">
@@ -103,7 +103,7 @@
         </div>
       </template>
       <DataToolbar label="授权码筛选">
-        <el-input v-model="searchText" placeholder="搜索授权码/设备..." style="width: 220px;" clearable />
+        <el-input v-model="searchText" placeholder="搜索全部授权码/设备..." :maxlength="200" style="width: 220px;" clearable @keyup.enter="applyKeyword" />
         <el-select v-model="filterProductType" placeholder="全部产品" clearable style="width: 150px;">
           <el-option label="普通 C 端" value="consumer" />
           <el-option label="专业 B 端" value="business" />
@@ -114,7 +114,7 @@
           <el-option label="已冻结" value="frozen" />
           <el-option label="已过期" value="expired" />
         </el-select>
-        <template #summary>共 {{ filteredCodes.length }} 个</template>
+        <template #summary>共 {{ total }} 个授权 · 本页 {{ authCodes.length }} 个</template>
       </DataToolbar>
       <el-table :data="filteredCodes" style="width: 100%" v-loading="isLoading">
         <el-table-column label="授权码" min-width="180">
@@ -194,6 +194,9 @@
           <div class="empty-state">暂无数据</div>
         </template>
       </el-table>
+      <div class="authorization-pagination">
+        <el-pagination :current-page="page" :page-size="pageSize" :total="total" :pager-count="5" layout="prev, pager, next" @current-change="changePage" />
+      </div>
     </el-card>
 
     <AdminDetailDrawer
@@ -258,8 +261,23 @@
     </el-dialog>
 
     <!-- 授权码详情 -->
-    <AdminDetailDrawer v-model="showDetailModal" title="授权码详情" size="min(520px, 92vw)">
+    <AdminDetailDrawer v-model="showDetailModal" title="授权码详情" size="min(600px, 92vw)" @update:model-value="onDetailVisibility">
+      <div v-if="detailError" class="detail-error" role="alert">{{ detailError }}</div>
       <div v-if="detailData" class="detail-grid">
+        <div class="detail-section related-users">
+          <h3>关联用户</h3>
+          <p class="text-muted text-small">按当前用户的授权关联读取，不按姓名或代理客户编号合并。</p>
+          <p v-if="relatedUsersLoading" class="text-muted">正在读取关联用户…</p>
+          <div v-else-if="relatedUsersError" class="detail-error" role="alert">{{ relatedUsersError }}<el-button size="small" @click="loadRelatedUsers">重试</el-button></div>
+          <template v-else>
+            <div v-for="user in relatedUsers" :key="user.id" class="related-user-row">
+              <span><strong>{{ user.name || '未填写姓名' }}</strong><small>用户 #{{ user.id }} · {{ user.device_name || '未填写设备名' }}</small></span>
+              <div><el-button size="small" @click="openRelatedUser(user.id)">用户详情</el-button><el-button size="small" @click="openRelatedFeedback(user.id)">工单</el-button></div>
+            </div>
+            <p v-if="!relatedUsers.length" class="text-muted">暂无当前关联用户，授权尚未激活或用户已更换授权。</p>
+            <el-pagination v-if="relatedUsersTotal > 10" :current-page="relatedUsersPage" :page-size="10" :total="relatedUsersTotal" layout="prev, pager, next" @current-change="changeRelatedUsersPage" />
+          </template>
+        </div>
         <div class="detail-row">
           <span class="detail-label">授权码</span>
           <span class="detail-value" style="font-family: monospace;">{{ detailData.code }}</span>
@@ -328,18 +346,20 @@
           </div>
         </div>
       </div>
-      <div v-else class="empty-state">加载中...</div>
-      <template #footer><el-button @click="showDetailModal = false">关闭</el-button></template>
+      <div v-else-if="detailLoading" class="empty-state">加载中...</div>
+      <template #footer><el-button v-if="returnPath" @click="router.push(returnPath)">返回来源</el-button><el-button @click="closeDetail">返回列表</el-button></template>
     </AdminDetailDrawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, Copy } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
-import { getAuthCodes, batchGenerateAuthCodes, updateAuthCode, deleteAuthCode, getPlansAdmin, unbindDevice, api } from '@/utils/api'
+import { getAuthCodesPage, getAuthCode, getUsersPage, batchGenerateAuthCodes, updateAuthCode, deleteAuthCode, getPlansAdmin, unbindDevice } from '@/utils/api'
+import { extendAuthCode } from '@/utils/api/auth-codes'
+import { contextId, contextText, supportReturnPath, supportSourcePath } from '@/features/admin/supportContext'
 import { showToast } from '@/utils'
 import { authService } from '@/utils/auth'
 import { hasStaffPermission } from '@/features/auth/permissions'
@@ -354,11 +374,13 @@ import { normalizeDeviceUnbindReason } from '@/features/admin/deviceUnbind'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 import {
   adminAuthCodeSchema,
+  adminUsersSchema,
   adminAuthCodesSchema,
   adminPlansSchema,
   generatedAuthCodesSchema,
   type AdminAuthCode,
   type AdminPlan,
+  type AdminUser,
 } from '@/features/admin/model'
 
 const authCodes = ref<AdminAuthCode[]>([])
@@ -366,7 +388,7 @@ const plans = ref<AdminPlan[]>([])
 const selectedPlanId = ref<string | number>(2)
 const generatorProductType = ref<'consumer' | 'business'>('consumer')
 const selectedPlatformScope = ref('amazon')
-const selectedSceneType = ref('competition')
+const selectedSceneType = ref<'competition' | 'course' | 'operations'>('competition')
 const generateCount = ref(1)
 const seatLimit = ref(1)
 const maxDevices = ref(1)
@@ -378,6 +400,17 @@ const searchText = ref('')
 const planNameMap = reactive<Record<string, string>>({})
 
 const router = useRouter()
+const query = () => router.currentRoute.value.query
+function queryStatus() { const value = contextText(query().status); return ['unused', 'active', 'frozen', 'expired'].includes(value) ? value : '' }
+function queryProduct() { const value = contextText(query().product); return ['consumer', 'business'].includes(value) ? value : '' }
+filterStatus.value = queryStatus()
+filterProductType.value = queryProduct()
+searchText.value = contextText(query().keyword)
+const page = ref(contextId(query().page) || 1)
+const pageSize = 20
+const total = ref(0)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let restoringQuery = false
 const platformStore = usePlatformStore()
 const isCompact = useCompactLayout()
 const canWrite = computed(() => hasStaffPermission(authService.getRole(), 'auth_codes.write'))
@@ -398,6 +431,18 @@ const extendDays = ref(30)
 // 详情弹窗
 const showDetailModal = ref(false)
 const detailData = ref<AdminAuthCode | null>(null)
+const selectedCodeId = ref<number | undefined>()
+const detailError = ref('')
+const detailLoading = ref(false)
+const relatedUsers = ref<AdminUser[]>([])
+const relatedUsersPage = ref(1)
+const relatedUsersTotal = ref(0)
+const relatedUsersError = ref('')
+const relatedUsersLoading = ref(false)
+const returnPath = computed(() => supportReturnPath(query().return_to, authService.getRole()))
+let loadSequence = 0
+let detailSequence = 0
+let relatedSequence = 0
 const unbindingDeviceId = ref<string | number | null>(null)
 const loadState = ref<AsyncDataState>('loading')
 const loadError = ref('')
@@ -407,23 +452,7 @@ const availablePlans = computed(() =>
 )
 const selectedPlan = computed(() => plans.value.find(plan => plan.id === selectedPlanId.value))
 
-const filteredCodes = computed(() => {
-  let codes = authCodes.value
-  if (filterProductType.value) {
-    codes = codes.filter(code => code.product_type === filterProductType.value)
-  }
-  if (filterStatus.value) {
-    codes = codes.filter(c => c.status === filterStatus.value)
-  }
-  if (searchText.value) {
-    const q = searchText.value.toLowerCase()
-    codes = codes.filter(c =>
-      c.code.toLowerCase().includes(q) ||
-      (c.device_name && c.device_name.toLowerCase().includes(q))
-    )
-  }
-  return codes
-})
+const filteredCodes = computed(() => authCodes.value)
 
 function getPlanName(planId?: string | number | null) {
   return planId === null || planId === undefined ? '未关联套餐' : planNameMap[String(planId)] || '未关联套餐'
@@ -482,17 +511,33 @@ async function saveMaxDevices() {
 }
 
 async function loadData() {
+  const sequence = ++loadSequence
   loadState.value = authCodes.value.length ? 'data' : 'loading'
   loadError.value = ''
   const platformKey = platformStore.adminPlatform !== 'all' ? platformStore.adminPlatform : undefined
-  const params = platformKey ? { platform_key: platformKey } : {}
+  const params = {
+    ...(platformKey ? { platform_key: platformKey } : {}),
+    page: page.value,
+    page_size: pageSize,
+    status: filterStatus.value || undefined,
+    product_type: filterProductType.value || undefined,
+    keyword: searchText.value.trim() || undefined,
+  }
   const [codesResult, plansResult] = await Promise.allSettled([
-    getAuthCodes(params),
+    getAuthCodesPage(params),
     getPlansAdmin({ page_size: 100 }),
   ])
+  if (sequence !== loadSequence) return
   try {
     if (codesResult.status === 'fulfilled') {
-      authCodes.value = adminAuthCodesSchema.parse(codesResult.value)
+      authCodes.value = adminAuthCodesSchema.parse(codesResult.value.items)
+      total.value = codesResult.value.total
+      if (page.value > 1 && (page.value - 1) * pageSize >= total.value) {
+        page.value = Math.max(1, Math.ceil(total.value / pageSize))
+        syncQuery()
+        await loadData()
+        return
+      }
       loadState.value = settledDataState(authCodes.value.length)
     } else {
       loadError.value = codesResult.reason instanceof Error && codesResult.reason.message
@@ -518,7 +563,59 @@ async function loadData() {
   }
 }
 
-watch(() => platformStore.adminPlatform, () => { loadData() })
+watch(() => platformStore.adminPlatform, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  detailSequence += 1
+  relatedSequence += 1
+  detailData.value = null
+  relatedUsers.value = []
+  showDetailModal.value = false
+  selectedCodeId.value = undefined
+  showDeviceModal.value = false
+  showExtendModal.value = false
+  editingCode.value = null
+  extendingCode.value = null
+  authCodes.value = []
+  total.value = 0
+  page.value = 1
+  syncQuery({ auth_code_id: undefined, return_to: undefined })
+  void loadData()
+})
+function applyKeyword() {
+  if (searchTimer) clearTimeout(searchTimer)
+  page.value = 1
+  syncQuery()
+  void loadData()
+}
+function changePage(value: number) {
+  if (searchTimer) clearTimeout(searchTimer)
+  page.value = value
+  syncQuery()
+  void loadData()
+}
+watch([filterStatus, filterProductType], () => { if (!restoringQuery) applyKeyword() }, { flush: 'sync' })
+watch(searchText, () => {
+  if (restoringQuery) return
+  if (searchTimer) clearTimeout(searchTimer)
+  // Invalidate in-flight results as soon as the search changes, not after the debounce.
+  loadSequence += 1
+  searchTimer = setTimeout(applyKeyword, 250)
+}, { flush: 'sync' })
+watch(() => [query().status, query().product, query().keyword, query().page], () => {
+  const nextStatus = queryStatus()
+  const nextProduct = queryProduct()
+  const nextKeyword = contextText(query().keyword)
+  const nextPage = contextId(query().page) || 1
+  if (filterStatus.value === nextStatus && filterProductType.value === nextProduct && searchText.value === nextKeyword && page.value === nextPage) return
+  if (searchTimer) clearTimeout(searchTimer)
+  restoringQuery = true
+  filterStatus.value = nextStatus
+  filterProductType.value = nextProduct
+  searchText.value = nextKeyword
+  page.value = nextPage
+  restoringQuery = false
+  void loadData()
+})
 watch(generatorProductType, productType => {
   const preferredPlan = plans.value.find(plan => plan.product_type === productType && plan.status === 'active')
   if (preferredPlan) selectedPlanId.value = preferredPlan.id
@@ -559,7 +656,8 @@ async function handleGenerate() {
 
 async function toggleFreeze(rawCode: unknown) {
   const code = adminAuthCodeSchema.parse(rawCode)
-  const restoredStatus = code.seat_used > 0 || code.device_used > 0 || code.devices.length > 0 ? 'active' : 'unused'
+  // Releasing all devices frees capacity, but does not undo first activation.
+  const restoredStatus = Number(code.user_id) > 0 ? 'active' : 'unused'
   const newStatus = code.status === 'frozen' ? restoredStatus : 'frozen'
   try {
     await updateAuthCode(code.id, { status: newStatus })
@@ -585,18 +683,13 @@ function handleCodeCommand(command: string, code: unknown) {
 
 async function confirmExtend() {
   if (!extendingCode.value) return
-  if (!extendDays.value || extendDays.value < 1) {
+  if (!Number.isInteger(extendDays.value) || extendDays.value < 1 || extendDays.value > 3650) {
     showToast('请输入有效天数', 'error')
     return
   }
   try {
-    const baseDate = extendingCode.value.expires_at ? new Date(extendingCode.value.expires_at) : new Date()
-    const startDate = baseDate < new Date() ? new Date() : baseDate
-    startDate.setDate(startDate.getDate() + extendDays.value)
-    await updateAuthCode(extendingCode.value.id, { expires_at: startDate.toISOString() })
-    if (extendingCode.value.status === 'expired') {
-      await updateAuthCode(extendingCode.value.id, { status: 'active' })
-    }
+    const codeId = extendingCode.value.id
+    await extendAuthCode(codeId, extendDays.value)
     showToast(`已延期 ${extendDays.value} 天`, 'success')
     showExtendModal.value = false
     await loadData()
@@ -656,14 +749,61 @@ async function loginWithGeneratedCode() {
 
 async function openDetail(rawCode: unknown) {
   const code = adminAuthCodeSchema.parse(rawCode)
-  try {
-    detailData.value = adminAuthCodeSchema.parse(await api.get(`/api/auth-codes/${code.id}`))
-    showDetailModal.value = true
-  } catch {
-    showToast('获取详情失败', 'error')
-  }
+  syncQuery({ auth_code_id: String(code.id) })
+  await openCode(Number(code.id))
 }
 
+function scopeParams() { return platformStore.adminPlatform === 'all' ? {} : { platform_key: platformStore.adminPlatform } }
+function syncQuery(extra: Record<string, string | undefined> = {}) {
+  void router.replace({ path: '/admin/authcodes', query: { ...query(), page: String(page.value), status: filterStatus.value || undefined, product: filterProductType.value || undefined, keyword: searchText.value || undefined, ...extra } })
+}
+async function openCode(id: number) {
+  const sequence = ++detailSequence
+  relatedSequence += 1
+  selectedCodeId.value = id
+  detailData.value = null
+  relatedUsers.value = []
+  relatedUsersPage.value = 1
+  detailError.value = ''
+  showDetailModal.value = true
+  detailLoading.value = true
+  try {
+    const detail = adminAuthCodeSchema.parse(await getAuthCode(id, scopeParams()))
+    if (sequence !== detailSequence) return
+    if (Number(detail.id) !== id) throw new Error('授权编号不匹配，请重新读取')
+    detailData.value = detail
+    void loadRelatedUsers()
+  } catch (error) {
+    if (sequence === detailSequence) detailError.value = error instanceof Error ? error.message : '无法读取授权，请核对权限与当前平台'
+  } finally { if (sequence === detailSequence) detailLoading.value = false }
+}
+async function loadRelatedUsers() {
+  if (!detailData.value) return
+  const sequence = ++relatedSequence
+  const id = detailData.value.id
+  relatedUsersLoading.value = true
+  relatedUsersError.value = ''
+  try {
+    const result = await getUsersPage({ ...scopeParams(), auth_code_id: id, page: relatedUsersPage.value, page_size: 10 })
+    if (sequence !== relatedSequence || String(detailData.value?.id) !== String(id)) return
+    relatedUsers.value = adminUsersSchema.parse(result.items)
+    relatedUsersTotal.value = result.total
+  } catch {
+    if (sequence === relatedSequence) { relatedUsers.value = []; relatedUsersError.value = '关联用户读取失败，不能据此认定没有用户。' }
+  } finally { if (sequence === relatedSequence) relatedUsersLoading.value = false }
+}
+function changeRelatedUsersPage(page: number) { relatedUsersPage.value = page; void loadRelatedUsers() }
+function openRelatedUser(id: string | number) { void router.push({ path: '/admin/users', query: { user_id: String(id), return_to: supportSourcePath(router.currentRoute.value.fullPath) } }) }
+function openRelatedFeedback(id: string | number) { void router.push({ path: '/admin/feedback', query: { user_id: String(id), return_to: supportSourcePath(router.currentRoute.value.fullPath) } }) }
+function closeDetail() {
+  detailSequence += 1
+  relatedSequence += 1
+  showDetailModal.value = false
+  detailData.value = null
+  selectedCodeId.value = undefined
+  syncQuery({ auth_code_id: undefined })
+}
+function onDetailVisibility(value: boolean) { if (!value) closeDetail() }
 async function promptDeviceUnbindReason(deviceName: string): Promise<string | null> {
   try {
     const result = await ElMessageBox.prompt(`请输入解绑“${deviceName}”的原因。该原因会写入审计记录。`, '解绑设备', {
@@ -690,16 +830,19 @@ async function promptDeviceUnbindReason(deviceName: string): Promise<string | nu
 
 async function handleUnbindDevice(device: AdminAuthCode['devices'][number]) {
   if (!canUnbindDevice.value || unbindingDeviceId.value !== null) return
+  const sequence = detailSequence
+  const codeId = detailData.value?.id
+  if (!codeId) return
   try {
     const reason = await promptDeviceUnbindReason(device.device_name || device.device_id)
-    if (!reason) return
+    if (!reason || sequence !== detailSequence) return
     unbindingDeviceId.value = device.id
     await unbindDevice(device.id, reason)
+    if (sequence !== detailSequence) return
+    const updated = adminAuthCodeSchema.parse(await getAuthCode(codeId, scopeParams()))
+    if (sequence !== detailSequence) return
+    detailData.value = updated
     await loadData()
-    const codeId = detailData.value?.id
-    if (codeId !== null && codeId !== undefined) {
-      detailData.value = adminAuthCodeSchema.parse(await api.get(`/api/auth-codes/${codeId}`, {}, { cache: false }))
-    }
     showToast('设备已解绑', 'success')
   } catch {
     showToast('设备解绑失败', 'error')
@@ -714,10 +857,21 @@ onMounted(() => {
     filterProductType.value = 'business'
   }
   void loadData()
+  const id = contextId(query().auth_code_id)
+  if (id) void openCode(id)
 })
+watch(() => query().auth_code_id, value => { const id = contextId(value); if (id && id !== selectedCodeId.value) void openCode(id); else if (!id && showDetailModal.value) { detailSequence += 1; relatedSequence += 1; showDetailModal.value = false; detailData.value = null; selectedCodeId.value = undefined } })
+onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; relatedSequence += 1; if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
 <style scoped>
+.authorization-pagination { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }
+.detail-error { color: var(--color-danger, #b42318); line-height: 1.6; }
+.related-users { padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-soft); }
+.related-users h3 { margin: 0 0 8px; font-size: 15px; }
+.related-user-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; }
+.related-user-row > span { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.related-user-row small { color: var(--color-text-secondary); }
 .table-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

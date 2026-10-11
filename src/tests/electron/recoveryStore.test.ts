@@ -121,6 +121,7 @@ describe('batch recovery queue', () => {
     coordinator.storeImport({ importId: 'first', rows, errors: [] }, owner); coordinator.create({ importId: 'first', batchId: 'batch', owner, tool, recordKind: 'live' })
     coordinator.registerBrowser('item_0', {}); await coordinator.startItem('item_0', tool)
     runners[0].options.onEvent({ type: 'run.completed' })
+    await Promise.resolve() // wait for stop before another execution acquires the lease
     coordinator.registerBrowser('item_1', {}); await coordinator.startItem('item_1', tool)
     await runners[1].options.onHostRequest('recovery.before-mutation', {})
     runners[1].options.onEvent({ type: 'run.failed', error: { code: 'TIMEOUT' } })

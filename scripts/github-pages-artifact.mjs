@@ -2,13 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { publicHttpsUrl } from './marketing-config.mjs'
 
-const directRoutes = ['terms', 'user/terms', 'competition', 'course', 'tools', 'demo']
+const directRoutes = ['terms', 'user/terms', 'competition', 'course', 'tools']
 const roots = new Set([
-  'index.html', '404.html', '_headers', '_redirects', 'marketing-version.json', 'robots.txt',
+  'index.html', '404.html', '_headers', '_redirects', 'marketing-version.json', 'robots.txt', 'sitemap.xml',
   'favicon.ico', 'favicon-16x16.png', 'favicon-32x32.png', 'apple-touch-icon.png', 'pwa-512x512.png', '.nojekyll', 'CNAME',
   ...directRoutes.map(route => `${route}/index.html`),
 ])
-const allowed = name => roots.has(name) || /^assets\/[\w.-]+-[\w-]{8,}\.(?:js|css|svg|png|webp|woff2?)$/i.test(name)
+const allowed = name => roots.has(name) || /^assets\/[\w.-]+-[\w-]{8,}\.(?:js|css|svg|png|jpe?g|webp|woff2?)$/i.test(name)
+const allowedDirectories = new Set(['assets', ...directRoutes, 'user'])
 
 // Called only on a fresh clone of the configured public, marketing-only repo.
 // Retain its Git history, and reject unknown content before replacing any file.
@@ -40,7 +41,7 @@ export function prepareGitHubPagesTree(artifact, checkout, trackedFiles, publicU
       const relative = prefix + entry.name
       if (entry.isSymbolicLink()) throw new Error('官网制品不允许符号链接')
       if (entry.isDirectory()) {
-        if (relative !== 'assets') throw new Error(`官网制品含未知目录：${relative}`)
+        if (!allowedDirectories.has(relative)) throw new Error(`官网制品含未知目录：${relative}`)
         inspect(path.join(directory, entry.name), `${relative}/`)
       } else {
         if (!allowed(relative)) throw new Error(`官网制品含未知文件：${relative}`)
@@ -76,10 +77,19 @@ export function prepareGitHubPagesTree(artifact, checkout, trackedFiles, publicU
     fs.mkdirSync(path.dirname(destination), { recursive: true })
     fs.copyFileSync(path.join(artifact, name), destination)
   }
-  // GitHub Pages does not implement Cloudflare _headers/_redirects. Preserve
-  // the restrictive browser policy and create real files for direct terms URLs.
+  // Preserve each route's generated metadata. The fallback keeps older frozen
+  // artifacts publishable; current builds contain their own route HTML files.
+  for (const route of directRoutes) {
+    const filename = path.join(checkout, route, 'index.html')
+    if (!incoming.includes(`${route}/index.html`)) {
+      fs.mkdirSync(path.dirname(filename), { recursive: true })
+      fs.copyFileSync(path.join(checkout, route === 'user/terms' ? 'terms/index.html' : 'index.html'), filename)
+    }
+  }
+  // GitHub Pages does not implement Cloudflare _headers/_redirects. Embed
+  // the same restrictive browser policy in every public HTML entrypoint.
   const policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'"
-  for (const filename of ['index.html', '404.html']) {
+  for (const filename of ['index.html', '404.html', ...directRoutes.map(route => `${route}/index.html`)]) {
     const full = path.join(checkout, filename)
     const html = fs.readFileSync(full, 'utf8')
     if (!html.includes('<head>')) throw new Error('官网 HTML 缺少 head')
@@ -87,8 +97,4 @@ export function prepareGitHubPagesTree(artifact, checkout, trackedFiles, publicU
   }
   fs.writeFileSync(path.join(checkout, '.nojekyll'), '')
   if (customDomain) fs.writeFileSync(path.join(checkout, 'CNAME'), `${hostname}\n`)
-  for (const route of directRoutes) {
-    fs.mkdirSync(path.join(checkout, route), { recursive: true })
-    fs.copyFileSync(path.join(checkout, 'index.html'), path.join(checkout, route, 'index.html'))
-  }
 }

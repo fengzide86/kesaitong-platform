@@ -51,7 +51,7 @@ FBA 筛选可用，FBA 转换/危险品提交/货件与 FBA 仓库不是一个�
 
 `D:\AmazonToolboxData\acceptance\kst-v2-fidelity-20261008\before`。
 
-回退页面只需把官网路由的模拟组件导入恢复为旧 `demo/SimulationView.vue` 并重建本地官网，不需要还原数据库或清空浏览器资料。
+历史回退说明（2026-10-11 更新）：旧原型现归档于 `docs/archive/legacy-marketing-demo/`，不参与当前构建。当前官网以公开验收冻结源码和嵌入式体验为准，不应将旧 `demo/SimulationView.vue` 重新开放成客户入口。需要回退时使用对应验收提交的完整源码与产物；无需恢复数据库。
 
 ## 验收结果
 

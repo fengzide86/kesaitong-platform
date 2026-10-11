@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.logging import get_logger
 from core.response import ErrorCodes, error_response, success_response
 from core.security import create_access_token
-from domains.access import normalize_entitlements, resolve_plan_code, resolve_product_access
+from domains.access import effective_license_status, normalize_entitlements, resolve_plan_code, resolve_product_access
 from models import AuthCode, AuthSeat, Device, Plan, User
 from services.staff_service import authenticate_staff, create_staff_access_token, staff_to_dict
 
@@ -73,7 +73,7 @@ class AuthService:
         if code_obj.status == "deleted":
             return error_response("授权码已被删除，请联系客服", ErrorCodes.AUTH_CODE_INVALID)
         
-        if code_obj.status == "expired" or (code_obj.expires_at and code_obj.expires_at < datetime.now()):
+        if effective_license_status(code_obj) == "expired":
             return error_response("授权码已过期", ErrorCodes.AUTH_CODE_EXPIRED)
         
         # 3. 检查平台权限（1.5 新增）
@@ -93,8 +93,11 @@ class AuthService:
             code_obj.device_id = device_id
             code_obj.device_name = device_name
             
-            # 使用已 JOIN 获取的 plan_duration，无需再次查询 Plan
-            code_obj.expires_at = datetime.now() + timedelta(days=plan_duration)
+            # Issued expiry is the commercial snapshot, including explicit
+            # overrides and extensions. Never restart it from today's Plan.
+            # Legacy unused codes without a term still start on activation.
+            if code_obj.expires_at is None:
+                code_obj.expires_at = datetime.now() + timedelta(days=plan_duration)
             
             # 创建用户记录
             user = User(
@@ -106,7 +109,7 @@ class AuthService:
             self.db.add(user)
             await self.db.flush()
             code_obj.user_id = user.id
-            logger.info(f"授权码 {code} 首次激活，用户ID: {user.id}")
+            logger.info("授权首次激活 auth_code_id=%s user_id=%s", code_obj.id, user.id)
         
         # 5. 席位检查（1.5 新增）
         seat_limit = code_obj.seat_limit or 1
@@ -164,8 +167,8 @@ class AuthService:
                             legacy_user.device_name = device_name
 
                 logger.info(
-                    f"授权码 {code} 恢复同一设备席位: "
-                    f"{legacy_device_id or 'unknown'} -> {device_id}"
+                    "授权恢复同一设备席位 auth_code_id=%s seat_id=%s",
+                    code_obj.id, seat_obj.id,
                 )
         
         # 缓存席位计数，后续响应直接复用
@@ -223,7 +226,7 @@ class AuthService:
                 )
             
             active_seats = recheck_seats
-            logger.info(f"授权码 {code} 创建新席位 #{seat_obj.seat_no}")
+            logger.info("授权绑定席位 auth_code_id=%s seat_id=%s", code_obj.id, seat_obj.id)
         else:
             # 已有席位，获取当前席位数
             active_seats_count = await self.db.execute(
@@ -266,7 +269,7 @@ class AuthService:
             self.db.add(device_obj)
             await self.db.flush()
             device_count += 1  # 新增了一个设备
-            logger.info(f"授权码 {code} 绑定新设备: {device_name}")
+            logger.info("授权绑定设备 auth_code_id=%s device_record_id=%s", code_obj.id, device_obj.id)
         else:
             # 已有设备，获取当前设备数
             device_count_result = await self.db.execute(
@@ -275,11 +278,14 @@ class AuthService:
             device_count = device_count_result.scalar() or 0
         
         # 7. 提交事务
+        auth_code_id = code_obj.id
         try:
             await self.db.commit()
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"验证过程出错: {e}")
+            # SQL exceptions can contain bound credentials; keep diagnostic
+            # identity/type without serializing the exception's parameter text.
+            logger.error("授权验证事务失败 auth_code_id=%s error_type=%s", auth_code_id, type(e).__name__)
             return error_response("验证过程出错，请重试", ErrorCodes.DATABASE_ERROR)
         
         # 8. 生成 JWT Token（plan_name 和统计数据已在上方缓存，无需重复查询）
@@ -351,7 +357,7 @@ class AuthService:
         if code_obj.status == "frozen":
             return error_response("您的授权码已被冻结，请联系客服", ErrorCodes.AUTH_CODE_FROZEN)
         
-        if code_obj.status == "expired" or (code_obj.expires_at and code_obj.expires_at < datetime.now()):
+        if effective_license_status(code_obj) == "expired":
             return error_response("您的授权码已过期，请续费", ErrorCodes.AUTH_CODE_EXPIRED)
         
         if code_obj.status == "deleted":

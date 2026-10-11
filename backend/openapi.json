@@ -4633,16 +4633,36 @@
         "title": "AuthCodeDeleteResponse",
         "type": "object"
       },
+      "AuthCodeExtend": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days"
+        ],
+        "title": "AuthCodeExtend",
+        "type": "object"
+      },
       "AuthCodeGenerate": {
         "properties": {
           "count": {
             "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
             "title": "Count",
             "type": "integer"
           },
           "duration_days": {
             "anyOf": [
               {
+                "maximum": 3650.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -4654,6 +4674,8 @@
           "max_devices": {
             "anyOf": [
               {
+                "maximum": 1000.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -4665,6 +4687,7 @@
           "plan_id": {
             "anyOf": [
               {
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -4688,6 +4711,11 @@
           "scene_type": {
             "anyOf": [
               {
+                "enum": [
+                  "competition",
+                  "course",
+                  "operations"
+                ],
                 "type": "string"
               },
               {
@@ -4700,6 +4728,8 @@
           "seat_limit": {
             "anyOf": [
               {
+                "maximum": 1000.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -4936,6 +4966,7 @@
           "device_id": {
             "anyOf": [
               {
+                "maxLength": 200,
                 "type": "string"
               },
               {
@@ -4947,6 +4978,7 @@
           "device_name": {
             "anyOf": [
               {
+                "maxLength": 200,
                 "type": "string"
               },
               {
@@ -4969,6 +5001,8 @@
           "max_devices": {
             "anyOf": [
               {
+                "maximum": 1000.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -4980,6 +5014,13 @@
           "status": {
             "anyOf": [
               {
+                "enum": [
+                  "unused",
+                  "active",
+                  "frozen",
+                  "expired",
+                  "deleted"
+                ],
                 "type": "string"
               },
               {
@@ -5207,7 +5248,7 @@
       "Body_add_expense_attachment_api_expenses__expense_id__attachments_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -5222,7 +5263,7 @@
         "properties": {
           "files": {
             "items": {
-              "format": "binary",
+              "contentMediaType": "application/octet-stream",
               "type": "string"
             },
             "title": "Files",
@@ -9631,18 +9672,6 @@
         "title": "FeatureDisabledDetailResponse",
         "type": "object"
       },
-      "FeatureDisabledResponse-Output": {
-        "properties": {
-          "detail": {
-            "$ref": "#/components/schemas/FeatureDisabledDetail"
-          }
-        },
-        "required": [
-          "detail"
-        ],
-        "title": "FeatureDisabledResponse",
-        "type": "object"
-      },
       "FeedbackCreate": {
         "properties": {
           "content": {
@@ -10427,6 +10456,17 @@
             "title": "Priority",
             "type": "string"
           },
+          "replied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replied At"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -10445,6 +10485,17 @@
               }
             ],
             "title": "Tool Id"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "user_id": {
             "anyOf": [
@@ -11656,6 +11707,22 @@
         "title": "LaunchGrantVerifyDataResponse",
         "type": "object"
       },
+      "LaunchGrantVerifyRequest": {
+        "description": "New clients keep the one-use grant out of URL and proxy access logs.",
+        "properties": {
+          "token": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "LaunchGrantVerifyRequest",
+        "type": "object"
+      },
       "LaunchGrantVerifySuccessResponse": {
         "properties": {
           "data": {
@@ -12177,9 +12244,53 @@
       },
       "OrderResponse": {
         "properties": {
+          "agency_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency Id"
+          },
+          "agency_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agency Name"
+          },
           "amount": {
             "title": "Amount",
             "type": "number"
+          },
+          "auth_code_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Code Id"
+          },
+          "auth_code_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Code Status"
           },
           "cancel_reason": {
             "anyOf": [
@@ -12235,6 +12346,28 @@
               }
             ],
             "title": "Created By Staff Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
           },
           "id": {
             "title": "Id",
@@ -13325,6 +13458,18 @@
       "ProfitPolicyUpdate": {
         "additionalProperties": false,
         "properties": {
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
           "ratios": {
             "$ref": "#/components/schemas/ProfitRatios-Input"
           }
@@ -15545,6 +15690,17 @@
       },
       "UserDetailResponse": {
         "properties": {
+          "auth_code_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Code Id"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -16177,6 +16333,17 @@
       },
       "UserSummaryResponse": {
         "properties": {
+          "auth_code_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Code Id"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -16328,6 +16495,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -16709,7 +16883,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FeatureDisabledResponse-Output"
+                  "$ref": "#/components/schemas/domains__platform__action_center_schemas__FeatureDisabledResponse"
                 }
               }
             },
@@ -17680,6 +17854,23 @@
               ],
               "title": "Q"
             }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
           }
         ],
         "responses": {
@@ -18296,6 +18487,23 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
             }
           }
         ],
@@ -19709,6 +19917,66 @@
               "title": "Include Deleted",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "query",
+            "name": "product_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "consumer",
+                    "business"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unused",
+                    "active",
+                    "frozen",
+                    "expired",
+                    "deleted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
           }
         ],
         "responses": {
@@ -19847,6 +20115,23 @@
               "title": "Code Id",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "platform_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(amazon|aliexpress)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform Key"
+            }
           }
         ],
         "responses": {
@@ -19932,6 +20217,63 @@
           }
         ],
         "summary": "Update Auth Code",
+        "tags": [
+          "授权码管理"
+        ]
+      }
+    },
+    "/api/auth-codes/{code_id}/extend": {
+      "post": {
+        "operationId": "extend_auth_code_api_auth_codes__code_id__extend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code_id",
+            "required": true,
+            "schema": {
+              "title": "Code Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthCodeExtend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthCodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Extend Auth Code",
         "tags": [
           "授权码管理"
         ]
@@ -23094,6 +23436,23 @@
             }
           },
           {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
             "description": "平台标识 (amazon/aliexpress)",
             "in": "query",
             "name": "platform_key",
@@ -23360,6 +23719,23 @@
             "schema": {
               "title": "Feedback Id",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(amazon|aliexpress)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform Key"
             }
           }
         ],
@@ -23804,7 +24180,7 @@
             "description": "Successful Response"
           },
           "503": {
-            "description": "数据库不可用，服务尚未就绪"
+            "description": "必需依赖不可用，服务尚未就绪"
           }
         },
         "summary": "Health Ready"
@@ -24238,7 +24614,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FeatureDisabledResponse-Output"
+                  "$ref": "#/components/schemas/schemas__ai_chat__FeatureDisabledResponse"
                 }
               }
             },
@@ -24312,7 +24688,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FeatureDisabledResponse-Output"
+                  "$ref": "#/components/schemas/schemas__ai_chat__FeatureDisabledResponse"
                 }
               }
             },
@@ -24989,6 +25365,26 @@
               ],
               "title": "Platform Key"
             }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "direct",
+                    "agency"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
           }
         ],
         "responses": {
@@ -25135,6 +25531,26 @@
               ],
               "title": "Platform Key"
             }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "direct",
+                    "agency"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
           }
         ],
         "responses": {
@@ -25180,6 +25596,22 @@
             "schema": {
               "title": "Order Id",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform Key"
             }
           }
         ],
@@ -26364,6 +26796,17 @@
               "title": "Page Size",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -27185,19 +27628,46 @@
     },
     "/api/tools/launch-grant/verify": {
       "post": {
-        "description": "验证并消费一次性启动授权；旧 launch-token 路径继续兼容。",
+        "description": "验证并消费一次性启动授权；旧路径和 query 协议兼容至 1.9.0。",
         "operationId": "verify_launch_token_api_tools_launch_grant_verify_post",
         "parameters": [
           {
+            "deprecated": true,
+            "description": "旧客户端 query 协议，保留至 1.9.0；新版使用 JSON body",
             "in": "query",
             "name": "token",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Token",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "旧客户端 query 协议，保留至 1.9.0；新版使用 JSON body",
+              "title": "Token"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LaunchGrantVerifyRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -27246,19 +27716,46 @@
     },
     "/api/tools/launch-token/verify": {
       "post": {
-        "description": "验证并消费一次性启动授权；旧 launch-token 路径继续兼容。",
+        "description": "验证并消费一次性启动授权；旧路径和 query 协议兼容至 1.9.0。",
         "operationId": "verify_launch_token_api_tools_launch_token_verify_post",
         "parameters": [
           {
+            "deprecated": true,
+            "description": "旧客户端 query 协议，保留至 1.9.0；新版使用 JSON body",
             "in": "query",
             "name": "token",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Token",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "旧客户端 query 协议，保留至 1.9.0；新版使用 JSON body",
+              "title": "Token"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LaunchGrantVerifyRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -27871,6 +28368,40 @@
           },
           {
             "in": "query",
+            "name": "platform_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(amazon|aliexpress)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "auth_code_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Auth Code Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -27965,6 +28496,23 @@
             "schema": {
               "title": "User Id",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(amazon|aliexpress)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform Key"
             }
           }
         ],

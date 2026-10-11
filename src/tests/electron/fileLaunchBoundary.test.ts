@@ -57,12 +57,14 @@ function setup(schema: RecordValue[] = [{ key: 'document', type: 'file', require
     './embedded-browser-host.cjs': { EmbeddedBrowserHost: class { isReady() { return true } request = hostAction; release() {} } },
     './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} } },
     './local-artifact-service.cjs': { LocalArtifactService: class { begin() { return 1 } registerRun() {} observe() {} } },
-    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} } },
+    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
     './runner-client.cjs': { RunnerClient: class { constructor(value: RunnerCallbacks) { callbacks = value } start = start } },
   })
   const controller = new DesktopAutomationController({ automationEnabled: true, controlApiBase: 'https://control.invalid', runtimeRoot: root,
     getWindow: () => window, getDefaultFreightWorkbookPath: () => 'unused', registerTrustedHandle: registrar.handle,
     registerAutomationHandle: registrar.automationHandle, registerTrustedOn: registrar.on, mayOpenExternalUrl: () => false, onActivityChanged: vi.fn(), showNotification: vi.fn() })
+  const { recoveryOwnerHash } = localRequire(resolve('dist-electron/electron/automation/recovery-store.cjs'))
+  controller.browserSessions.prepare(recoveryOwnerHash(['https://control.invalid', 1, null, 'device']), 'amazon')
   controller.registerIpc()
   const event = { sender, senderFrame: { url: sender.getURL() } } as IpcMainInvokeEvent
   const invoke = async (channel: string, request?: unknown) => handlers.get(channel)!(event, ...(request === undefined ? [] : [request]))
@@ -129,5 +131,16 @@ describe('authoritative native file launch boundary', () => {
     await test.invoke('files:clear-input')
     await expect(test.runner().onHostRequest('files.validate-upload', { filePath: test.file })).rejects.toThrow('LOCAL_FILE_UNREADABLE')
     expect(test.hostAction).not.toHaveBeenCalled()
+  })
+  it('changed content is rejected by the actual mutation ACK, even after native reselection', async () => {
+    const test = setup()
+    await test.invoke('files:select-input', { label: '商品资料' })
+    await test.launch()
+    writeFileSync(test.file, 'changed after launch')
+    await test.invoke('files:select-input', { label: '商品资料' })
+    await expect(test.runner().onHostRequest('recovery.before-mutation', {})).rejects.toThrow('LOCAL_FILE_CHANGED')
+    expect(test.hostAction).not.toHaveBeenCalled()
+    const rows = await test.invoke('recovery:list', {}) as Array<{ classification: string }>
+    expect(rows[0]?.classification).toBe('not_submitted')
   })
 })

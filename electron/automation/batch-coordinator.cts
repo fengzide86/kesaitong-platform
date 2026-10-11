@@ -1,6 +1,8 @@
 const { RunnerClient } = require('./runner-client.cjs');
 const crypto = require('node:crypto');
 import type { RecoveryStore } from './recovery-store.cjs';
+import { ExecutionLease, type ExecutionPermit } from './execution-lease.cjs';
+import type { ExecutionReportOutbox } from './execution-report-outbox.cjs';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
@@ -46,6 +48,8 @@ interface ParsedImport {
 }
 
 interface BatchItem {
+  permit?: ExecutionPermit;
+  reportReservation?: string;
   attemptId: string;
   recoveryId: string | null;
   retryOf?: string;
@@ -81,6 +85,8 @@ interface RunnerFactoryOptions {
 }
 
 interface CoordinatorOptions {
+  executionLease?: ExecutionLease;
+  reportOutbox?: ExecutionReportOutbox;
   validateUpload?: (payload: UnknownRecord) => Promise<unknown>;
   authorizeMutation?: () => Promise<string>;
   recoveryStore?: RecoveryStore;
@@ -93,6 +99,11 @@ interface CoordinatorOptions {
 }
 
 class BatchCoordinator {
+  private readonly executionLease: ExecutionLease;
+  private readonly reportOutbox?: ExecutionReportOutbox;
+  private generation = 0;
+  private cancelling = false;
+  private unsubscribeLease?: () => void;
   validateUpload?: (payload: UnknownRecord) => Promise<unknown>;
   authorizeMutation?: () => Promise<string>;
   recoveryStore?: RecoveryStore;
@@ -108,9 +119,11 @@ class BatchCoordinator {
   activeItemId: string | null;
   provisioningItemId: string | null;
 
-  constructor({ scriptPath = '', env, hostManager, onEvent = () => {}, onNotify = () => {}, runnerFactory, recoveryStore, authorizeMutation, validateUpload }: CoordinatorOptions = {}) {
+  constructor({ scriptPath = '', env, hostManager, onEvent = () => {}, onNotify = () => {}, runnerFactory, recoveryStore, authorizeMutation, validateUpload, executionLease, reportOutbox }: CoordinatorOptions = {}) {
     if (!hostManager) throw new Error('BatchCoordinator requires hostManager');
     this.scriptPath = scriptPath;
+    this.executionLease = executionLease || new ExecutionLease();
+    this.reportOutbox = reportOutbox;
     this.env = env || {};
     this.recoveryStore = recoveryStore;
     this.authorizeMutation = authorizeMutation;
@@ -162,6 +175,7 @@ class BatchCoordinator {
   }
 
   create({ importId, batchId, serverBatchId, tool, maxOpenSessions = 6, recordKind = 'live', owner = null }: { importId: string; batchId: string; serverBatchId?: string | number; tool: UnknownRecord; maxOpenSessions?: number; recordKind?: 'demo' | 'live'; owner?: string | null }) {
+    if (this.cancelling) throw this.error('BATCH_STOPPING', '原批次正在停止，请稍后重试');
     if (this.batch && this.batch.status === 'running') throw this.error('BATCH_ACTIVE', '已有批次正在执行');
     const importedRows = this.imports.get(importId);
     if (!importedRows?.length) throw this.error('BATCH_IMPORT_MISSING', '导入数据已经失效，请重新选择文件');
@@ -170,6 +184,9 @@ class BatchCoordinator {
       ? this.recoveryStore.queue(owner, tool, importedRows.map(row => ({ input: row.input, batchId, itemId: row.itemId, originalRow: row.sourceRow, retryOf: row.retryOf }))) : [];
     this.imports.clear();
     this.importOwners.clear();
+    this.generation += 1;
+    this.unsubscribeLease?.();
+    this.unsubscribeLease = this.executionLease.onAvailable(() => this.schedule());
     this.batch = {
       owner,
       batchId,
@@ -247,9 +264,14 @@ class BatchCoordinator {
     const item = this.requireItem(itemId);
     const batch = this.batch;
     if (!batch) throw this.error('BATCH_NOT_FOUND', '批次不存在');
+    if (batch.status !== 'running' || this.cancelling) throw this.error('BATCH_STOPPING', '批次已结束或正在停止');
     if (this.activeItemId && this.activeItemId !== itemId) throw this.error('BATCH_RUNNER_BUSY', '另一个账号正在处理');
     if (batch.recordKind !== 'demo' && !this.hostManager.isReady(itemId)) throw this.error('BROWSER_NOT_REGISTERED', '账号浏览器尚未就绪');
     if (TERMINAL.has(item.status)) throw this.error('BATCH_ITEM_TERMINAL', '该账号已经结束');
+    if (item.runner || item.permit || item.status !== 'pending') throw this.error('BATCH_RUNNER_BUSY', '该账号已启动或正在等待人工操作');
+    const generation = this.generation;
+    const permit = this.executionLease.acquire();
+    item.permit = permit;
     this.provisioningItemId = null;
     this.activeItemId = itemId;
     item.status = 'running';
@@ -269,19 +291,35 @@ class BatchCoordinator {
       },
     };
     try {
+      if (batch.recordKind === 'live' && this.env.TOOLBOX_PERSIST_REPORTS === '1') {
+        if (!this.reportOutbox) throw this.error('RECEIPT_SERVICE_MISSING', '本机回执服务不可用，已禁止执行');
+        item.reportReservation = await this.reportOutbox.reserve(((runTool as UnknownRecord).launchGrant as UnknownRecord | undefined)?.token);
+        if (generation !== this.generation || batch.status !== 'running') {
+          await this.reportOutbox.releaseReservation(item.reportReservation);
+          throw this.error('SESSION_REVOKED', '原批次准备已失效');
+        }
+      }
+      permit.assert();
       if (batch.recordKind === 'live' && this.recoveryStore) {
         if (!batch.owner) throw this.error('RECOVERY_OWNER_MISSING', '未验证当前授权，已禁止执行。');
         const record = this.recoveryStore.begin(batch.owner, runTool, item.input || {}, { batchId: batch.batchId, itemId, originalRow: item.sourceRow, retryOf: item.recoveryId || item.retryOf });
         item.recoveryId = record.id;
         (runTool.executionContext as UnknownRecord).sessionId = `session_${item.attemptId}`;
       }
-    } catch (cause) { this.finishItem(item, 'failed', cause instanceof Error ? cause.message : '恢复检查失败'); throw cause; }
+    } catch (cause) {
+      if (item.reportReservation) await this.reportOutbox?.releaseReservation(item.reportReservation);
+      if (generation === this.generation) this.finishItem(item, 'failed', cause instanceof Error ? cause.message : '恢复检查失败');
+      permit.release();
+      throw cause;
+    }
     item.runner = this.createRunner(item);
     this.emit('batch.item_updated', { itemId });
     try {
-      return await item.runner.start(runTool);
+      const result = await item.runner.start(runTool);
+      if (generation !== this.generation) throw this.error('SESSION_REVOKED', '原批次执行已退出');
+      return result;
     } catch (error) {
-      this.finishItem(item, 'failed', error instanceof Error ? error.message : '启动失败');
+      if (generation === this.generation) this.finishItem(item, 'failed', error instanceof Error ? error.message : '启动失败');
       throw error;
     }
   }
@@ -337,13 +375,22 @@ class BatchCoordinator {
 
   async cancel(status = 'cancelled') {
     if (!this.batch) return { status: 'idle' };
+    if (this.cancelling) throw this.error('BATCH_STOPPING', '原批次正在停止，请稍后重试');
+    this.cancelling = true;
+    try {
+    this.generation += 1;
+    this.batch.status = status;
+    this.unsubscribeLease?.(); this.unsubscribeLease = undefined;
     const runners = this.batch.items.flatMap((item) => item.runner ? [item.runner.stop()] : []);
-    await Promise.allSettled(runners);
+    const stopped = await Promise.allSettled(runners);
+    if (stopped.some(result => result.status === 'rejected')) throw this.error('BATCH_STOP_FAILED', '执行进程尚未确认停止，已保留执行锁，请关闭后重新打开软件。');
     for (const item of this.batch.items) {
       if (this.batch.owner && item.recoveryId && this.recoveryStore) this.recoveryStore.observe(this.batch.owner, item.recoveryId, { type: status === 'interrupted' ? 'run.interrupted' : 'run.cancelled' });
+      this.releaseUnusedReceipt(item);
       if (!TERMINAL.has(item.status)) item.status = 'cancelled';
       item.input = null;
       item.runner = null;
+      item.permit?.release(); item.permit = undefined;
     }
     this.batch.status = status;
     this.activeItemId = null;
@@ -351,25 +398,41 @@ class BatchCoordinator {
     this.hostManager.releaseAll();
     this.emit('batch.finished');
     return this.snapshot();
+    } finally { this.cancelling = false; }
   }
 
   createRunner(item: BatchItem): RunnerLike {
+    const generation = this.generation;
+    const attempt = item.attemptId;
+    const current = () => generation === this.generation && item.attemptId === attempt && this.batch?.status === 'running' && !TERMINAL.has(item.status);
     return this.runnerFactory({
       scriptPath: this.scriptPath,
       env: this.env,
-      onEvent: (event: RunnerEvent) => this.handleRunnerEvent(item, event),
+      onEvent: (event: RunnerEvent) => { if (current()) this.handleRunnerEvent(item, event); },
       onHostRequest: async (action: string, payload: UnknownRecord) => {
+        if (!current() || TERMINAL.has(item.status)) throw this.error('SESSION_REVOKED', '原批次执行已退出');
+        if (action === 'execution.report') {
+          if (!item.reportReservation || !this.reportOutbox) throw this.error('RECEIPT_RESERVATION_MISSING', '缺少本次执行回执预留');
+          return this.reportOutbox.submit(payload, item.reportReservation);
+        }
+        if (!item.permit) throw this.error('EXECUTION_REVOKED', '该账号尚未取得执行许可');
+        const requestPermit = item.permit;
+        requestPermit.assert();
         if (action === 'files.validate-upload' || (action === 'browser.action' && (payload.action as UnknownRecord | undefined)?.kind === 'upload')) {
           if (!this.validateUpload) throw this.error('LOCAL_FILE_UNAVAILABLE', '本机上传验证不可用，已禁止上传');
           const upload = (payload.action || {}) as UnknownRecord;
           const filePath = action === 'files.validate-upload' ? payload.filePath
             : typeof upload.inputKey === 'string' ? (payload.input as UnknownRecord | undefined)?.[upload.inputKey] : upload.value;
           const result = await this.validateUpload({ filePath });
+          if (!current()) throw this.error('SESSION_REVOKED', '原批次上传已退出');
+          requestPermit.assert();
           if (action === 'files.validate-upload') return result;
         }
         if (action === 'recovery.before-mutation') {
           if (!this.batch?.owner || !item.recoveryId || !this.recoveryStore) throw this.error('RECOVERY_MISSING', '缺少本机恢复记录，已禁止提交。');
           if (this.authorizeMutation && await this.authorizeMutation() !== this.batch.owner) throw this.error('RECOVERY_OWNER_MISMATCH', '授权已变化，已禁止继续提交。');
+          if (!current() || !item.permit) throw this.error('SESSION_REVOKED', '原批次提交已退出');
+          requestPermit.assert();
           this.recoveryStore.mutation(this.batch.owner, item.recoveryId);
           return { saved: true };
         }
@@ -389,6 +452,7 @@ class BatchCoordinator {
       item.interventionType = event.action?.type || 'other';
       item.message = event.action?.instruction || '需要完成页面操作';
       this.activeItemId = null;
+      item.permit?.release(); item.permit = undefined;
       if (!item.notifiedInterventions.has(item.interventionType)) {
         item.notifiedInterventions.add(item.interventionType);
         this.onNotify({ itemId: item.itemId, accountLabelMasked: item.accountLabelMasked, type: item.interventionType });
@@ -411,11 +475,16 @@ class BatchCoordinator {
       catch { message = '本机恢复记录保存失败，结果待核对。'; }
     }
     item.status = status;
+    this.releaseUnusedReceipt(item);
     item.message = message || '';
     item.interventionType = null;
     item.readyToResume = false;
     if (this.activeItemId === item.itemId) this.activeItemId = null;
-    item.runner?.stop?.().catch(() => {});
+    const permit = item.permit;
+    item.permit = undefined;
+    // Do not hand execution to another process until the old Runner stopped.
+    if (item.runner) void item.runner.stop().then(() => permit?.release(), () => { /* fail closed: retain the lease */ });
+    else permit?.release();
     item.runner = null;
     if (item.browserReady) {
       this.hostManager.release(item.itemId);
@@ -431,6 +500,15 @@ class BatchCoordinator {
     this.schedule();
   }
 
+  private releaseUnusedReceipt(item: BatchItem): void {
+    if (!this.batch?.owner || !item.recoveryId || !item.reportReservation) return;
+    try {
+      if (this.recoveryStore?.list(this.batch.owner).find(row => row.id === item.recoveryId)?.classification === 'not_submitted') {
+        void this.reportOutbox?.releaseReservation(item.reportReservation).catch(() => { /* retain on storage failure */ });
+      }
+    } catch { /* Unknown execution keeps its reservation. */ }
+  }
+
   async resumeWaiting(item: BatchItem) {
     if (!item.runner) {
       item.status = 'pending';
@@ -438,6 +516,8 @@ class BatchCoordinator {
       this.schedule();
       return;
     }
+    if (this.executionLease.busy) return;
+    item.permit = this.executionLease.acquire();
     this.activeItemId = item.itemId;
     item.readyToResume = false;
     item.status = 'running';
@@ -451,6 +531,7 @@ class BatchCoordinator {
 
   schedule(): void {
     if (!this.batch || this.batch.status !== 'running' || this.activeItemId || this.provisioningItemId) return;
+    if (this.executionLease.busy) return;
     const resumable = this.batch.items.find(item => item.status === 'waiting_user' && item.readyToResume);
     if (resumable) {
       this.resumeWaiting(resumable);

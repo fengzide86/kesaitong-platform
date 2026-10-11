@@ -107,6 +107,7 @@ export interface BatchBridge {
 }
 
 export interface AutomationBridge {
+  prepareBrowser(platform: 'amazon' | 'aliexpress'): Promise<{ partition: string }>
   start(tool: AutomationTool): Promise<AutomationStartResult>
   preflight(tool: AutomationTool): Promise<AutomationPreflightResult>
   pause(): Promise<AutomationStatusResult>

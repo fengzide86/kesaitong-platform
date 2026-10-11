@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
@@ -12,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.csv_export import csv_row as _csv_row
 from core.dependencies import require_commerce_operator, require_super_admin
 from core.response import APIResponse, PaginatedResponse, success_response
 from database import get_db
@@ -38,12 +37,6 @@ from schemas.expense import (
 router = APIRouter()
 
 
-def _csv_row(values: list[object]) -> str:
-    output = io.StringIO(newline="")
-    csv.writer(output).writerow(values)
-    return output.getvalue()
-
-
 async def _stream_expenses_csv(
     bind: Any,
     query: Any,
@@ -64,7 +57,7 @@ async def _stream_expenses_csv(
                 item["title"],
                 item["category_name"],
                 item.get("payee") or "",
-                str(item["amount"]),
+                item["amount"],
                 item["currency"],
                 status_labels.get(item["status"], item["status"]),
                 item.get("created_by_name") or "",

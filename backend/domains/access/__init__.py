@@ -7,6 +7,8 @@ from domains.access.entitlements import (
     resolve_product_access,
     serialize_entitlements,
 )
+from domains.access.license_state import effective_license_status, effective_license_status_sql
+from domains.access.locking import lock_auth_code
 from domains.access.plan_identity import (
     fixed_plan_entitlements,
     plan_entitlements_source,
@@ -15,7 +17,10 @@ from domains.access.plan_identity import (
 
 __all__ = [
     "DEFAULT_ENTITLEMENTS",
+    "effective_license_status",
+    "effective_license_status_sql",
     "fixed_plan_entitlements",
+    "lock_auth_code",
     "normalize_entitlements",
     "plan_entitlements_source",
     "require_business_access",

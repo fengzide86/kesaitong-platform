@@ -167,7 +167,7 @@ const beginnerLinks = ['了解亚马逊虚拟仿真系统', '运营模式介绍'
         </section>
       </main>
     </div>
-    <footer class="course-footer"><span class="footer-emblem">跨</span><span>课赛通 · 独立模拟体验　｜　所有人物、商品及订单均为虚构样例</span></footer>
+    <footer class="course-footer"><span class="footer-emblem">跨</span><span>课赛通 · 独立模拟体验&ensp;｜&ensp;所有人物、商品及订单均为虚构样例</span></footer>
   </div>
 </template>
 

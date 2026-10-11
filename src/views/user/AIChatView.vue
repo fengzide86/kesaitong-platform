@@ -3,7 +3,7 @@
     <PageHeader eyebrow="执行支持" title="工具帮助" description="遇到授权、设备或自动操作问题，直接描述你看到的情况。">
       <template #actions>
         <button class="btn btn-secondary" @click="ticketsVisible = true">我的工单</button>
-        <button v-if="sessionId" class="btn btn-secondary" @click="showHistory = true">历史记录</button>
+        <button class="btn btn-secondary" @click="openHistory">历史记录</button>
       </template>
     </PageHeader>
 
@@ -24,8 +24,8 @@
             <div class="message-text" style="white-space: pre-wrap;">{{ msg.content }}</div>
             <div v-if="msg.knowledge_refs?.length" class="message-refs">
               <span class="ref-label">参考知识：</span>
-              <span v-for="ref in msg.knowledge_refs" :key="ref.id" class="ref-tag">
-                {{ ref.title }}
+              <span v-for="reference in msg.knowledge_refs" :key="reference.id" class="ref-tag">
+                {{ reference.title }}
               </span>
             </div>
             <div v-else-if="msg.knowledge_ids?.length" class="message-refs">
@@ -94,9 +94,11 @@
     <MySupportTickets v-model="ticketsVisible" />
     <!-- History Modal -->
     <div v-if="showHistory" class="modal-overlay" @click.self="showHistory = false">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+      <div ref="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1">
         <h3 id="history-title">对话历史</h3>
-        <div class="history-list">
+        <p v-if="historyLoading" role="status">正在加载历史…</p>
+        <p v-if="historyError" role="alert">{{ historyError }} <button type="button" class="btn btn-secondary" @click="loadHistory(historyPage)">重试</button></p>
+        <div class="history-list" :aria-busy="historyLoading">
           <button v-for="session in historySessions" :key="session.session_id" type="button" class="history-item" @click="loadSession(session.session_id)">
             <div class="history-info">
               <span class="history-status" :class="session.status">{{ getStatusText(session.status) }}</span>
@@ -104,8 +106,9 @@
             </div>
             <div class="history-meta">{{ session.message_count }} 条消息</div>
           </button>
-          <div v-if="!historySessions.length" class="empty-history">暂无历史记录</div>
+          <div v-if="!historyLoading && !historyError && !historySessions.length" class="empty-history">暂无历史记录</div>
         </div>
+        <nav class="history-pagination" aria-label="历史记录分页"><button type="button" class="btn btn-secondary" :disabled="historyLoading || historyPage <= 1" @click="loadHistory(historyPage - 1)">上一页</button><span>第 {{ historyPage }} 页 · 共 {{ historyTotal }} 条</span><button type="button" class="btn btn-secondary" :disabled="historyLoading || historyPage * 20 >= historyTotal" @click="loadHistory(historyPage + 1)">下一页</button></nav>
         <button class="btn btn-secondary" @click="showHistory = false">关闭</button>
       </div>
     </div>
@@ -114,6 +117,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useModalFocus } from '@/composables/useModalFocus'
 import MySupportTickets from '@/components/MySupportTickets.vue'
 import { useCustomerSupportChat } from '@/features/ai/useCustomerSupportChat'
 import PageHeader from '@/components/PageHeader.vue'
@@ -122,12 +126,15 @@ const ticketsVisible = ref(false)
 const {
   sessionId, messages, inputMessage, isLoading, isTransferring, showActions, showRating, rating,
   sessionResolved, sessionTransferred, lastAiMessage, messagesContainer, showHistory,
-  historySessions, quickQuestions, formatTime, getStatusText, askQuickQuestion,
+  historySessions, historyPage, historyTotal, historyLoading, historyError, loadHistory, openHistory, quickQuestions, formatTime, getStatusText, askQuickQuestion,
   sendMessage, retryMessage, startNewSession, sessionLoading, sessionError, markResolved, transferToHuman, submitRating, loadSession,
 } = useCustomerSupportChat()
+const historyModal = ref<HTMLElement | null>(null)
+useModalFocus(showHistory, historyModal, () => { showHistory.value = false })
 </script>
 
 <style scoped>
+.history-pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0}.modal{max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box}
 .ai-chat-container {
   display: flex;
   flex-direction: column;

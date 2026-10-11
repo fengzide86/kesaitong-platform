@@ -72,6 +72,7 @@ class TestHealthCheck:
         monkeypatch.setattr(settings, "REDIS_URL", "redis://configured.example:6379/0")
         monkeypatch.setattr(cache, "redis", None)
         monkeypatch.setattr(cache, "redis_error", "connection refused")
+        monkeypatch.setattr(cache, "_next_retry_at", float("inf"))
 
         response = await client.get("/api/health/ready")
 
@@ -80,6 +81,7 @@ class TestHealthCheck:
         assert response.json()["checks"]["redis"] == {
             "status": "error",
             "error": "connection refused",
+            "required": False,
         }
 
     @pytest.mark.asyncio
@@ -483,7 +485,8 @@ class TestRefreshToken:
         """测试不带 Token 刷新"""
         response = await client.post("/api/auth/refresh")
         
-        assert response.status_code == 403
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == "Bearer"
 
 
 class TestCheckAuthStatus:
