@@ -39,6 +39,7 @@ import type { FreightQuoteResult } from '../src/shared/freight/types.js'
 import type { ParsedFreightWorkbook } from '../src/shared/freight/workbook-parser.js'
 import type { RunnerEvent } from '../src/shared/ipc/automation-contract.js'
 import type { UpdateDeferPhase, UpdateSnapshot } from '../src/shared/ipc/update-contract.js'
+import { recoveryRecordSchema, type RecoveryBridge, type RecoveryQuery, type RecoveryReview, type RecoveryPrepare } from '../src/shared/ipc/recovery-contract.js'
 import {
   localArtifactReadResultSchema,
   type LocalArtifactReadRequest,
@@ -46,6 +47,7 @@ import {
 } from '../src/shared/ipc/artifact-contract.js'
 
 type Unsubscribe = () => void
+import { fileInputSelectionSchema, fileInputValidationResultSchema, type FileInputSelectionRequest, type FileInputSelection, type FileInputValidationRequest, type FileInputValidationResult } from '../src/shared/ipc/file-input-contract.js'
 type UnknownCallback = (data: unknown) => void
 
 function readRuntimeArgument(name: string): string {
@@ -96,7 +98,9 @@ const automationEnabled = readRuntimeArgument('toolbox-automation-enabled') === 
 // Expired/cleared authentication must also revoke this window's local evidence.
 if (automationEnabled) {
   window.addEventListener('toolbox:auth-cleared', () => {
+    void invokeDesktop('recovery:revoke-session').catch(() => undefined)
     void invokeDesktop('artifacts:clear').catch(() => undefined)
+    void invokeDesktop('files:clear-input').catch(() => undefined)
   })
 }
 
@@ -119,11 +123,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadUserCode: (): Promise<string | null> => invokeDesktop('credential-load-user-code'),
     clearUserCode: (): Promise<boolean> => invokeDesktop('credential-clear-user-code'),
   },
-  ...(automationEnabled ? { artifacts: {
+  ...(automationEnabled ? { recovery: {
+    list: async (query: RecoveryQuery = {}) => recoveryRecordSchema.array().parse(await invokeDesktop('recovery:list', query)),
+    review: async (request: RecoveryReview) => recoveryRecordSchema.parse(await invokeDesktop('recovery:review', request)),
+    openPlatform: (id: string) => invokeDesktop<void>('recovery:open-platform', id),
+    readEvidence: async (id: string) => localArtifactReadResultSchema.parse(await invokeDesktop('recovery:read-evidence', id)),
+    prepare: (request: RecoveryPrepare) => invokeDesktop<Awaited<ReturnType<RecoveryBridge['prepare']>>>('recovery:prepare', request),
+    export: (query: RecoveryQuery = {}) => invokeDesktop<Awaited<ReturnType<RecoveryBridge['export']>>>('recovery:export', query),
+  }, artifacts: {
     read: async (request: LocalArtifactReadRequest): Promise<LocalArtifactReadResult> =>
       localArtifactReadResultSchema.parse(await invokeDesktop('artifacts:read', request)),
     clear: (): Promise<void> => invokeDesktop('artifacts:clear'),
+  }, files: {
+    select: async (request: FileInputSelectionRequest): Promise<FileInputSelection | null> => {
+      const result = await invokeDesktop('files:select-input', request)
+      return result === null ? null : fileInputSelectionSchema.parse(result)
+    },
+    validate: async (request: FileInputValidationRequest): Promise<FileInputValidationResult> => fileInputValidationResultSchema.parse(await invokeDesktop('files:validate-input', request)),
+    clear: (): Promise<void> => invokeDesktop('files:clear-input'),
   }, automation: {
+    prepareBrowser: (platform: 'amazon' | 'aliexpress'): Promise<{ partition: string }> => invokeDesktop('automation:prepare-browser', platform),
     start: (tool: AutomationTool): Promise<AutomationStartResult> => invokeDesktop('automation:start', tool),
     preflight: (tool: AutomationTool): Promise<AutomationPreflightResult> => invokeDesktop('automation:preflight', tool),
     pause: (): Promise<AutomationStatusResult> => invokeDesktop('automation:pause'),

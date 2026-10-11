@@ -1,8 +1,9 @@
 const allowedSources = [
   /^src\/marketing\//,
   /^src\/components\/(?:brand|landing)\//,
-  /^src\/assets\/(?:brand|css\/base)\//,
+  /^src\/assets\/(?:brand|css\/base|website)\//,
   /^src\/views\/LandingView\.vue$/,
+  /^src\/views\/(?:ScenarioView|MarketingToolsView)\.vue$/,
   /^src\/composables\/useLandingMotion\.ts$/,
   /^src\/runtime\/desktop-download\.ts$/,
 ]
@@ -42,6 +43,17 @@ export const marketingHeaders = `/*
   Cache-Control: public, max-age=31536000, immutable
 `
 
-// Only the real static route is rewritten. The generated 404.html preserves
-// actual HTTP 404s for unknown paths instead of turning API mistakes into 200s.
-export const marketingRedirects = '/terms /index.html 200\n/user/terms /terms 301\n'
+// Known routes have their own static head for crawlers and share previews.
+// Unknown paths retain actual HTTP 404s rather than a blanket SPA rewrite.
+export const marketingRedirects = [
+  '/terms /terms/index.html 200',
+  '/terms/ /terms/index.html 200',
+  '/user/terms /terms 301',
+  '/user/terms/ /terms 301',
+  '/competition /competition/index.html 200',
+  '/competition/ /competition/index.html 200',
+  '/course /course/index.html 200',
+  '/course/ /course/index.html 200',
+  '/tools /tools/index.html 200',
+  '/tools/ /tools/index.html 200',
+].join('\n') + '\n'

@@ -33,6 +33,7 @@ describe('compiled preload in Electron sandbox require restrictions', () => {
     expect(bridge).toHaveProperty('automation')
     expect(bridge).toHaveProperty('batch')
     expect(bridge).toHaveProperty('artifacts')
+    expect(bridge).toHaveProperty('files')
   })
 
   it('keeps runtime capability gates when bundled', () => {
@@ -41,6 +42,7 @@ describe('compiled preload in Electron sandbox require restrictions', () => {
     expect(bridge).not.toHaveProperty('batch')
     expect(bridge).not.toHaveProperty('freight')
     expect(bridge).not.toHaveProperty('artifacts')
+    expect(bridge).not.toHaveProperty('files')
     expect(bridge).toHaveProperty('updates')
     expect(bridge).toHaveProperty('credentialStore')
   })

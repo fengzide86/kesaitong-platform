@@ -297,6 +297,10 @@ async def upsert_batch_item(
         ).execution_options(populate_existing=True)
     )
     item = result.scalar_one_or_none()
+    if item is not None and item.status == "completed":
+        # A delayed event from the same attempt must never undo success. A
+        # deliberate retry belongs to a new batch/item, not this terminal row.
+        return serialize_item(item)
     if batch.status in TERMINAL_BATCH_STATUSES:
         if item is not None:
             return serialize_item(item)

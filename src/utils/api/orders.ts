@@ -9,6 +9,8 @@ type OrderWire = Schemas['OrderResponse']
 type OrderEnvelope = Schemas['APIResponse_OrderResponse_']
 
 export const getOrders = (params: ApiQueryParams = {}): Promise<OrderWire[]> => api.get('/api/orders', params)
+export const getOrder = (id: EntityId, params: ApiQueryParams = {}): Promise<OrderWire> =>
+  api.get(`/api/orders/${encodeURIComponent(String(id))}`, params, { cache: false })
 
 export async function getOrdersPage(params: ApiQueryParams = {}): Promise<PaginatedResponse<OrderWire>> {
   const response = await api.get<Schemas['OrderPageResponse']>('/api/orders', params, { responseMode: 'raw' })

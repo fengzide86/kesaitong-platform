@@ -70,8 +70,11 @@ class Settings:
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
 
-    # ===== Redis 配置（可选）=====
+    # ===== Redis 配置（internal/production 默认必需）=====
     REDIS_URL: str | None = None
+    # Internal/production Redis backs distributed rate limiting and revocation.
+    # Set false only for an intentionally single-process degraded deployment.
+    REDIS_REQUIRED: bool = False
 
     # ===== 自动化工具签名（Ed25519 原始密钥，Base64）=====
     TOOL_SIGNING_PRIVATE_KEY_B64: str = ""
@@ -181,6 +184,13 @@ class Settings:
 
         # ===== 初始化 Redis 配置 =====
         self.REDIS_URL = os.getenv("REDIS_URL")  # 例如: redis://localhost:6379/0
+        redis_required = os.getenv("REDIS_REQUIRED", "").strip().lower()
+        if redis_required and redis_required not in {"true", "false"}:
+            raise ValueError("REDIS_REQUIRED 必须是 true 或 false")
+        self.REDIS_REQUIRED = (
+            redis_required == "true" if redis_required
+            else self.APP_ENV in {"internal", "production"}
+        )
         self.TOOL_SIGNING_PRIVATE_KEY_B64 = os.getenv("TOOL_SIGNING_PRIVATE_KEY_B64", "")
         self.TOOL_SIGNING_PUBLIC_KEY_B64 = os.getenv("TOOL_SIGNING_PUBLIC_KEY_B64", "")
         self.TOOL_SIGNING_KEY_ID = os.getenv("TOOL_SIGNING_KEY_ID", "tool-signing-v1")

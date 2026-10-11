@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 
 const root = process.cwd()
 const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-const releaseDir = path.join(root, metadata.build?.directories?.output || 'release')
+const releaseDir = path.resolve(root, process.env.TOOLBOX_DESKTOP_RELEASE_DIR || metadata.build?.directories?.output || 'release')
 const manifestPath = path.join(releaseDir, 'latest.yml')
 if (!fs.existsSync(manifestPath)) throw new Error(`NSIS update manifest is missing: ${manifestPath}`)
 

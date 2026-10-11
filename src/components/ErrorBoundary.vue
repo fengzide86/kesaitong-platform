@@ -30,7 +30,7 @@ import { ref, onErrorCaptured, type ComponentPublicInstance } from 'vue'
 import { useRouter } from 'vue-router'
 import { captureException } from '@/utils/sentry'
 
-const props = defineProps({
+defineProps({
   showDetails: {
     type: Boolean,
     default: () => import.meta.env.DEV

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BusinessBatchRunConsole from '@/features/business/BusinessBatchRunConsole.vue'
 import { businessBatchSnapshotSchema, type BatchItem } from '@/features/business/model'
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
+import { recoveryRecordSchema } from '@/shared/ipc/recovery-contract'
 
 vi.mock('@/utils', () => ({ showToast: vi.fn() }))
 
@@ -25,9 +26,10 @@ describe('business run console actual-state display', () => {
     wrapper?.unmount()
     wrapper = undefined
     vi.useRealTimers()
+    vi.unstubAllEnvs()
   })
 
-  function render(items: BatchItem[], recordKind: 'live' | 'demo' = 'live') {
+  function render(items: BatchItem[], recordKind: 'live' | 'demo' = 'live', allowInternalDemo = false) {
     const store = useBusinessWorkspaceStore()
     store.snapshot = businessBatchSnapshotSchema.parse({
       status: 'running', recordKind, items,
@@ -40,7 +42,7 @@ describe('business run console actual-state display', () => {
       },
     })
     store.selectedItemId = items[0]?.itemId ?? null
-    wrapper = mount(BusinessBatchRunConsole, { global: { stubs: { Teleport: true } } })
+    wrapper = mount(BusinessBatchRunConsole, { props: { allowInternalDemo }, global: { stubs: { Teleport: true, RecoveryPanel: { template: '<div data-testid="recovery-panel" />' } } } })
     return { store, view: wrapper }
   }
 
@@ -67,7 +69,7 @@ describe('business run console actual-state display', () => {
     const { view } = render([
       item('running', { progressPercent: 37, stageIndex: 1 }),
       item('waiting_user', { progressPercent: 100, simulatedOutcome: 'attention_example' }),
-    ], 'demo')
+    ], 'demo', true)
     expect(view.text()).toContain('并发演示')
     expect(view.text()).toContain('37%')
     expect(view.text()).toContain('需关注案例')
@@ -76,7 +78,7 @@ describe('business run console actual-state display', () => {
     expect(view.findAll('webview')).toHaveLength(0)
   })
 
-  it('keeps intervention unfinished, and routes continue/retry to the existing store actions', async () => {
+  it('keeps intervention unfinished and blocks blind retries without recovery evidence', async () => {
     const { view, store } = render([item('waiting_user'), item('failed')])
     const continueAction = vi.spyOn(store, 'completeUserAction').mockResolvedValue(undefined)
     const retryAction = vi.spyOn(store, 'restartItem').mockResolvedValue(undefined)
@@ -86,8 +88,10 @@ describe('business run console actual-state display', () => {
     expect(continueAction).toHaveBeenCalledWith('internal-waiting_user-9876543210')
     await view.get('tbody tr.is-failed').trigger('click')
     expect(view.get('.detail-status').text()).not.toContain('案例')
+    expect(view.get('.detail-status').text()).toContain('不能直接重试')
+    expect(view.get('.primary-action').attributes('disabled')).toBeDefined()
     await view.get('.primary-action').trigger('click')
-    expect(retryAction).toHaveBeenCalledWith('internal-failed-9876543210')
+    expect(retryAction).not.toHaveBeenCalled()
     await view.get('[aria-label="关闭详情"]').trigger('click')
     expect(view.get('.detail-layer').classes()).not.toContain('open')
   })
@@ -100,15 +104,47 @@ describe('business run console actual-state display', () => {
     expect(store.isActive).toBe(true)
   })
 
-  it('completed batch offers reimport rather than a dead retry button', async () => {
+  it('ended batches offer recovery verification without reimporting every row', async () => {
     const { view, store } = render([item('failed')])
     store.snapshot.status = 'completed'
     await view.get('tbody tr').trigger('click')
     expect(view.find('.primary-action').exists()).toBe(false)
-    const reimport = view.findAll('button').find(button => button.text() === '重新导入并新建')!
-    await reimport.trigger('click')
-    expect(view.emitted('new')).toHaveLength(1)
+    expect(view.find('[data-testid="recovery-panel"]').exists()).toBe(true)
+    expect(view.findAll('button').some(button => button.text() === '重新导入并新建')).toBe(false)
+    expect(view.emitted('new')).toBeUndefined()
     expect(view.text()).toContain('原始输入已清理')
+  })
+
+  it('only reviewed retryable rows expose the existing retry action', async () => {
+    const recovery = recoveryRecordSchema.parse({ id: 'recovery-1', batchId: 'batch-1', itemId: 'item-1', originalRow: 2,
+      toolId: 'tool-1', toolVersion: '1', attemptId: 'attempt-1', classification: 'manual_not_completed', executionStatus: 'failed',
+      revision: 2, updatedAt: '2026-10-08', errorCode: 'TIMEOUT', retryAllowed: true, targetOrigin: null, runId: 'run-1' })
+    const { view, store } = render([item('failed', { recovery })])
+    const retryAction = vi.spyOn(store, 'restartItem').mockResolvedValue(undefined)
+    await view.get('tbody tr').trigger('click')
+    expect(view.get('.detail-status').text()).toContain('人工核对未完成')
+    expect(view.get('.primary-action').attributes('disabled')).toBeUndefined()
+    await view.get('.primary-action').trigger('click')
+    expect(retryAction).toHaveBeenCalledWith('internal-failed-9876543210')
+  })
+
+  it('does not render a residual legacy Demo snapshot for customers', async () => {
+    const { view, store } = render([item('completed', { accountLabelMasked: '旧样例账号', progressPercent: 100 })], 'demo')
+    const saved = JSON.stringify(store.snapshot)
+    expect(view.find('[data-testid="legacy-demo-retired"]').exists()).toBe(true)
+    expect(view.find('[data-testid="business-run-console"]').exists()).toBe(false)
+    expect(view.text()).not.toMatch(/旧样例账号|100%|并发演示|完成案例/)
+    expect(JSON.stringify(store.snapshot)).toBe(saved)
+    await view.get('button').trigger('click')
+    expect(view.emitted('new')).toHaveLength(1)
+  })
+
+  it('cannot enable old customer Demo rendering in production even with an internal prop', () => {
+    vi.stubEnv('DEV', false)
+    vi.stubEnv('MODE', 'production')
+    const { view } = render([item('running')], 'demo', true)
+    expect(view.find('[data-testid="legacy-demo-retired"]').exists()).toBe(true)
+    expect(view.find('[data-testid="business-run-console"]').exists()).toBe(false)
   })
 
   it('does not count or filter queued accounts as actively running', async () => {

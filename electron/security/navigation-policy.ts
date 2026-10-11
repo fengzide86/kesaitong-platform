@@ -1,3 +1,5 @@
+import { isAuditedV2Origin } from './v2-origin.js'
+
 export function isAllowedMainFrameUrl(url: string, allowDevelopmentOrigin = false): boolean {
   try {
     const parsed = new URL(url)
@@ -44,6 +46,7 @@ export function isAllowedWebviewUrl(url: string): boolean {
     const parsed = new URL(url)
     if (parsed.username || parsed.password) return false
     if (parsed.protocol === 'https:') return true
+    if (isAuditedV2Origin(parsed)) return true
     return parsed.protocol === 'http:'
       && (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost')
   } catch {
@@ -52,6 +55,6 @@ export function isAllowedWebviewUrl(url: string): boolean {
 }
 
 export function isAllowedWebviewPartition(partition: string | undefined): boolean {
-  if (partition === 'persist:tool-workspace') return true
+  // Persistent owner profiles require a main-process grant in main-window.
   return typeof partition === 'string' && /^batch-[A-Za-z0-9_-]+$/.test(partition)
 }

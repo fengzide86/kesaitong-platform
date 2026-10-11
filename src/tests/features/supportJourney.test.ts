@@ -3,6 +3,8 @@ import { defineComponent } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { demoPreviewFor } from '@/features/automation/demoPreview'
 import { useCustomerSupportChat } from '@/features/ai/useCustomerSupportChat'
+import { prepareSupportDraft } from '@/features/ai/supportHandoff'
+import { authService } from '@/utils/auth'
 
 const mocks = vi.hoisted(() => ({ transfer: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), create: vi.fn(), toast: vi.fn() }))
 vi.mock('element-plus', () => ({ ElMessageBox: { prompt: mocks.prompt } }))
@@ -44,7 +46,10 @@ describe('customer support handoff', () => {
     wrapper.unmount()
   })
   it('leaves purchase context as a draft rather than automatically submitting', async () => {
-    sessionStorage.setItem('toolbox_purchase_inquiry', '咨询套餐')
+    authService.setAuth({ token: 'test-token' })
+    authService.setRole('user')
+    authService.setUser({ id: 1 })
+    prepareSupportDraft('咨询套餐', 'amazon')
     const { chat, wrapper } = await setup()
     expect(chat.inputMessage.value).toBe('咨询套餐')
     expect(chat.messages.value).toHaveLength(1)

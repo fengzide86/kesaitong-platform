@@ -6,6 +6,7 @@ import {
   type Event,
   type MessageBoxReturnValue,
   type WebContents,
+  type WebPreferences,
 } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,6 +27,8 @@ interface MainWindowOptions {
   mayOpenExternalUrl: (url: string) => boolean
   getActivityState: () => DesktopActivityState
   cancelActiveWork: () => Promise<void>
+  approveWebview?: (partition: string | undefined, preferences: WebPreferences) => boolean
+  webviewAttached?: (guest: WebContents) => void
   onClosed: () => void
 }
 
@@ -106,8 +109,8 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     if (
       !options.automationEnabled
       || !isAllowedWebviewUrl(params.src || 'about:blank')
-      || !isAllowedWebviewPartition(params.partition)
       || Boolean(params.preload)
+      || !(options.approveWebview ? options.approveWebview(params.partition, webPreferences) : isAllowedWebviewPartition(params.partition))
     ) {
       event.preventDefault()
       return
@@ -120,6 +123,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     webPreferences.webSecurity = true
     webPreferences.allowRunningInsecureContent = false
   })
+  window.webContents.on('did-attach-webview', (_event, guest) => options.webviewAttached?.(guest))
 
   window.once('ready-to-show', () => window.show())
   window.webContents.on('did-finish-load', () => {

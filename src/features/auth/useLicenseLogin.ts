@@ -1,4 +1,4 @@
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Auth, getDeviceId, getDeviceName, showToast } from '@/utils'
 import { api, verifyAuthCode } from '@/utils/api'
@@ -49,6 +49,9 @@ export function useLicenseLogin() {
   const deviceName = ref('')
   const deviceId = ref('')
   const wechatId = ref('')
+  let active = true
+  let loginSequence = 0
+  onUnmounted(() => { active = false; loginSequence += 1 })
 
   const connectionStatusClass = computed(() => ({
     online: connection.status === 'online',
@@ -82,9 +85,10 @@ export function useLicenseLogin() {
   }
 
   async function handleLogin() {
+    if (!active || isLoading.value) return
     showError.value = false
     const validation = validateAuthCode(authCode.value)
-    if (!validation.valid) {
+    if (validation.valid === false) {
       errorMessage.value = validation.message
       showError.value = true
       showToast(validation.message, 'error')
@@ -93,10 +97,14 @@ export function useLicenseLogin() {
     }
 
     isLoading.value = true
+    const sequence = ++loginSequence
+    const submitted = { code: authCode.value.trim(), deviceId: deviceId.value, deviceName: deviceName.value }
+    const current = () => active && sequence === loginSequence
     try {
       const result = licenseLoginResponseSchema.parse(
-        await verifyAuthCode(authCode.value.trim(), deviceId.value, deviceName.value),
+        await verifyAuthCode(submitted.code, submitted.deviceId, submitted.deviceName),
       )
+      if (!current()) return
       if (!result.success) {
         errorMessage.value = result.message
         showError.value = true
@@ -105,23 +113,26 @@ export function useLicenseLogin() {
       }
       if (!result.data) throw new Error('授权登录响应缺少用户信息')
 
-      userStore.setLogin({ token: result.data.token, role: 'user', auth_code: authCode.value.trim(), user: result.data })
-      userStore.setDevice(deviceId.value, deviceName.value)
-      Auth.set(authCode.value.trim())
-      void saveRememberedUserCode(authCode.value.trim())
+      userStore.setLogin({ token: result.data.token, role: 'user', auth_code: submitted.code, user: result.data })
+      userStore.setDevice(submitted.deviceId, submitted.deviceName)
+      Auth.set(submitted.code)
+      void saveRememberedUserCode(submitted.code)
       if (result.data.platform_scope) {
         localStorage.setItem('toolbox_platform_scope', JSON.stringify(result.data.platform_scope))
       }
       loginSucceeded.value = true
       await new Promise(resolve => window.setTimeout(resolve, 160))
+      if (!current()) return
       window.dispatchEvent(new CustomEvent('toolbox:route-track', { detail: { duration: 780 } }))
       await new Promise(resolve => window.setTimeout(resolve, 270))
+      if (!current()) return
       const businessAccess = result.data.product_type === 'business'
         && result.data.business_workspace_enabled === true
         && result.data.entitlements?.batch_execution === true
         && result.data.entitlements?.multi_account_workspace === true
       await router.push(businessAccess ? '/business/overview' : '/user/tools')
     } catch (error) {
+      if (!current()) return
       const apiError = typeof error === 'object' && error !== null
         ? error as { kind?: string; message?: string; requestId?: string | null }
         : null
@@ -141,8 +152,10 @@ export function useLicenseLogin() {
       showError.value = true
       showToast(errorMessage.value, 'error')
     } finally {
-      isLoading.value = false
-      if (showError.value) focusLoginInput()
+      if (current()) {
+        isLoading.value = false
+        if (showError.value) focusLoginInput()
+      }
     }
   }
 

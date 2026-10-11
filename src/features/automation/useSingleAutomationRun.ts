@@ -1,19 +1,15 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { prepareSupportContext } from '@/features/ai/supportHandoff'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useTaskRunStore } from '@/stores/taskRun'
-import { createDemoRun, updateDemoRun } from '@/utils/api'
 import { showToast } from '@/utils'
 import { confirmAction } from '@/shared/ui/confirm'
 import { authService } from '@/utils/auth'
-import type { RunStatus } from '@/automation'
-import { demoRunSchema, unwrapApiData } from '@/features/demo/model'
-import { demoActivityToken, setDemoActivity } from '@/utils/demoActivity'
 import { refreshLiveLaunch } from '@/features/automation/launch'
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import type { FreightQuoteResult } from '@/shared/freight/types'
-import { flushPendingDemoReceipts, queueDemoReceipt, type DemoReceipt } from './demo-receipts'
 import type { RunnerPreflightResult } from '@/shared/ipc/automation-contract'
 import { localArtifactReadResultSchema, type LocalArtifactDiagnosticSummary, type LocalArtifactKind, type LocalArtifactUnavailableCode } from '@/shared/ipc/artifact-contract'
 
@@ -22,10 +18,22 @@ export function useSingleAutomationRun() {
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback
 }
-
 const router = useRouter()
 const appStore = useAppStore()
 const taskRunStore = useTaskRunStore()
+const currentRunId = computed(() => taskRunStore.runId || undefined)
+const recoveryRetryAllowed = ref(false)
+let recoveryRequest = 0
+async function refreshRecoveryStatus() {
+  const request = ++recoveryRequest
+  recoveryRetryAllowed.value = false
+  const runId = taskRunStore.runId
+  if (!runId || !window.electronAPI?.recovery || !['failed', 'cancelled'].includes(runStatus.value)) return
+  try {
+    const records = await window.electronAPI.recovery.list({})
+    if (request === recoveryRequest && taskRunStore.runId === runId) recoveryRetryAllowed.value = records.find(record => record.runId === runId)?.retryAllowed === true
+  } catch { /* Unknown evidence is never permission to retry. */ }
+}
  const {
    status: runStatus,
    currentStep,
@@ -39,6 +47,8 @@ const endingRun = ref(false)
 const taskStarted = ref(false)
 const taskStarting = ref(false)
 const browserRegistered = ref(false)
+const browserPartition = ref('')
+let browserPreparation = 0
 const problemDetails = ref<HTMLDetailsElement | null>(null)
 const preflightResult = ref<RunnerPreflightResult | null>(null)
 type EvidenceReadState = 'idle' | 'loading' | 'ready' | 'missing' | 'error'
@@ -51,12 +61,8 @@ const diagnosticState = ref<EvidenceReadState>('idle')
 const diagnosticMessage = ref('仅显示当前执行与同步摘要。')
 const localDiagnostic = ref<LocalArtifactDiagnosticSummary | null>(null)
 let evidenceRequestVersion = 0
- const loggedRunIds = new Set<string>()
- const telemetryRuns = new Map<string, Promise<string | null>>()
-const pendingReceipt = ref<DemoReceipt | null>(null)
 const recordSyncing = ref(false)
-const recordPending = computed(() => Boolean(pendingReceipt.value || runResult.value?.reportWarning))
- let activeDemoToken: string | null = null
+const recordPending = computed(() => Boolean(runResult.value?.reportWarning))
 
  const toolName = computed(() => appStore.currentTool?.name || '自动化工具')
  const isPreflight = computed(() => appStore.currentTool?.executionMode === 'preflight')
@@ -106,7 +112,7 @@ const screenshotAvailabilityMessage = computed(() => {
 })
 const isActiveRun = computed(() => !isPreflight.value && ['idle', 'preparing', 'running', 'waiting_user', 'paused'].includes(runStatus.value))
 const isTerminal = computed(() => ['completed', 'failed', 'cancelled'].includes(runStatus.value))
-const needsPlatformReview = computed(() => !isDemo.value && !isPreflight.value && ['failed', 'cancelled'].includes(runStatus.value))
+const needsPlatformReview = computed(() => !isDemo.value && !isPreflight.value && ['failed', 'cancelled'].includes(runStatus.value) && !recoveryRetryAllowed.value)
  const isBrowserRetryableError = computed(() => false)
  const interactionLocked = computed(() => ['preparing', 'running', 'paused'].includes(runStatus.value))
 const displayUrl = computed(() => isPreflight.value
@@ -355,7 +361,6 @@ async function closeWorkspace() {
     })) return
     if (isActiveRun.value) await taskRunStore.cancel()
     if (isPreflight.value) await cancelPreflight()
-    await deactivateDemoActivity()
     taskRunStore.reset()
     appStore.closeTool()
   } catch {
@@ -371,28 +376,21 @@ async function restartRun() {
   try {
     const currentTool = appStore.currentTool
     if (!currentTool?.id) throw new Error('当前工具信息不完整')
+    if (!['live', 'preflight'].includes(currentTool.executionMode || '')) throw new Error('旧演示入口已停用，请返回工具箱选择真实工具')
     if (currentTool.executionMode === 'preflight') {
       preflightResult.value = null
       taskStarted.value = false
       await startDemoTask()
       return
     }
-    if (currentTool.executionMode === 'live' && needsPlatformReview.value && !await confirmAction({
-      title: '作为新任务再次执行？',
-      message: '这会使用新授权重新发起任务，不会恢复上次任务。请先核对平台状态；若上次操作已生效，再次执行可能重复处理。',
-      confirmText: '发起新任务',
-      cancelText: '先核对平台',
-      danger: true,
-    })) return
-    const nextTool = currentTool.executionMode === 'live'
-      ? await refreshLiveLaunch(currentTool)
-      : { ...currentTool, demoRunId: createLocalDemoRunId(), executionMode: 'demo' as const }
+    if (currentTool.executionMode === 'live') {
+      await refreshRecoveryStatus()
+      if (!recoveryRetryAllowed.value) throw new Error('没有确定可重试的本机证据；请先核对平台并记录结论。已完成输入不能重复执行。')
+    }
+    const nextTool = await refreshLiveLaunch(currentTool)
     appStore.currentTool = nextTool
-    if (nextTool.executionMode !== 'live') await activateDemoActivity(nextTool.demoRunId || 'workspace')
-    await taskRunStore.start(nextTool, { mode: nextTool.executionMode === 'live' ? 'live' : 'demo' })
-    if (nextTool.executionMode !== 'live') scheduleTelemetry(nextTool)
+    await taskRunStore.start(nextTool, { mode: 'live' })
   } catch (error) {
-    await deactivateDemoActivity()
     showToast(errorMessage(error, '暂时无法重新执行'), 'error')
   } finally {
     restarting.value = false
@@ -423,18 +421,14 @@ async function cancelPreflight(): Promise<void> {
 }
 
 async function openSupport() {
-  localStorage.setItem('toolbox_support_context', JSON.stringify({
-    run_id: taskRunStore.runId,
-    tool_id: appStore.currentTool?.id,
+  prepareSupportContext({
     tool_name: toolName.value,
-    platform_key: appStore.currentTool?.platformKey,
-    error_code: taskRunStore.error?.code,
     problem_code: problemCode.value,
     run_status: runStatus.value,
     execution_mode: appStore.currentTool?.executionMode,
     result_requires_review: needsPlatformReview.value,
     record_pending: recordPending.value,
-  }))
+  }, appStore.currentTool?.platformKey || 'amazon')
   await closeWorkspace()
   if (!appStore.toolVisible) router.push('/user/ai-chat')
 }
@@ -445,6 +439,7 @@ async function openSupport() {
    taskStarted.value = true
    try {
     const currentTool = appStore.currentTool
+    if (!['live', 'preflight'].includes(currentTool?.executionMode || '')) throw new Error('旧演示入口已停用，请返回工具箱选择真实工具')
     if (currentTool?.executionMode === 'preflight') {
       const api = window.electronAPI?.automation
       if (!api?.preflight) throw new Error('当前桌面端不支持浏览器预检，请更新课赛通')
@@ -452,20 +447,14 @@ async function openSupport() {
       preflightResult.value = await api.preflight(JSON.parse(JSON.stringify(currentTool)))
       return
     }
-     const demoRunId = currentTool?.demoRunId || createLocalDemoRunId()
-     const nextTool = currentTool?.executionMode === 'live'
-       ? currentTool
-       : { ...(currentTool || {}), demoRunId, executionMode: 'demo' as const }
+     const nextTool = currentTool!
      appStore.currentTool = nextTool
-     if (nextTool.executionMode !== 'live') await activateDemoActivity(demoRunId)
-     await taskRunStore.start(nextTool, { mode: nextTool.executionMode === 'live' ? 'live' : 'demo' })
-     if (nextTool.executionMode !== 'live') scheduleTelemetry(nextTool)
+     await taskRunStore.start(nextTool, { mode: 'live' })
     } catch {
-      await deactivateDemoActivity()
       // A failed preflight must be retryable without remounting the workspace.
       // Keep the normal task-start guard for an already-running demo/live run.
       if (appStore.currentTool?.executionMode === 'preflight') taskStarted.value = false
-      showToast(isDemo.value ? '演示启动失败，你可以重新加载或联系客服' : '自动处理启动失败，请检查授权和运行环境或联系支持', 'error')
+      showToast(isDemo.value ? '旧演示入口已停用，请返回工具箱选择真实工具' : '自动处理启动失败，请检查授权和运行环境或联系支持', 'error')
    } finally {
      taskStarting.value = false
      browserLoading.value = false
@@ -491,122 +480,54 @@ async function openSupport() {
    }
  }
 
- async function recordTerminalRun(status: RunStatus) {
-   if (!['completed', 'failed', 'cancelled'].includes(status)) return
-   if (!isDemo.value) return
-   const runId = taskRunStore.runId
-   if (!runId || loggedRunIds.has(runId)) {
-     await deactivateDemoActivity()
-     return
-   }
-   const tool = appStore.currentTool
-   const receipt: DemoReceipt = {
-     localId: runId, toolId: String(tool?.id || ''), toolName: tool?.name || '工具演示',
-     platform: tool?.platformKey || 'amazon', scenario: tool?.scenarioId || 'default',
-     status: status as DemoReceipt['status'], completedSteps: taskRunStore.completedCount,
-   }
-   pendingReceipt.value = receipt
-   recordSyncing.value = true
-   try {
-    const remoteRunId = await telemetryRuns.get(runId)
-    const synced = await queueDemoReceipt(remoteRunId ? { ...receipt, remoteId: remoteRunId } : receipt)
-    if (synced) { loggedRunIds.add(runId); if (pendingReceipt.value?.localId === runId) pendingReceipt.value = null }
-   } catch (error) {
-     console.warn('[DemoRun] 演示记录上报失败:', errorMessage(error, '未知错误'))
-   } finally {
-     recordSyncing.value = false
-     await deactivateDemoActivity()
-   }
- }
-
-async function retryRecordSync() {
-  if (!pendingReceipt.value || recordSyncing.value) return
-  const receipt = pendingReceipt.value
-  recordSyncing.value = true
+async function prepareWorkspaceBrowser() {
+  const request = ++browserPreparation
   try {
-    if (await queueDemoReceipt(receipt)) {
-      loggedRunIds.add(receipt.localId)
-      if (pendingReceipt.value?.localId === receipt.localId) pendingReceipt.value = null
-      showToast('演示记录已同步', 'success')
-    } else showToast('记录暂未同步，请联网后重试；无需重新执行任务', 'warning')
-  } finally { recordSyncing.value = false }
+    const automation = window.electronAPI?.automation
+    if (!automation?.prepareBrowser) throw new Error('当前桌面版本不支持账号隔离，请更新后重新打开工具')
+    const result = await automation.prepareBrowser(appStore.currentTool?.platformKey === 'aliexpress' ? 'aliexpress' : 'amazon')
+    if (request === browserPreparation) browserPartition.value = result.partition
+  } catch (error) {
+    if (request !== browserPreparation) return
+    browserLoading.value = false
+    showToast(errorMessage(error, '独立浏览器准备失败，请重新打开工具'), 'error')
+  }
 }
 
- function scheduleTelemetry(tool: NonNullable<typeof appStore.currentTool>): void {
-   const localRunId = tool.demoRunId
-   if (!localRunId || telemetryRuns.has(localRunId)) return
-   const request = (async (): Promise<string | null> => {
-     try {
-       const created = demoRunSchema.parse(unwrapApiData(await createDemoRun({
-         client_demo_run_id: localRunId,
-         tool_id: String(tool.id),
-         tool_name: tool.name || '工具演示',
-         platform_key: tool.platformKey || 'amazon',
-         scenario_id: tool.scenarioId || 'default',
-         total_step_count: 6,
-       })))
-       const remoteRunId = String(created.id)
-       await updateDemoRun(remoteRunId, {
-         event_seq: 1,
-         status: 'running',
-         current_step_id: 'prepare',
-         completed_step_count: 0,
-       })
-       return remoteRunId
-     } catch (error) {
-       console.warn('[DemoRun] 演示记录后台同步失败，本地演示继续:', errorMessage(error, '未知错误'))
-       return null
-     }
-   })()
-   telemetryRuns.set(localRunId, request)
- }
-
- async function activateDemoActivity(id: string | number): Promise<void> {
-   const nextToken = demoActivityToken('single', id)
-   if (activeDemoToken === nextToken) return
-   await deactivateDemoActivity()
-   activeDemoToken = nextToken
-   await setDemoActivity(nextToken, true)
- }
-
- async function deactivateDemoActivity(): Promise<void> {
-   const token = activeDemoToken
-   activeDemoToken = null
-   if (token) await setDemoActivity(token, false)
- }
-
 onMounted(() => {
-  void flushPendingDemoReceipts()
-  window.addEventListener('online', flushPendingDemoReceipts)
+  window.addEventListener('toolbox:recovery-updated', refreshRecoveryStatus)
   window.addEventListener('toolbox:auth-cleared', closeEvidence)
   window.addEventListener('toolbox:user-updated', handleEvidenceUserUpdate)
   // Desktop runs wait for the WebView's dom-ready event so preflight uses the
   // same embedded host instead of opening a second Playwright window.
   if (!isDesktop.value) void startDemoTask()
+  else if (!isDemo.value) void prepareWorkspaceBrowser()
 })
 
-watch(runStatus, recordTerminalRun)
 watch(runStatus, status => {
   if (status === 'failed' || status === 'cancelled' || status === 'completed') {
     browserLoading.value = false
+    void refreshRecoveryStatus()
   }
 }, { immediate: true })
 
 onUnmounted(() => {
+  browserPreparation += 1
+  recoveryRequest += 1
+  window.removeEventListener('toolbox:recovery-updated', refreshRecoveryStatus)
   closeEvidence()
-  window.removeEventListener('online', flushPendingDemoReceipts)
   window.removeEventListener('toolbox:auth-cleared', closeEvidence)
   window.removeEventListener('toolbox:user-updated', handleEvidenceUserUpdate)
-  void deactivateDemoActivity()
   void cancelPreflight()
   if (browserRegistered.value) void window.electronAPI?.automation?.unregisterBrowser()
   taskRunStore.reset()
 })
   return {
+    currentRunId, recoveryRetryAllowed, browserPartition,
     browserLoading, restarting, endingRun, stageItems, toolName, isDemo, isPreflight, isDesktop, isBrowserPreview,
     preflightResult, preflightMessage,
     platformName, platformShortName, isActiveRun, isTerminal, needsPlatformReview, interactionLocked, displayUrl,
-    freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing, retryRecordSync,
+    freightQuote, adapterVersion, evidenceSummary, recordPending, recordSyncing,
     evidenceOpen, evidenceView, diagnosticRows, localDiagnosticRows, diagnosticState, diagnosticMessage,
     screenshotState, screenshotDataUrl, screenshotMessage, canReadDiagnostic, canViewScreenshot, screenshotAvailabilityMessage,
     showRunEvidence, readRunEvidence, screenshotImageFailed,
@@ -614,15 +535,4 @@ onUnmounted(() => {
     isBrowserRetryableError, failureTitle, failureDescription, technicalError, problemDetails, showProblemDetails,
     stageState, completeUserAction, stopRun, closeWorkspace, restartRun, startReadyScript, openSupport, registerWorkspaceBrowser,
   }
-}
-
-function cryptoRandom(): string {
-  if (globalThis.crypto?.getRandomValues) {
-    return Array.from(globalThis.crypto.getRandomValues(new Uint32Array(2)), value => value.toString(16)).join('')
-  }
-  return Math.random().toString(16).slice(2)
-}
-
-function createLocalDemoRunId(): string {
-  return `demo_run_local_${Date.now()}_${cryptoRandom()}`
 }

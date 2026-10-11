@@ -61,13 +61,16 @@ async function expectNoOverflow(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
 }
 
-for (const width of [1365, 1024, 768]) {
+for (const width of [1365, 1180, 1038, 1024, 768]) {
   test(`B端四个路由在 ${width}px 无页面级横向溢出`, async ({ page }) => {
     await mockControlPlane(page, 'business')
     await page.setViewportSize({ width, height: 768 })
     for (const path of ['overview', 'workspace', 'records', 'license']) {
       await page.goto(`/#/business/${path}`, { waitUntil: 'domcontentloaded' })
       await expect(page.locator('.business-layout')).toBeVisible()
+      const title = page.getByTestId('shell-page-header').locator('h1')
+      await expect(title).toBeVisible()
+      await expect.poll(() => title.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
       await expectNoOverflow(page)
     }
   })

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 import json
 import secrets
 from collections.abc import AsyncIterator
@@ -17,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import log_admin_action
 from core.cache import cache
+from core.csv_export import csv_row
 from core.response import paginated_response
+from domains.access import effective_license_status, effective_license_status_sql
 from domains.commerce.agency_commission import AgencyCommissionService
 from models import Agency, AgencyCustomer, AgencyRequest, AuthCode, Order, Plan, StaffRole
 from schemas.agency import (
@@ -132,8 +132,10 @@ class AgencyService:
             query = query.where(or_(AgencyCustomer.name.contains(q, autoescape=True), AgencyCustomer.contact.contains(q, autoescape=True)))
         return await self._page(query, page, page_size, CustomerView)
 
-    async def customer(self, item_id: int) -> AgencyCustomer:
-        return await self._get(AgencyCustomer, item_id)
+    async def customer(self, item_id: int) -> CustomerView:
+        item = await self._get(AgencyCustomer, item_id)
+        agency = await self._agency(item.agency_id, active=False)
+        return CustomerView.model_validate(item).model_copy(update={"agency_name": agency.name})
 
     async def create_customer(self, data: CustomerCreate, request: Request) -> AgencyCustomer:
         agency_id = data.agency_id
@@ -300,16 +302,19 @@ class AgencyService:
     def _license_view(code: AuthCode, plan_name: str) -> dict[str, Any]:
         return {
             "id": code.id, "agency_id": code.agency_id, "customer_id": code.customer_id, "order_id": code.order_id,
-            "code": code.code, "plan_name": plan_name, "status": code.status, "expires_at": code.expires_at,
+            "code": code.code, "plan_name": plan_name, "status": effective_license_status(code), "expires_at": code.expires_at,
             "activated": code.user_id is not None, "created_at": code.created_at,
         }
 
-    async def licenses(self, page: int, page_size: int, agency_id: int | None, status: str | None, q: str | None = None) -> dict[str, Any]:
+    async def licenses(self, page: int, page_size: int, agency_id: int | None, status: str | None, q: str | None = None, customer_id: int | None = None) -> dict[str, Any]:
         query = self._scope(AuthCode, agency_id).where(AuthCode.order_id.is_not(None))
+        if customer_id is not None:
+            query = query.where(AuthCode.customer_id == customer_id)
+        effective_status = effective_license_status_sql()
         if status == "pending_activation":
-            query = query.where(AuthCode.status == "unused", AuthCode.user_id.is_(None), AuthCode.order_id.in_(select(Order.id).where(Order.status == "paid")))
+            query = query.where(effective_status == "unused", AuthCode.user_id.is_(None), AuthCode.order_id.in_(select(Order.id).where(Order.status == "paid")))
         elif status:
-            query = query.where(AuthCode.status == status)
+            query = query.where(effective_status == status)
         if q:
             query = query.where(or_(AuthCode.code.contains(q, autoescape=True), AuthCode.customer_id.in_(select(AgencyCustomer.id).where(AgencyCustomer.name.contains(q, autoescape=True)))))
         total = int((await self.db.execute(select(func.count()).select_from(query.subquery()))).scalar_one())
@@ -325,18 +330,23 @@ class AgencyService:
         if not code.order_id:
             raise HTTPException(404, "授权没有代理订单关联")
         order = await self._get(Order, code.order_id)
-        return self._license_view(code, order.plan_name_snapshot)
+        customer = await self.customer(code.customer_id)
+        return {**self._license_view(code, order.plan_name_snapshot), "customer_name": customer.name, "agency_name": customer.agency_name}
 
-    async def requests(self, page: int, page_size: int, agency_id: int | None, status: str | None, q: str | None = None) -> dict[str, Any]:
+    async def requests(self, page: int, page_size: int, agency_id: int | None, status: str | None, q: str | None = None, customer_id: int | None = None) -> dict[str, Any]:
         query = self._scope(AgencyRequest, agency_id)
+        if customer_id is not None:
+            query = query.where(AgencyRequest.customer_id == customer_id)
         if status:
             query = query.where(AgencyRequest.status == status)
         if q:
             query = query.where(or_(AgencyRequest.content.contains(q, autoescape=True), AgencyRequest.customer_id.in_(select(AgencyCustomer.id).where(AgencyCustomer.name.contains(q, autoescape=True)))))
         return await self._page(query, page, page_size, AgencyRequestView)
 
-    async def support_request(self, item_id: int) -> AgencyRequest:
-        return await self._get(AgencyRequest, item_id)
+    async def support_request(self, item_id: int) -> AgencyRequestView:
+        item = await self._get(AgencyRequest, item_id)
+        customer = await self.customer(item.customer_id)
+        return AgencyRequestView.model_validate(item).model_copy(update={"customer_name": customer.name, "agency_name": customer.agency_name})
 
     async def create_request(self, data: AgencyRequestCreate, request: Request) -> AgencyRequest:
         customer = await self._get(AgencyCustomer, data.customer_id, lock=True)
@@ -351,7 +361,7 @@ class AgencyService:
         await self._save(item, "agency_request_create", request)
         return item
 
-    async def resolve_request(self, item_id: int, data: AgencyRequestResolve, request: Request) -> AgencyRequest:
+    async def resolve_request(self, item_id: int, data: AgencyRequestResolve, request: Request) -> AgencyRequestView:
         self._owner()
         item = await self._get(AgencyRequest, item_id, lock=True)
         before = {"status": item.status, "response": item.response}
@@ -361,7 +371,7 @@ class AgencyService:
         item.resolved_by_staff_id = self.actor["staff_id"] if data.status != "open" else None
         # Resolving a service request is not a financial refund or a silent license extension.
         await self._save(item, "agency_request_reply", request, {"before": before, "after": data.model_dump()})
-        return item
+        return await self.support_request(item_id)
 
     async def summary(self, agency_id: int | None) -> dict[str, int]:
         queries = {
@@ -380,7 +390,7 @@ class AgencyService:
         """Owner-only read model; counts are not capped by the list preview."""
         self._owner()
         pending_activation = self._scope(AuthCode).where(
-            AuthCode.order_id.is_not(None), AuthCode.status == "unused",
+            AuthCode.order_id.is_not(None), effective_license_status_sql() == "unused",
             AuthCode.user_id.is_(None),
             AuthCode.order_id.in_(select(Order.id).where(Order.status == "paid")),
         )
@@ -410,20 +420,12 @@ class AgencyService:
 
     async def _csv_rows(self, agency_id: int | None, status: str | None, q: str | None, customer_id: int | None) -> AsyncIterator[str]:
         query = self._orders_query(agency_id, status, q, customer_id)
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(["订单号", "客户", "套餐", "金额", "状态", "授权交付"])
-        yield "\ufeff" + buffer.getvalue()
+        yield "\ufeff" + csv_row(["订单号", "客户", "套餐", "金额", "状态", "授权交付"])
         cursor = 0
         while True:
             rows = (await self.db.execute(query.where(Order.id > cursor).order_by(Order.id).limit(500))).scalars().all()
             if not rows:
                 break
-            buffer.seek(0)
-            buffer.truncate(0)
             for order in await self._order_views(rows):
-                # Spreadsheet formulas must not be created from customer-entered text.
-                values = [order.order_no, order.customer_name, order.plan_name, str(order.amount), order.status, "已交付" if order.auth_code else "待交付"]
-                writer.writerow(["'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value for value in values])
-            yield buffer.getvalue()
+                yield csv_row([order.order_no, order.customer_name, order.plan_name, order.amount, order.status, "已交付" if order.auth_code else "待交付"])
             cursor = rows[-1].id

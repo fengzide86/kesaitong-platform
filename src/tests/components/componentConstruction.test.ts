@@ -67,7 +67,11 @@ describe('component construction smoke', () => {
       await router.push('/')
       await router.isReady()
       const wrapper = shallowMount(loaded.default, {
-        props: requiredProps(loaded.default),
+        props: {
+          ...requiredProps(loaded.default),
+          ...(filename.endsWith('/ScenarioPainComparison.vue') ? { kind: 'competition' } : {}),
+          ...(filename.endsWith('/LandingSceneChecklist.vue') ? { scene: 'competition' } : {}),
+        },
         global: {
           plugins: [createPinia(), router],
           stubs: {

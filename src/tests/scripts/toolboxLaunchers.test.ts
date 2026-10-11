@@ -199,13 +199,13 @@ describe('KST local launchers and deployment boundaries', () => {
     const root = fixture()
     mkdirSync(path.join(root, 'node_modules', '.bin'), { recursive: true })
     writeFileSync(path.join(root, 'node_modules', '.bin', 'fixture.cmd'), '@echo off\r\nnode "%~dp0../../inspect.cjs" %*\r\n')
-    writeFileSync(path.join(root, 'inspect.cjs'), 'require("fs").writeFileSync("observed.json", JSON.stringify({args:process.argv.slice(2),temp:process.env.TEMP}))')
+    writeFileSync(path.join(root, 'inspect.cjs'), 'require("fs").writeFileSync("observed.json", JSON.stringify({args:process.argv.slice(2),temp:process.env.TEMP,browserGc:process.env.PLAYWRIGHT_SKIP_BROWSER_GC}))')
     const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'with-toolbox-data-root.mjs'), '--', 'fixture', 'payload & spaced!'], {
       cwd: root, env: { ...process.env, TOOLBOX_DATA_ROOT: path.join(root, 'data') }, encoding: 'utf8', timeout: 20_000,
     })
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(JSON.parse(readFileSync(path.join(root, 'observed.json'), 'utf8'))).toEqual({
-      args: ['payload & spaced!'], temp: path.join(root, 'data', 'build-tmp'),
+      args: ['payload & spaced!'], temp: path.join(root, 'data', 'build-tmp'), browserGc: '1',
     })
   })
 })

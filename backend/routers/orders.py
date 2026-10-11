@@ -1,16 +1,15 @@
 """Staff-only order queries and explicit transactional state transitions."""
 
-import csv
-import io
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.csv_export import csv_row as _csv_row
 from core.dependencies import require_any_staff, require_commerce_operator
 from core.exceptions import ValidationException
 from database import get_db
@@ -25,12 +24,6 @@ from schemas.order import (
 from services.order_service import OrderService
 
 router = APIRouter()
-
-
-def _csv_row(values: list[object]) -> str:
-    output = io.StringIO(newline="")
-    csv.writer(output).writerow(values)
-    return output.getvalue()
 
 
 async def _stream_orders_csv(bind: Any, filters: list[Any]) -> AsyncIterator[str]:
@@ -55,7 +48,7 @@ async def _stream_orders_csv(bind: Any, filters: list[Any]) -> AsyncIterator[str
                 [
                     order.order_no,
                     order.plan_name_snapshot,
-                    str(order.amount),
+                    order.amount,
                     order.channel or "",
                     order.responsible or "",
                     status_map.get(order.status, order.status),
@@ -73,6 +66,7 @@ async def get_orders(
     status_filter: str | None = Query(default=None, alias="status"),
     plan_id: int | None = Query(default=None, gt=0),
     platform_key: str | None = None,
+    source: Literal["direct", "agency"] | None = None,
     db: AsyncSession = Depends(get_db),
     _staff: dict[str, object] = Depends(require_any_staff),
 ) -> object:
@@ -82,6 +76,7 @@ async def get_orders(
         status_filter=status_filter,
         plan_id=plan_id,
         platform_key=platform_key,
+        source=source,
     )
 
 
@@ -95,10 +90,15 @@ async def export_orders(
     start_date: str | None = None,
     end_date: str | None = None,
     platform_key: str | None = None,
+    source: Literal["direct", "agency"] | None = None,
     db: AsyncSession = Depends(get_db),
     _staff: dict[str, object] = Depends(require_any_staff),
 ) -> StreamingResponse:
     filters = []
+    if source == "direct":
+        filters.append(Order.agency_id.is_(None))
+    elif source == "agency":
+        filters.append(Order.agency_id.is_not(None))
     if status_filter:
         if status_filter not in OrderStatus.ALL:
             raise ValidationException("订单状态无效")
@@ -143,11 +143,11 @@ async def create_order(
 @router.get("/{order_id}", response_model=OrderEnvelope, response_model_exclude_unset=True)
 async def get_order(
     order_id: int,
+    platform_key: str | None = None,
     db: AsyncSession = Depends(get_db),
     _staff: dict[str, object] = Depends(require_any_staff),
 ) -> object:
-    order = await OrderService(db).get_order(order_id)
-    return {"success": True, "message": "ok", "data": OrderService.serialize(order)}
+    return {"success": True, "message": "ok", "data": await OrderService(db).detail(order_id, platform_key)}
 
 
 @router.patch("/{order_id}", response_model=OrderEnvelope, response_model_exclude_unset=True)

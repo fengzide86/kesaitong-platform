@@ -13,6 +13,7 @@ x-api-environment: &api-environment
   MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER in .env.docker}
   MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.docker}
   REDIS_URL: redis://redis:6379/0
+  REDIS_REQUIRED: "${REDIS_REQUIRED:-true}"
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env.docker}
   CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env.docker}
   RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}

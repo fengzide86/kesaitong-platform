@@ -129,6 +129,7 @@ describe('taskRun store', () => {
 
   it('桌面端 Demo 使用本地 Runner 执行真实交互沙盒', async () => {
     const automation = {
+      prepareBrowser: vi.fn().mockResolvedValue({ partition: 'persist:kst-workspace-v1-demo-fixture' }),
       onEvent: vi.fn(() => vi.fn()),
       start: vi.fn(() => Promise.resolve({ runId: 'local_run_1' })),
       preflight: vi.fn(() => Promise.resolve({
@@ -145,7 +146,7 @@ describe('taskRun store', () => {
     window.electronAPI = { automation }
     const store = useTaskRunStore()
 
-    await store.start(tool)
+    await store.start(tool, { allowInternalDemo: true })
 
     expect(automation.start).toHaveBeenCalledWith(tool)
     expect(store.status).toBe('preparing')

@@ -27,6 +27,8 @@ router = APIRouter()
 @router.get("", response_model=UserListEnvelope, response_model_exclude_unset=True)
 async def get_users(
     keyword: str | None = Query(None, description="关键词搜索"),
+    platform_key: str | None = Query(None, pattern="^(amazon|aliexpress)$"),
+    auth_code_id: int | None = Query(None, ge=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -35,7 +37,7 @@ async def get_users(
     """获取用户列表（支持搜索和分页）"""
     service = UserService(db)
     pagination = PaginationParams(page=page, page_size=page_size)
-    return await service.get_users_list(keyword=keyword, pagination=pagination)
+    return await service.get_users_list(keyword=keyword, pagination=pagination, platform_key=platform_key, auth_code_id=auth_code_id)
 
 
 @router.get("/stats", response_model=UserStatsEnvelope, response_model_exclude_unset=True)
@@ -51,12 +53,13 @@ async def get_user_stats(
 @router.get("/{user_id}", response_model=UserDetailEnvelope, response_model_exclude_unset=True)
 async def get_user(
     user_id: int,
+    platform_key: str | None = Query(None, pattern="^(amazon|aliexpress)$"),
     db: AsyncSession = Depends(get_db),
     _admin: dict[str, Any] = Depends(get_current_admin),
 ) -> dict[str, Any]:
     """获取用户详情"""
     service = UserService(db)
-    return await service.get_user_by_id(user_id)
+    return await service.get_user_by_id(user_id, platform_key=platform_key)
 
 
 @router.put("/{user_id}", response_model=UserItemEnvelope, response_model_exclude_unset=True)

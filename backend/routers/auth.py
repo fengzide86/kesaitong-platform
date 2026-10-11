@@ -3,20 +3,19 @@
 使用服务层 + 统一响应格式
 """
 
-from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_current_user
+from core.rate_limit import limiter as auth_limiter
 from core.security import create_access_token, verify_token
 from core.token_blacklist import is_token_blacklisted
 from database import get_db
+from domains.access import effective_license_status
 from domains.auth import AuthService
 from models import AuthCode
 from schemas.auth import (
@@ -30,9 +29,6 @@ from schemas.auth import (
 )
 
 router = APIRouter()
-
-
-auth_limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/verify", response_model=VerifyResponse, response_model_exclude_unset=True)
@@ -153,7 +149,7 @@ async def refresh_token(
         if auth_code.status == "deleted":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="授权码已被删除")
 
-        if auth_code.status == "expired" or (auth_code.expires_at and auth_code.expires_at < datetime.now()):
+        if effective_license_status(auth_code) == "expired":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="授权码已过期")
 
     # 5. 签发新 Token

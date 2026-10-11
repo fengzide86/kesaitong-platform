@@ -13,6 +13,7 @@
       <span><strong>代理运营</strong> 仅所属代理的客户、订单、授权和售后</span>
     </div>
 
+    <form class="staff-search" @submit.prevent="searchAccounts"><el-input v-model="keyword" aria-label="搜索后台账号" placeholder="搜索登录账号或显示名称" maxlength="100" clearable @clear="searchAccounts" /><el-button native-type="submit">搜索</el-button></form>
     <AsyncStateNotice :state="loadState" :message="loadError" loading-text="正在加载后台账号…" @retry="loadAccounts" />
     <el-card class="table-card" shadow="never">
       <el-table v-if="loadState !== 'loading' && loadState !== 'error'" v-loading="loading" :data="accounts" stripe>
@@ -40,6 +41,7 @@
         <template #empty><div class="empty-state">暂无后台账号</div></template>
       </el-table>
     </el-card>
+    <el-pagination v-if="total > pageSize" v-model:current-page="page" :page-size="pageSize" :total="total" layout="total, prev, pager, next" @current-change="loadAccounts" />
 
     <el-dialog v-model="createVisible" title="新建后台账号" width="520px" :close-on-click-modal="false">
       <el-form label-position="top">
@@ -72,10 +74,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
-import { createStaffAccount, getStaffAccounts, resetStaffPassword, updateStaffAccount } from '@/utils/api'
+import { createStaffAccount, resetStaffPassword, updateStaffAccount } from '@/utils/api'
+import { getStaffAccountsPage } from '@/utils/api/staff'
 import { showToast } from '@/utils'
 import { authService } from '@/utils/auth'
 import { staffRoleLabel } from '@/features/auth/permissions'
@@ -88,6 +91,14 @@ import type { Agency } from '@/features/agency/model'
 
 const staffRoles = backofficeRoleSchema.options
 const accounts = ref<StaffAccount[]>([])
+const page = ref(1)
+const pageSize = 20
+const total = ref(0)
+const keyword = ref('')
+let listRevision = 0
+let active = true
+function searchAccounts() { page.value = 1; void loadAccounts() }
+onUnmounted(() => { active = false; listRevision += 1; agencyRevision += 1 })
 const loading = ref(false)
 const submitting = ref(false)
 const loadError = ref('')
@@ -120,18 +131,25 @@ function isSelf(rawAccount: unknown): boolean {
 }
 
 async function loadAccounts() {
+  const revision = ++listRevision
   loading.value = true
   loadState.value = accounts.value.length ? 'data' : 'loading'
   loadError.value = ''
   try {
-    accounts.value = z.array(staffAccountSchema).parse(await getStaffAccounts({ page_size: 100 }))
+    const result = await getStaffAccountsPage({ page: page.value, page_size: pageSize, q: keyword.value.trim() || undefined })
+    if (!active || revision !== listRevision) return
+    const lastPage = Math.max(1, Math.ceil(result.total / pageSize))
+    if (page.value > lastPage) { page.value = lastPage; await loadAccounts(); return }
+    accounts.value = z.array(staffAccountSchema).parse(result.items)
+    total.value = result.total
     loadState.value = settledDataState(accounts.value.length)
   }
   catch (error) {
+    if (!active || revision !== listRevision) return
     loadError.value = errorText(error, '后台账号列表暂时无法加载')
     loadState.value = failedDataState(accounts.value.length > 0)
   }
-  finally { loading.value = false }
+  finally { if (active && revision === listRevision) loading.value = false }
 }
 
 function openCreate() {
@@ -191,5 +209,6 @@ onMounted(loadAccounts)
 </script>
 
 <style scoped>
+.staff-search{display:flex;gap:10px;margin:16px 0;max-width:500px}.el-pagination{margin:18px 0;flex-wrap:wrap}
 .staff-accounts-page{width:min(1240px,100%);margin:0 auto}.role-guide{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}.role-guide span{display:grid;gap:4px;padding:13px;border:1px solid var(--color-border);border-radius:10px;color:var(--color-text-secondary);background:var(--color-surface-soft);font-size:var(--type-meta)}.role-guide strong{color:var(--color-text)}.load-error{min-height:220px;display:grid;place-content:center;justify-items:center;gap:12px;color:var(--color-danger)}.empty-state{padding:36px;color:var(--color-text-secondary)}small{display:block;margin-top:5px;color:var(--color-text-tertiary);line-height:1.5}.el-dialog p{color:var(--color-text-secondary);line-height:1.65}@media(max-width:720px){.role-guide{grid-template-columns:1fr}}
 </style>

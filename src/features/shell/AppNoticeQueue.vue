@@ -1,7 +1,7 @@
 <template>
   <ConnectionNotice />
   <template v-if="!connection.shouldWarn">
-    <AnnouncementBanner :hide-banner="showUpdateNotice || hideAnnouncementBanner" />
+    <AnnouncementBanner v-if="customerAnnouncements" :hide-banner="showUpdateNotice || hideAnnouncementBanner" />
     <UpdateNoticeBar v-if="showUpdateNotice" />
   </template>
 </template>
@@ -15,9 +15,9 @@ import { useAnnouncementStore } from '@/features/announcements/store'
 import { useConnectionStore } from '@/stores/connection'
 import { useUpdateStore } from '@/features/updates/store'
 
-const props = defineProps<{ suppressUpdate?: boolean; hideAnnouncementBanner?: boolean }>()
+const props = withDefaults(defineProps<{ suppressUpdate?: boolean; hideAnnouncementBanner?: boolean; customerAnnouncements?: boolean }>(), { customerAnnouncements: true })
 const announcements = useAnnouncementStore()
 const connection = useConnectionStore()
 const updates = useUpdateStore()
-const showUpdateNotice = computed(() => updates.shouldShowNotice && !props.suppressUpdate && !announcements.critical)
+const showUpdateNotice = computed(() => updates.shouldShowNotice && !props.suppressUpdate && (!props.customerAnnouncements || !announcements.critical))
 </script>

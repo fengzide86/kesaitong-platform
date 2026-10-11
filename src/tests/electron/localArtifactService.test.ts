@@ -55,6 +55,19 @@ afterEach(() => {
 })
 
 describe('current-task local artifact safety', () => {
+  it('owner-verified recovery can read a fixed run screenshot after process restart without granting current-task access', async () => {
+    const { directory, screenshot, window } = setup()
+    screenshot()
+    const restarted = new LocalArtifactService({ directory })
+    services.push(restarted)
+    expect(await restarted.readRecoveredScreenshot('run_1', async () => true)).toMatchObject({ status: 'available' })
+    expect(await readScreenshot(restarted, window)).toMatchObject({ code: 'NOT_AVAILABLE' })
+    expect(await restarted.readRecoveredScreenshot('run_1', async () => false)).toMatchObject({ code: 'SESSION_CHANGED' })
+    const authority = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    expect(await restarted.readRecoveredScreenshot('run_1', authority)).toMatchObject({ code: 'SESSION_CHANGED' })
+    expect(await restarted.readRecoveredScreenshot('../outside', async () => true)).toMatchObject({ status: 'unavailable' })
+    expect(await restarted.readRecoveredScreenshot('missing', async () => true)).toMatchObject({ code: 'MISSING' })
+  })
   it('reads an actual registered PNG as a typed local data URL', async () => {
     const { service, window, screenshot } = setup()
     screenshot()

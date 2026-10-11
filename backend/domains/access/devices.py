@@ -6,17 +6,23 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.audit import log_admin_action
 from core.exceptions import ConflictException, NotFoundException
 from core.timestamps import utc_iso
-from models import AuthCode, AuthSeat, Device, User
+from models import AuthCode, AuthSeat, Device, LaunchToken, User
+
+from .locking import lock_auth_code
 
 
 async def _release_device_seat(db: AsyncSession, device: Device) -> None:
+    await db.execute(update(LaunchToken).where(
+        LaunchToken.auth_code_id == device.auth_code_id,
+        LaunchToken.device_id == device.device_id, LaunchToken.status == "pending",
+    ).values(status="revoked"))
     result = await db.execute(
         select(AuthSeat).where(
             AuthSeat.auth_code_id == device.auth_code_id,
@@ -100,6 +106,11 @@ async def unbind_admin(
     device = (await db.execute(select(Device).where(Device.id == device_id))).scalars().first()
     if not device:
         raise NotFoundException("设备不存在")
+    await lock_auth_code(db, device.auth_code_id)
+    device = (await db.execute(select(Device).where(Device.id == device_id)
+                              .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+    if not device:
+        raise NotFoundException("设备不存在")
     device_name = device.device_name or "未知设备"
     before = {
         "device_name": device_name,
@@ -138,16 +149,18 @@ async def unbind_user(
     ).scalars().first()
     if not auth_code:
         raise NotFoundException("未找到授权信息")
+    await lock_auth_code(db, auth_code.id)
     device = (
         await db.execute(
             select(Device).where(Device.id == device_id, Device.auth_code_id == auth_code.id)
+            .with_for_update().execution_options(populate_existing=True)
         )
     ).scalars().first()
     if not device:
         raise NotFoundException("设备不存在或不属于您")
-    device_count = (
-        await db.execute(select(func.count(Device.id)).where(Device.auth_code_id == auth_code.id))
-    ).scalar() or 0
+    device_count = len((await db.execute(
+        select(Device.id).where(Device.auth_code_id == auth_code.id).with_for_update()
+    )).scalars().all())
     if device_count <= 1:
         raise ConflictException("至少需要保留一个设备")
     device_name = device.device_name or "未知设备"

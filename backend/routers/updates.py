@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import require_super_admin
 from core.response import success_response
 from database import get_db
+from domains.updates.download import published_installer_location
 from domains.updates.schemas import (
     UpdateDeleteResponse,
     UpdateFileListResponse,
@@ -26,6 +28,16 @@ release_service = UpdateReleaseService(UPDATES_DIR)
 
 def get_static_files() -> StaticFiles:
     return StaticFiles(directory=UPDATES_DIR)
+
+
+@router.api_route("/latest-installer", methods=["GET", "HEAD"], include_in_schema=False)
+def latest_installer() -> RedirectResponse:
+    """Public navigation endpoint, not a control-plane execution API."""
+    return RedirectResponse(
+        published_installer_location(release_service.releases_dir),
+        status_code=302,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @router.post("/releases/stage", response_model=UpdateReleaseEnvelope, response_model_exclude_unset=True)

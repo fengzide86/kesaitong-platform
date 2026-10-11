@@ -37,7 +37,9 @@ async def list_public(db: AsyncSession) -> list[SettingResponse]:
 
 async def list_admin(db: AsyncSession) -> list[SettingResponse]:
     result = await db.execute(
-        select(Setting).where(Setting.key != "admin_password").order_by(Setting.key)
+        select(Setting).where(
+            Setting.key != "admin_password", ~Setting.key.startswith("transaction_guard:"),
+        ).order_by(Setting.key)
     )
     return [_response(setting) for setting in result.scalars().all()]
 
@@ -51,6 +53,10 @@ async def update(
 ) -> None:
     if data.key == "admin_password":
         raise HTTPException(status_code=422, detail="请使用后台账号密码接口")
+    if data.key == "profit_ratios":
+        raise HTTPException(status_code=422, detail="请使用带版本的分润策略接口")
+    if data.key.startswith("transaction_guard:"):
+        raise HTTPException(status_code=422, detail="内部事务保护配置不可修改")
     result = await db.execute(select(Setting).where(Setting.key == data.key).with_for_update())
     setting = result.scalars().first()
     before = (

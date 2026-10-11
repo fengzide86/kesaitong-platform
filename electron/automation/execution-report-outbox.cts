@@ -18,7 +18,8 @@ const receiptSchema = z.object({
 const entrySchema = z.object({
   id: z.string(), createdAt: z.number(), blocked: z.boolean().default(false), receipt: receiptSchema,
 })
-const stateSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(200) })
+const reservationSchema = z.object({ id: z.string(), createdAt: z.number() })
+const stateSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(200), reservations: z.array(reservationSchema).max(200).default([]) }).refine(state => state.entries.length + state.reservations.length <= 200)
 type Entry = z.infer<typeof entrySchema>
 interface ReportResult { executionId?: number; warning?: string }
 interface OutboxOptions {
@@ -35,6 +36,7 @@ export class ExecutionReportOutbox {
   private readonly options: OutboxOptions
   private readonly target: string
   private entries: Entry[] | null = null
+  private reservations: Array<z.infer<typeof reservationSchema>> = []
   private work: Promise<void> = Promise.resolve()
   private timer: ReturnType<typeof setInterval> | undefined
 
@@ -56,6 +58,8 @@ export class ExecutionReportOutbox {
     this.timer = undefined
   }
 
+  async drain(): Promise<void> { await this.work }
+
   private serialize<T>(action: () => Promise<T>): Promise<T> {
     const next = this.work.then(action)
     this.work = next.then(() => undefined, () => undefined)
@@ -66,31 +70,63 @@ export class ExecutionReportOutbox {
     if (!this.options.codec.isEncryptionAvailable()) throw new Error('本机安全存储不可用，无法保存待同步记录')
     if (this.entries) return this.entries
     // A corrupt/unreadable file must not be overwritten with an empty queue.
-    this.entries = fs.existsSync(this.target)
-      ? stateSchema.parse(JSON.parse(this.options.codec.decryptString(fs.readFileSync(this.target)))).entries
-      : []
+    const stored = fs.existsSync(this.target)
+      ? stateSchema.parse(JSON.parse(this.options.codec.decryptString(fs.readFileSync(this.target))))
+      : { entries: [], reservations: [] }
+    this.entries = stored.entries
+    this.reservations = stored.reservations
     return this.entries
   }
 
-  private save(entries: Entry[]): void {
-    const bytes = this.options.codec.encryptString(JSON.stringify({ version: 1, entries }))
+  private save(entries: Entry[], reservations = this.reservations): void {
+    const bytes = this.options.codec.encryptString(JSON.stringify({ version: 1, entries, reservations }))
     fs.mkdirSync(this.options.directory, { recursive: true })
     const temporary = `${this.target}.tmp`
-    fs.writeFileSync(temporary, bytes, { mode: 0o600 })
-    fs.renameSync(temporary, this.target)
+    let descriptor: number | undefined
+    try {
+      descriptor = fs.openSync(temporary, 'w', 0o600)
+      fs.writeFileSync(descriptor, bytes)
+      fs.fsyncSync(descriptor)
+      fs.closeSync(descriptor); descriptor = undefined
+      fs.renameSync(temporary, this.target)
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor)
+      try { fs.unlinkSync(temporary) } catch { /* renamed or failed to create */ }
+    }
     this.entries = entries
+    this.reservations = reservations
   }
 
-  submit(rawReceipt: unknown): Promise<ReportResult> {
+  /** Reserve durably before launching, not after the external write. A crashed
+   * reservation stays unavailable until reviewed; it is never a made-up receipt. */
+  reserve(token: unknown): Promise<string> {
+    const validated = receiptSchema.shape.token.parse(token)
+    return this.serialize(async () => {
+      const entries = this.load()
+      const id = createHash('sha256').update(validated).digest('hex')
+      if (this.reservations.some(row => row.id === id) || entries.some(row => row.receipt.token === validated)) throw new Error('RECEIPT_ALREADY_RESERVED: 原尝试已有待核对回执，请勿重复执行')
+      if (entries.length + this.reservations.length >= 200) throw new Error('待同步记录已满，请先联网同步后再执行新任务；未完成预留需联系支持核对')
+      this.save(entries, [...this.reservations, { id, createdAt: (this.options.now || Date.now)() }])
+      return id
+    })
+  }
+
+  releaseReservation(id: string): Promise<void> {
+    return this.serialize(async () => { this.save(this.load(), this.reservations.filter(row => row.id !== id)) })
+  }
+
+  submit(rawReceipt: unknown, reservationId?: string): Promise<ReportResult> {
     const receipt = receiptSchema.parse(rawReceipt)
     return this.serialize(async () => {
       const entries = this.load()
       const id = createHash('sha256').update(`${receipt.token}\0${receipt.run_id}`).digest('hex')
       let entry = entries.find(item => item.id === id)
       if (!entry) {
-        if (entries.length >= 200) throw new Error('待同步记录已满，请先联网同步后再执行新任务')
+        const reserved = reservationId && this.reservations.some(row => row.id === reservationId)
+        if (reservationId && (!reserved || createHash('sha256').update(receipt.token).digest('hex') !== reservationId)) throw new Error('RECEIPT_RESERVATION_MISMATCH: 回执不属于本次执行预留')
+        if (!reserved && entries.length + this.reservations.length >= 200) throw new Error('待同步记录已满，请先联网同步后再执行新任务')
         entry = { id, receipt, createdAt: (this.options.now || Date.now)(), blocked: false }
-        this.save([...entries, entry])
+        this.save([...entries, entry], this.reservations.filter(row => row.id !== reservationId))
       }
       return this.deliver(entry)
     })

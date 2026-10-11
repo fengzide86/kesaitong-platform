@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_authenticated_staff, require_super_admin
+from core.rate_limit import limiter
 from database import get_db
 from models import StaffUser
 from schemas.staff import (
@@ -36,6 +37,7 @@ def _session_data(staff: StaffUser) -> dict[str, object]:
 
 
 @router.post("/auth/login", response_model=StaffSessionEnvelope)
+@limiter.limit("5/minute")
 async def login(
     req: StaffLogin,
     request: Request,
@@ -90,10 +92,11 @@ async def logout(
 async def list_accounts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    q: str = Query("", max_length=100),
     db: AsyncSession = Depends(get_db),
     _actor: dict[str, Any] = Depends(require_super_admin),
 ) -> dict[str, object]:
-    accounts, total = await staff_service.list_accounts(db, page=page, page_size=page_size)
+    accounts, total = await staff_service.list_accounts(db, page=page, page_size=page_size, keyword=q)
     return {
         "success": True,
         "message": "ok",

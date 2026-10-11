@@ -1,12 +1,38 @@
 """
 用户管理 API 集成测试
 """
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import User
 from tests.conftest import get_data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("view", ["list", "detail"])
+async def test_created_at_is_explicit_utc_without_reinterpreting_legacy_activity(
+    client: AsyncClient, db_session: AsyncSession, auth_headers: dict, view: str,
+):
+    """Creation uses UTC DB defaults; the unrelated legacy activity field stays untouched."""
+    legacy_activity = datetime(2026, 10, 1, 9, 25)
+    user = User(name="UTC创建时间", device_id="utc-created-device", last_active_at=legacy_activity)
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    # SQLite CURRENT_TIMESTAMP is UTC. MySQL sessions explicitly SET +00:00
+    # in database.py; activation never overrides User.created_at.
+    assert abs((datetime.now(UTC).replace(tzinfo=None) - user.created_at).total_seconds()) < 30
+    path = "/api/users" if view == "list" else f"/api/users/{user.id}"
+    response = await client.get(path, headers=auth_headers)
+    data = get_data(response)
+    item = data[0] if view == "list" else data
+    assert item["created_at"] == user.created_at.replace(tzinfo=UTC).isoformat()
+    assert datetime.fromisoformat(item["created_at"]).tzinfo == UTC
+    if view == "detail":
+        assert item["last_active_at"] == legacy_activity.isoformat()
 
 
 class TestGetUsers:

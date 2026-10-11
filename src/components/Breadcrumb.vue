@@ -5,6 +5,10 @@
       首页
     </router-link>
     <span class="breadcrumb-separator">/</span>
+    <template v-if="selection && selection.area.id !== 'action'">
+      <span class="breadcrumb-area">{{ selection.area.label }}</span>
+      <span class="breadcrumb-separator">/</span>
+    </template>
     <span class="breadcrumb-item active" aria-current="page">{{ currentTitle }}</span>
   </nav>
 </template>
@@ -13,21 +17,24 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Home } from '@lucide/vue'
+import { useAdminNavigation } from '@/features/admin/useAdminNavigation'
 
 const route = useRoute()
+const { selection } = useAdminNavigation()
 
 const homePath = computed(() => {
   return route.path?.startsWith('/admin') ? '/admin/dashboard' : '/user/tools'
 })
 
 const currentTitle = computed(() => {
-  return route.meta?.title || '未知页面'
+  return selection.value?.item.label || route.meta?.title || '未知页面'
 })
 </script>
 
 <style scoped>
 .breadcrumb {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   min-height: 30px;
@@ -66,4 +73,5 @@ const currentTitle = computed(() => {
   color: var(--color-text-tertiary);
   font-size: var(--type-meta);
 }
+.breadcrumb-area { color: var(--color-text-secondary); }
 </style>

@@ -2,6 +2,7 @@ import { ref, nextTick, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { createChatSession, sendChatMessage, getChatSession, resolveChatSession, transferChatToHuman, getChatHistory } from '@/utils/api'
 import { showToast } from '@/utils'
+import { consumeSupportDraft } from './supportHandoff'
 import { usePlatformStore } from '@/stores/platform'
 import { confirmAction } from '@/shared/ui/confirm'
 import {
@@ -9,7 +10,6 @@ import {
   chatReplySchema,
   chatSessionCreatedSchema,
   chatSessionDetailSchema,
-  parseJsonRecord,
   type ChatMessage,
   type ChatSessionSummary,
 } from '@/features/ai/model'
@@ -37,6 +37,12 @@ const lastAiMessage = ref<string | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const showHistory = ref(false)
 const historySessions = ref<ChatSessionSummary[]>([])
+const historyPage = ref(1)
+const historyTotal = ref(0)
+const historyLoading = ref(false)
+const historyError = ref('')
+let historySequence = 0
+let pendingDraft = consumeSupportDraft(platformStore.currentPlatform)
 let nextMsgId = 0
 let sessionSequence = 0
 let mounted = true
@@ -67,7 +73,8 @@ async function startNewSession() {
       created_at: new Date().toISOString()
     }]
     sessionMessages.set(res.session_id, messages.value)
-    inputMessage.value = ''
+    inputMessage.value = pendingDraft
+    pendingDraft = ''
     lastAiMessage.value = null
     rating.value = 0
     showActions.value = false
@@ -216,14 +223,25 @@ async function transferToHuman() {
   }
 }
 
-async function loadHistory() {
+async function loadHistory(page = 1) {
+  const sequence = ++historySequence
+  historyLoading.value = true
+  historyError.value = ''
   try {
-    const res = chatHistorySchema.parse(await getChatHistory(1, 20))
-    if (mounted) historySessions.value = res.items
+    const res = chatHistorySchema.parse(await getChatHistory(page, 20))
+    if (!mounted || sequence !== historySequence) return
+    const lastPage = Math.max(1, Math.ceil(res.total / 20))
+    if (page > lastPage) { await loadHistory(lastPage); return }
+    historySessions.value = res.items
+    historyPage.value = page
+    historyTotal.value = res.total
   } catch {
-    showToast('加载历史失败', 'error')
+    if (mounted && sequence === historySequence) historyError.value = '历史记录暂时无法加载，请重试。'
+  } finally {
+    if (mounted && sequence === historySequence) historyLoading.value = false
   }
 }
+function openHistory() { showHistory.value = true; void loadHistory(1) }
 
 async function loadSession(sid: string) {
   const sequence = ++sessionSequence
@@ -255,38 +273,10 @@ async function loadSession(sid: string) {
 }
 
 onMounted(async () => {
-  loadHistory()
-  const started = await startNewSession()
-  if (!started) return
-  const purchase = sessionStorage.getItem('toolbox_purchase_inquiry')
-  if (purchase) {
-    sessionStorage.removeItem('toolbox_purchase_inquiry')
-    inputMessage.value = purchase.slice(0, 2000)
-    // Leave the request editable; entering the page is not consent to submit it.
-    return
-  }
-  try {
-    const context = parseJsonRecord(localStorage.getItem('toolbox_support_context'))
-    if (context) {
-      localStorage.removeItem('toolbox_support_context')
-      const problemCode = typeof context.problem_code === 'string' ? context.problem_code : ''
-      const toolName = typeof context.tool_name === 'string' ? context.tool_name : '工具'
-      const problem = problemCode ? `，问题编号 ${problemCode}` : ''
-      const requiresReview = context.result_requires_review === true
-        || (context.execution_mode === 'live' && (context.run_status === 'failed' || context.run_status === 'cancelled'))
-      const situation = requiresReview
-        ? '本次客户端已停止，当前平台结果待核对'
-        : context.record_pending === true ? '本次执行记录仍待同步'
-        : context.execution_mode === 'demo' ? '本次本地演示遇到问题'
-        : context.execution_mode === 'preflight' ? '本次只读预检遇到问题' : '本次操作遇到问题'
-      inputMessage.value = `${toolName}${situation}${problem}，请帮我核对处理。`
-      await sendMessage()
-    }
-  } catch {
-    localStorage.removeItem('toolbox_support_context')
-  }
+  await startNewSession()
 })
 watch(() => platformStore.currentPlatform, () => {
+  pendingDraft = ''
   sessionId.value = null
   messages.value = []
   inputMessage.value = ''
@@ -296,7 +286,7 @@ onUnmounted(() => { mounted = false; sessionSequence += 1 })
   return {
     sessionId, messages, inputMessage, isLoading, isTransferring, showActions, showRating, rating,
     sessionResolved, sessionTransferred, lastAiMessage, messagesContainer, showHistory,
-    historySessions, quickQuestions, formatTime, getStatusText, askQuickQuestion,
+    historySessions, historyPage, historyTotal, historyLoading, historyError, loadHistory, openHistory, quickQuestions, formatTime, getStatusText, askQuickQuestion,
     sendMessage, retryMessage, startNewSession, sessionLoading, sessionError, markResolved, transferToHuman, submitRating, loadSession,
   }
 }

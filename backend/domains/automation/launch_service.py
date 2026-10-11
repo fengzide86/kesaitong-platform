@@ -5,18 +5,18 @@ from __future__ import annotations
 import json
 import secrets
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from core.logging import get_logger
 from core.response import ErrorCodes, error_response, success_response
-from domains.access import resolve_plan_code, resolve_product_access
+from domains.access import effective_license_status, lock_auth_code, resolve_plan_code, resolve_product_access
 from domains.catalog import normalize_tool_config, resolve_tool_runtime
-from models import AuthCode, AuthSeat, AutomationBatch, Device, LaunchToken, Plan, Setting
+from models import AuthSeat, AutomationBatch, Device, LaunchToken, Plan, Setting, User
 from services.tool_release_service import build_manifest, resolve_release_for_launch, sign_manifest
 
 logger = get_logger(__name__)
@@ -38,6 +38,22 @@ async def _error(
 ) -> dict[str, Any]:
     await db.rollback()
     return error_response(message, error_code, detail)
+
+
+async def _device_is_authorized(db: AsyncSession, auth_code_id: int, user_id: int | None, device_id: str | None) -> bool:
+    if not user_id or not device_id:
+        return False
+    user = (await db.execute(select(User).where(
+        User.id == user_id, User.auth_code_id == auth_code_id, User.is_active.is_(True),
+    ).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+    seat = await db.scalar(select(AuthSeat.id).where(
+        AuthSeat.auth_code_id == auth_code_id, AuthSeat.user_id == user_id,
+        AuthSeat.device_id == device_id, AuthSeat.status == "active",
+    ).with_for_update())
+    device = await db.scalar(select(Device.id).where(
+        Device.auth_code_id == auth_code_id, Device.device_id == device_id,
+    ).with_for_update())
+    return user is not None and seat is not None and device is not None
 
 
 async def create_launch_grant(
@@ -68,17 +84,14 @@ async def create_launch_grant(
     if not auth_code_id:
         return await _error(db, "未找到授权信息", ErrorCodes.UNAUTHORIZED)
 
-    auth_code = (
-        await db.execute(
-            select(AuthCode).where(AuthCode.id == auth_code_id).with_for_update()
-        )
-    ).scalar_one_or_none()
+    auth_code = await lock_auth_code(db, auth_code_id)
     if not auth_code:
         return await _error(db, "授权码不存在", ErrorCodes.AUTH_CODE_INVALID)
-    if auth_code.status != "active":
-        return await _error(db, "授权码状态异常", ErrorCodes.AUTH_CODE_FROZEN)
-    if auth_code.expires_at and auth_code.expires_at < datetime.now():
+    license_status = effective_license_status(auth_code)
+    if license_status == "expired":
         return await _error(db, "授权码已过期", ErrorCodes.AUTH_CODE_EXPIRED)
+    if license_status != "active":
+        return await _error(db, "授权码状态异常", ErrorCodes.AUTH_CODE_FROZEN)
 
     batch: AutomationBatch | None = None
     if execution_mode == "batch":
@@ -197,50 +210,8 @@ async def create_launch_grant(
             except (json.JSONDecodeError, TypeError):
                 pass
 
-    active_seats = (
-        await db.execute(
-            select(AuthSeat).where(
-                AuthSeat.auth_code_id == auth_code_id,
-                AuthSeat.user_id == user_id,
-                AuthSeat.status == "active",
-            )
-        )
-    ).scalars().all()
-    if not active_seats:
-        return await _error(db, "当前授权席位无效，请重新登录或联系管理员", 403)
-
-    device_count = int(
-        (
-            await db.execute(
-                select(func.count(Device.id)).where(
-                    Device.auth_code_id == auth_code_id,
-                    Device.device_id == device_id,
-                )
-            )
-        ).scalar()
-        or 0
-    )
-    if device_count == 0:
-        total_devices = int(
-            (
-                await db.execute(
-                    select(func.count(Device.id)).where(Device.auth_code_id == auth_code_id)
-                )
-            ).scalar()
-            or 0
-        )
-        if total_devices >= (auth_code.max_devices or 1):
-            return await _error(db, "当前设备未授权或已超过设备数量限制", 403)
-        normalized_device_id = cast(str, device_id)
-        db.add(
-            Device(
-                auth_code_id=auth_code_id,
-                device_id=normalized_device_id,
-                device_name=f"Device-{normalized_device_id[:8]}",
-            )
-        )
-        await db.flush()
-        logger.info("自动绑定新设备: %s", device_id)
+    if not await _device_is_authorized(db, auth_code_id, user_id, device_id):
+        return await _error(db, "当前设备或席位已失效，请使用授权码重新登录", 403)
 
     script_key, target_url = resolve_tool_runtime(target_tool, platform_key)
     release = await resolve_release_for_launch(db, tool_id, device_id or str(user_id))
@@ -362,9 +333,16 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
             status_code=409,
             detail={"code": "FEATURE_DISABLED", "message": "当前为演示模式"},
         )
+    code_id = await db.scalar(select(LaunchToken.auth_code_id).where(LaunchToken.token == token))
+    if code_id is None:
+        return await _error(db, "Token 不存在", 404)
+    # Always acquire in authorization -> launch -> batch order, matching create
+    # and revocation. Token TTL is not permission to outlive revoked access.
+    auth_code = await lock_auth_code(db, code_id)
     launch = (
         await db.execute(
             select(LaunchToken).where(LaunchToken.token == token).with_for_update()
+            .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()
     if not launch:
@@ -375,6 +353,56 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
         return await _error(db, "Token 状态无效", 403)
     if launch.expires_at < datetime.now():
         return await _error(db, "Token 已过期", 403)
+    if not auth_code or effective_license_status(auth_code) != "active":
+        return await _error(db, "授权已经失效，请重新登录", 403)
+    if not await _device_is_authorized(db, code_id, launch.user_id, launch.device_id):
+        return await _error(db, "当前设备或席位已失效，请重新登录", 403)
+    if launch.platform_key not in [part.strip() for part in (auth_code.platform_scope or "amazon").split(",")]:
+        return await _error(db, "当前授权不再包含该平台", 403)
+    setting = (await db.execute(select(Setting).where(Setting.key == "tool_configs")
+                               .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+    try:
+        tools = json.loads(setting.value) if setting and setting.value else []
+        raw_tool = next((item for item in tools if item.get("id") == launch.tool_id), None)
+    except (TypeError, ValueError, AttributeError):
+        raw_tool = None
+    tool = normalize_tool_config(raw_tool) if raw_tool else None
+    if not tool or (
+        tool.get("availability") not in {"live", "live_beta"}
+        or tool.get("script_status") != "script_ready"
+        or tool.get("release_status", "available") not in {"available", "beta"}
+        or tool.get("platform_key") != launch.platform_key
+    ):
+        return await _error(db, "工具当前不可执行", 403)
+    if auth_code.plan_id:
+        plan = (await db.execute(select(Plan).where(Plan.id == auth_code.plan_id)
+                                 .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+        if not plan:
+            return await _error(db, "授权套餐不存在", 403)
+        allowed_plans = [str(item).upper() for item in tool.get("available_plans", [])]
+        if allowed_plans and resolve_plan_code(plan.name, plan.entitlements) not in allowed_plans:
+            return await _error(db, "当前套餐不再包含该工具", 403)
+        try:
+            features = json.loads(plan.features) if plan.features else {}
+            allowed_tools = features.get("allowed_tools", []) if isinstance(features, dict) else []
+        except (TypeError, ValueError):
+            allowed_tools = []
+        if allowed_tools and launch.tool_id not in allowed_tools and tool.get("capability_key") not in allowed_tools:
+            return await _error(db, "当前套餐不再包含该工具", 403)
+    if launch.execution_mode == "batch":
+        batch = (await db.execute(select(AutomationBatch).where(
+            AutomationBatch.client_batch_id == launch.client_batch_id,
+            AutomationBatch.auth_code_id == code_id, AutomationBatch.device_id == launch.device_id,
+        ).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+        access = await resolve_product_access(db, code_id)
+        entitlements = access.get("entitlements") or {}
+        if (
+            not batch or batch.status != "running" or batch.tool_id != launch.tool_id
+            or not tool.get("supports_batch") or not access.get("enabled")
+            or access.get("product_type") != "business"
+            or not entitlements.get("batch_execution") or not entitlements.get("multi_account_workspace")
+        ):
+            return await _error(db, "批次已经结束或批量权限已失效", 403)
 
     launch.status = "used"
     launch.used_at = datetime.now()

@@ -7,11 +7,61 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import sys
 import uuid
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
+
+REDACTED = "[REDACTED]"
+_CREDENTIAL_KEYS = {
+    "token", "accesstoken", "refreshtoken", "launchtoken", "launchgrant", "password", "passwd",
+    "secret", "clientsecret", "apikey", "authorization", "cookie", "setcookie", "authcode", "paras",
+}
+_URL_CREDENTIALS = re.compile(r"(\b[a-z][a-z0-9+.-]*://)[^/\s@]+@", re.IGNORECASE)
+_AUTH_CREDENTIAL = re.compile(r"\b(Bearer|Basic)\s+[^\s\"',;]+", re.IGNORECASE)
+_CREDENTIAL_VALUE = re.compile(
+    r"(?P<label>\b(?:token|access_token|refresh_token|launch_token|password|passwd|secret|secret_key|jwt_secret_key|client_secret|private_key|tool_signing_private_key_b64|api[_-]?key|auth_code|paras)"
+    r"|授权码)(?P<separator>[\"']?\s*[:=：]\s*)"
+    r"(?P<value>\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"',;&\]}]+)",
+    re.IGNORECASE,
+)
+_COOKIE = re.compile(r"\b(?:cookie|set-cookie)\s*[:=]\s*[^\r\n]+", re.IGNORECASE)
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+
+
+def redact_sensitive(value: Any) -> Any:
+    """Make a safe logging copy; retain IDs/error codes, never request credentials.
+
+    Call sites must still log object IDs rather than unlabeled raw secrets. This
+    last-line protection also covers third-party URL errors and exception text.
+    """
+    if isinstance(value, dict):
+        return {
+            key: REDACTED if (
+                re.sub(r"[-_\s]", "", str(key)).lower() in _CREDENTIAL_KEYS
+                or re.sub(r"[-_\s]", "", str(key)).lower().endswith(("password", "secretkey", "privatekey", "privatekeyb64", "apikey"))
+            )
+            else redact_sensitive(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_sensitive(item) for item in value]
+    if not isinstance(value, str):
+        return value
+    safe = _URL_CREDENTIALS.sub(lambda match: f"{match.group(1)}{REDACTED}@", value)
+    safe = _AUTH_CREDENTIAL.sub(lambda match: f"{match.group(1)} {REDACTED}", safe)
+    def redact_labeled_value(match: re.Match[str]) -> str:
+        credential = match.group("value")
+        replacement = REDACTED
+        if credential[0] in {"\"", "'"}:
+            replacement = f"{credential[0]}{REDACTED}{credential[0]}"
+        return f"{match.group('label')}{match.group('separator')}{replacement}"
+
+    safe = _CREDENTIAL_VALUE.sub(redact_labeled_value, safe)
+    safe = _COOKIE.sub(f"Cookie: {REDACTED}", safe)
+    return _JWT.sub(REDACTED, safe)
 
 # ===== 请求上下文变量 =====
 # 用于在请求链路中传递 request_id
@@ -92,7 +142,7 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, "extra_data"):
             log_data["data"] = record.extra_data
 
-        return json.dumps(log_data, ensure_ascii=False)
+        return json.dumps(redact_sensitive(log_data), ensure_ascii=False)
 
 
 class HumanReadableFormatter(logging.Formatter):
@@ -135,7 +185,7 @@ class HumanReadableFormatter(logging.Formatter):
         if record.exc_info and record.exc_info[0] is not None:
             msg += f"\n{self.formatException(record.exc_info)}"
 
-        return msg
+        return str(redact_sensitive(msg))
 
 
 # ===== 日志配置 =====

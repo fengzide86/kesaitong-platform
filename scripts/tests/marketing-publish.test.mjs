@@ -66,6 +66,33 @@ test('GitHub Pages validates the exact public user site and existing branch conf
   assert.throws(() => assertGitHubPagesProject({ ...pages, source: { branch: 'develop', path: '/' } }, config))
   assert.throws(() => assertGitHubPagesProject({ ...pages, html_url: 'https://other.github.io' }, config))
   assert.throws(() => assertGitHubPagesProject({ ...pages, build_type: 'workflow' }, config))
+  assert.throws(() => assertGitHubPagesProject({ ...pages, cname: 'unexpected.test' }, config))
+})
+
+test('GitHub Pages custom origin requires the same user repository and a matching existing CNAME', () => {
+  const values = { KST_MARKETING_PROVIDER: 'github-pages', GITHUB_PAGES_REPOSITORY: 'kst-team/kst-team.github.io', KST_MARKETING_SITE_URL: 'https://kesaitong.top' }
+  const config = validateMarketingConfig(values)
+  assert.equal(config.publicUrl, 'https://kesaitong.top')
+  const pages = { html_url: `${config.publicUrl}/`, cname: 'kesaitong.top', source: { branch: 'main', path: '/' }, build_type: 'legacy' }
+  assertGitHubPagesProject(pages, config)
+  assertGitHubPagesProject({ ...pages, cname: 'KESAITONG.TOP' }, config)
+  for (const cname of [null, undefined, '', 'www.kesaitong.top', 'other.test']) {
+    assert.throws(() => assertGitHubPagesProject({ ...pages, cname }, config))
+  }
+  for (const invalid of [
+    { ...values, GITHUB_PAGES_REPOSITORY: 'other/kst-team.github.io' },
+    { ...values, GITHUB_PAGES_REPOSITORY: 'kst-team/another-repo' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://other.github.io' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://github.io' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://192.0.2.1' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://kesaitong.top:9443' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://user:secret@kesaitong.top' },
+    { ...values, KST_MARKETING_SITE_URL: 'https://kesaitong.top/subpath' },
+  ]) assert.throws(() => validateMarketingConfig(invalid))
+  assert.throws(() => assertGitHubPagesProject({ ...pages, html_url: 'https://kst-team.github.io/' }, config))
+  assert.throws(() => assertGitHubPagesProject({ ...pages, source: { branch: 'main', path: '/docs' } }, config))
+  assert.throws(() => assertGitHubPagesProject({ ...pages, source: { branch: 'develop', path: '/' } }, config))
+  assert.throws(() => assertGitHubPagesProject({ ...pages, build_type: 'workflow' }, config))
 })
 
 function pagesFixture() {
@@ -82,7 +109,7 @@ function pagesFixture() {
   return { root, artifact, checkout, publicUrl: metadata.publicUrl, tracked: ['index.html', '404.html', 'marketing-version.json'] }
 }
 
-test('GitHub artifact keeps history, builds direct terms routes and embeds browser policy', () => {
+test('GitHub artifact keeps history, builds direct public routes and embeds browser policy', () => {
   const f = pagesFixture()
   try {
     fs.mkdirSync(path.join(f.checkout, 'assets'))
@@ -91,7 +118,7 @@ test('GitHub artifact keeps history, builds direct terms routes and embeds brows
     assert.equal(fs.readFileSync(path.join(f.checkout, '.git/HEAD'), 'utf8'), 'preserve')
     assert.equal(fs.existsSync(path.join(f.checkout, 'assets/old-12345678.js')), false)
     assert.equal(fs.existsSync(path.join(f.checkout, '.nojekyll')), true)
-    for (const name of ['index.html', '404.html', 'terms/index.html', 'user/terms/index.html']) assert.match(fs.readFileSync(path.join(f.checkout, name), 'utf8'), /connect-src 'none'/)
+    for (const name of ['index.html', '404.html', 'terms/index.html', 'user/terms/index.html', 'competition/index.html', 'course/index.html', 'tools/index.html']) assert.match(fs.readFileSync(path.join(f.checkout, name), 'utf8'), /connect-src 'none'/)
   } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
 })
 
@@ -107,11 +134,126 @@ test('GitHub artifact refuses unknown target or incoming files before changing a
   }
 })
 
+test('GitHub artifact preserves route-specific SEO, terms canonical alias and sitemap', () => {
+  const f = pagesFixture()
+  try {
+    for (const route of ['competition', 'course', 'tools', 'terms', 'user/terms']) {
+      fs.mkdirSync(path.join(f.artifact, route), { recursive: true })
+      const canonicalPath = route === 'user/terms' ? 'terms' : route
+      fs.writeFileSync(path.join(f.artifact, route, 'index.html'), `<html><head><title>${route}</title><link rel="canonical" href="${f.publicUrl}/${canonicalPath}/"></head><body>route</body></html>`)
+    }
+    const sitemap = '<?xml version="1.0"?><urlset><url><loc>https://kst.github.io/tools/</loc></url></urlset>'
+    fs.writeFileSync(path.join(f.artifact, 'sitemap.xml'), sitemap)
+    prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl)
+    for (const route of ['competition', 'course', 'tools', 'terms', 'user/terms']) {
+      const html = fs.readFileSync(path.join(f.checkout, route, 'index.html'), 'utf8')
+      assert.match(html, /connect-src 'none'/)
+      assert.ok(html.includes(`<title>${route}</title>`))
+      assert.ok(html.includes(`href="${f.publicUrl}/${route === 'user/terms' ? 'terms' : route}/"`))
+    }
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'sitemap.xml'), 'utf8'), sitemap)
+    fs.mkdirSync(path.join(f.artifact, 'tools', 'private'))
+    fs.writeFileSync(path.join(f.artifact, 'tools', 'private', 'index.html'), 'not a public route')
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl), /未知目录/)
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+})
+
 test('GitHub artifact rejects a different site and traversal without deleting the old build', () => {
   const f = pagesFixture()
   try {
     assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, 'https://other.github.io'))
     assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, [...f.tracked, '../index.html'], f.publicUrl))
     assert.equal(fs.existsSync(path.join(f.checkout, 'index.html')), true)
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+})
+
+test('GitHub artifact accepts hashed certificate JPEG assets but rejects unhashed originals', () => {
+  const f = pagesFixture()
+  try {
+    fs.mkdirSync(path.join(f.artifact, 'assets'))
+    const publicName = 'assets/competition-award-2025-redacted-12345678.jpg'
+    const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+    fs.writeFileSync(path.join(f.artifact, publicName), bytes)
+    prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl)
+    assert.deepEqual(fs.readFileSync(path.join(f.checkout, publicName)), bytes)
+    fs.writeFileSync(path.join(f.artifact, 'assets/original.jpg'), bytes)
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, [...f.tracked, publicName, '.nojekyll'], f.publicUrl))
+  } finally {
+    assert.equal(path.dirname(f.root), path.resolve(os.tmpdir()))
+    assert.match(path.basename(f.root), /^kst-pages-test-/)
+    fs.rmSync(f.root, { recursive: true, force: true })
+  }
+})
+
+function setFixturePublicUrl(directory, publicUrl) {
+  const filename = path.join(directory, 'marketing-version.json')
+  const metadata = JSON.parse(fs.readFileSync(filename, 'utf8'))
+  fs.writeFileSync(filename, JSON.stringify({ ...metadata, publicUrl }))
+}
+
+test('GitHub artifact creates a CNAME for a custom site and preserves its binding on updates', () => {
+  for (const existingCname of [false, true]) {
+    const f = pagesFixture()
+    try {
+      const customUrl = 'https://kesaitong.top'
+      setFixturePublicUrl(f.artifact, customUrl)
+      setFixturePublicUrl(f.checkout, customUrl)
+      const tracked = [...f.tracked]
+      if (existingCname) {
+        fs.writeFileSync(path.join(f.checkout, 'CNAME'), 'kesaitong.top\n')
+        tracked.push('CNAME')
+      }
+      prepareGitHubPagesTree(f.artifact, f.checkout, tracked, customUrl)
+      assert.equal(fs.readFileSync(path.join(f.checkout, 'CNAME'), 'utf8'), 'kesaitong.top\n')
+      assert.equal(fs.readFileSync(path.join(f.checkout, '.git/HEAD'), 'utf8'), 'preserve')
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+  }
+})
+
+test('GitHub artifact requires an explicit old origin when migrating to a custom domain', () => {
+  const f = pagesFixture()
+  try {
+    const customUrl = 'https://kesaitong.top'
+    const previousPublicUrl = 'https://fengzide86.github.io'
+    setFixturePublicUrl(f.checkout, previousPublicUrl)
+    setFixturePublicUrl(f.artifact, customUrl)
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, customUrl))
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, customUrl, { previousPublicUrl: 'https://other.github.io' }))
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, 'https://other.github.io', { previousPublicUrl }))
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'index.html'), 'utf8'), '<html><head></head><body>课赛通</body></html>')
+    // GitHub may already have committed the new binding before our first upload.
+    fs.writeFileSync(path.join(f.checkout, 'CNAME'), 'kesaitong.top\n')
+    prepareGitHubPagesTree(f.artifact, f.checkout, [...f.tracked, 'CNAME'], customUrl, { previousPublicUrl })
+    assert.equal(JSON.parse(fs.readFileSync(path.join(f.checkout, 'marketing-version.json'), 'utf8')).publicUrl, customUrl)
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'CNAME'), 'utf8'), 'kesaitong.top\n')
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+})
+
+test('GitHub artifact rejects mismatched target or incoming CNAME without overwriting files', () => {
+  for (const where of ['checkout', 'artifact']) {
+    const f = pagesFixture()
+    try {
+      const customUrl = 'https://kesaitong.top'
+      setFixturePublicUrl(f.artifact, customUrl)
+      setFixturePublicUrl(f.checkout, customUrl)
+      fs.writeFileSync(path.join(f[where], 'CNAME'), 'other.test\n')
+      const tracked = where === 'checkout' ? [...f.tracked, 'CNAME'] : f.tracked
+      assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, tracked, customUrl), /CNAME/)
+      assert.equal(fs.readFileSync(path.join(f.checkout, 'index.html'), 'utf8'), '<html><head></head><body>课赛通</body></html>')
+      assert.equal(fs.readFileSync(path.join(f[where], 'CNAME'), 'utf8'), 'other.test\n')
+    } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
+  }
+})
+
+test('GitHub artifact refuses an untracked CNAME, an unexpected user-site CNAME and stale incoming metadata', () => {
+  const f = pagesFixture()
+  try {
+    fs.writeFileSync(path.join(f.checkout, 'CNAME'), 'other.test\n')
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl), /CNAME/)
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'index.html'), 'utf8'), '<html><head></head><body>课赛通</body></html>')
+    fs.unlinkSync(path.join(f.checkout, 'CNAME'))
+    setFixturePublicUrl(f.artifact, 'https://other.github.io')
+    assert.throws(() => prepareGitHubPagesTree(f.artifact, f.checkout, f.tracked, f.publicUrl), /制品来源/)
+    assert.equal(fs.readFileSync(path.join(f.checkout, 'index.html'), 'utf8'), '<html><head></head><body>课赛通</body></html>')
   } finally { fs.rmSync(f.root, { recursive: true, force: true }) }
 })

@@ -57,19 +57,22 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 import { ElButton, ElDialog } from 'element-plus'
 import { Check, LockKeyhole, ShieldCheck } from '@lucide/vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 import { getPlans, getPublicSettings } from '@/utils/api'
+import { prepareSupportDraft } from '@/features/ai/supportHandoff'
+import { usePlatformStore } from '@/stores/platform'
 import { publicSettingsSchema } from '@/features/auth/model'
 import { showToast } from '@/utils'
 import { customerPlanListSchema, licensePlanCode, readStoredLicense, type CustomerPlan } from '@/features/user/model'
 
-const route = useRoute() || { query: {} }
+const route = useRoute() || { query: {} as LocationQuery }
 const router = useRouter()
+const platformStore = usePlatformStore()
 const contactVisible = ref(false)
 const selectedPlan = ref<CustomerPlan | null>(null)
 const contactId = ref('')
@@ -96,7 +99,7 @@ function refreshLicense() { userInfo.value = readStoredLicense() }
 function renewCurrent() {
   const plan = plans.value.find(isCurrent)
   if (plan) { void contactService(plan); return }
-  sessionStorage.setItem('toolbox_purchase_inquiry', `我想咨询当前「${currentPlanName.value}」授权续期，${licenseExpiry.value}。请先核对原授权和可续期方案，不要另建重复授权。`)
+  prepareSupportDraft(`我想咨询当前「${currentPlanName.value}」授权续期，${licenseExpiry.value}。请先核对原授权和可续期方案，不要另建重复授权。`, platformStore.currentPlatform)
   void router.push('/user/ai-chat')
 }
 
@@ -140,9 +143,9 @@ async function copyContact() {
 
 function openPurchaseInquiry() {
   if (!selectedPlan.value) return
-  sessionStorage.setItem('toolbox_purchase_inquiry', isCurrent(selectedPlan.value)
+  prepareSupportDraft(isCurrent(selectedPlan.value)
     ? `我想咨询当前「${cleanPlanName(selectedPlan.value.name)}」套餐续期，${licenseExpiry.value}。请先核对原授权、续期期限和费用，不要另建重复授权。`
-    : `我想咨询「${cleanPlanName(selectedPlan.value.name)}」套餐，请帮我确认工具权限、授权期限和购买方式。`)
+    : `我想咨询「${cleanPlanName(selectedPlan.value.name)}」套餐，请帮我确认工具权限、授权期限和购买方式。`, platformStore.currentPlatform)
   contactVisible.value = false
   void router.push('/user/ai-chat')
 }

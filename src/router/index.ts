@@ -150,7 +150,7 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'AdminDashboard',
         component: () => import('@/views/admin/DashboardView.vue'),
-        meta: { title: '数据总览看板', skeleton: 'dashboard', roles: ['super_admin', 'operator', 'support'] }
+        meta: { title: '行动中心', skeleton: 'dashboard', roles: ['super_admin', 'operator', 'support'] }
       },
       {
         path: 'authcodes',
@@ -168,7 +168,7 @@ const routes: RouteRecordRaw[] = [
         path: 'orders',
         name: 'AdminOrders',
         component: () => import('@/views/admin/OrdersView.vue'),
-        meta: { title: '订单与套餐权限', skeleton: 'table', roles: ['super_admin', 'operator', 'support'] }
+        meta: { title: '订单管理', skeleton: 'table', roles: ['super_admin', 'operator', 'support'] }
       },
       {
         path: 'profit',

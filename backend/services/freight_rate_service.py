@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -61,7 +61,7 @@ def create_rate_draft(pack_input: Any, source_file_name: str | None = None) -> d
         "version": pack["version"],
         "name": pack.get("name") or pack["id"],
         "status": "draft",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "source_file_name": source_file_name,
         "source_hash": pack.get("sourceHash"),
         "manifest": manifest,
@@ -82,7 +82,7 @@ def publish_rate_release(releases: list[dict[str, Any]], pack_id: str, version: 
     target["signature"] = sign_manifest(target["manifest"])
     target["signing_key_id"] = settings.TOOL_SIGNING_KEY_ID
     target["status"] = "published"
-    target["published_at"] = datetime.now(timezone.utc).isoformat()
+    target["published_at"] = datetime.now(UTC).isoformat()
     return target
 
 

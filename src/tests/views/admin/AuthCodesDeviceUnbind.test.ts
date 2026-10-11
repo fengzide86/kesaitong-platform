@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/utils/api', () => ({
-  getAuthCodes: (...args: unknown[]) => mocks.getAuthCodes(...args),
+  getAuthCodesPage: (...args: unknown[]) => mocks.getAuthCodes(...args),
+  getAuthCode: (...args: unknown[]) => mocks.apiGet(...args),
+  getUsersPage: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 }),
   getPlansAdmin: (...args: unknown[]) => mocks.getPlansAdmin(...args),
   batchGenerateAuthCodes: vi.fn(),
   updateAuthCode: (...args: unknown[]) => mocks.updateAuthCode(...args),
@@ -73,6 +75,7 @@ function mountAuthCodesView() {
         'el-card': { template: '<section><slot name="header"/><slot/></section>' },
         'el-table': true,
         'el-table-column': true,
+        'el-pagination': true,
         'el-dialog': true,
         'el-select': true,
         'el-option': true,
@@ -96,7 +99,7 @@ describe('授权码详情设备解绑 UI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authService.setRole('support')
-    mocks.getAuthCodes.mockResolvedValue([code])
+    mocks.getAuthCodes.mockResolvedValue({ items: [code], total: 1, page: 1, page_size: 20 })
     mocks.getPlansAdmin.mockResolvedValue([])
     mocks.apiGet.mockResolvedValue(code)
     mocks.updateAuthCode.mockResolvedValue({ ...code, status: 'frozen' })
@@ -117,6 +120,7 @@ describe('授权码详情设备解绑 UI', () => {
           'el-card': { template: '<section><slot name="header"/><slot/></section>' },
           'el-table': true,
           'el-table-column': true,
+          'el-pagination': true,
           'el-dialog': true,
           'el-select': true,
           'el-option': true,

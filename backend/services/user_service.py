@@ -5,14 +5,16 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import Request
-from sqlalchemy import case, desc, func, select
+from fastapi import HTTPException, Request
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import log_admin_action
 from core.logging import get_logger
 from core.pagination import PaginationParams, paginate
 from core.response import ErrorCodes, error_response, success_response
+from core.timestamps import utc_iso
+from domains.access import effective_license_status_sql
 from models import AuthCode, Device, User
 
 logger = get_logger(__name__)
@@ -27,19 +29,25 @@ class UserService:
     async def get_users_list(
         self,
         keyword: str | None = None,
-        pagination: PaginationParams | None = None
+        pagination: PaginationParams | None = None,
+        platform_key: str | None = None,
+        auth_code_id: int | None = None,
     ) -> dict[str, Any]:
         """获取用户列表（支持搜索和分页）"""
         query = select(User).order_by(desc(User.created_at))
+        if auth_code_id is not None:
+            query = query.where(User.auth_code_id == auth_code_id)
+        if platform_key:
+            scope = AuthCode.platform_scope
+            scope_filter = or_(scope == platform_key, scope.like(f"{platform_key},%"), scope.like(f"%,{platform_key},%"), scope.like(f"%,{platform_key}"))
+            if platform_key == "amazon":
+                scope_filter = or_(scope_filter, scope.is_(None), scope == "")
+            query = query.join(AuthCode, User.auth_code_id == AuthCode.id).where(scope_filter)
         
         # 关键词搜索
         if keyword:
             query = query.where(
-                func.concat(
-                    func.coalesce(User.name, ""),
-                    func.coalesce(User.device_name, ""),
-                    func.coalesce(User.phone, "")
-                ).like(f"%{keyword}%")
+                or_(*(func.coalesce(column, "").contains(keyword, autoescape=True) for column in (User.name, User.device_name, User.device_id, User.phone)))
             )
         
         if pagination:
@@ -57,13 +65,18 @@ class UserService:
                 data=[self._serialize_user(u) for u in users]
             )
     
-    async def get_user_by_id(self, user_id: int) -> dict[str, Any]:
+    async def get_user_by_id(self, user_id: int, platform_key: str | None = None) -> dict[str, Any]:
         """根据 ID 获取用户详情"""
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalars().first()
         
         if not user:
             return error_response("用户不存在", ErrorCodes.RESOURCE_NOT_FOUND)
+        if platform_key:
+            code = await self.db.get(AuthCode, user.auth_code_id) if user.auth_code_id else None
+            scope = (code.platform_scope or "amazon").split(",") if code else []
+            if platform_key not in [item.strip() for item in scope]:
+                raise HTTPException(status_code=403, detail="该用户不属于当前平台，请切换平台后查看")
         
         return success_response(data=self._serialize_user(user, detailed=True))
     
@@ -147,7 +160,7 @@ class UserService:
         """获取用户统计"""
         today_start = datetime.combine(datetime.now().date(), datetime.min.time())
         tomorrow_start = today_start + timedelta(days=1)
-        active_code_ids = select(AuthCode.id).where(AuthCode.status == "active")
+        active_code_ids = select(AuthCode.id).where(effective_license_status_sql() == "active")
         total_users, active_users, today_new = (
             await self.db.execute(
                 select(
@@ -183,6 +196,7 @@ class UserService:
         """序列化用户对象"""
         data = {
             "id": user.id,
+            "auth_code_id": user.auth_code_id,
             "name": user.name,
             "phone": user.phone,
             "device_id": user.device_id,
@@ -190,7 +204,9 @@ class UserService:
             "total_seats": user.total_seats,
             "extra_devices": user.extra_devices,
             "is_active": user.is_active,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
+            # Created by the UTC database default (SQLite CURRENT_TIMESTAMP;
+            # MySQL sessions SET +00:00), not a client-local wall clock.
+            "created_at": utc_iso(user.created_at),
         }
         
         if detailed:

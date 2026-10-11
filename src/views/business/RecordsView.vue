@@ -1,13 +1,9 @@
 <template>
   <div class="records-page">
-    <PageHeader eyebrow="BUSINESS RECORDS" title="批量执行记录" description="默认查看真实批次；历史演示单独保留，不计入真实任务结果。">
+    <PageHeader eyebrow="BUSINESS RECORDS" title="批量执行记录" description="查看真实批次结果与本机恢复状态。">
       <template #actions><button type="button" @click="helpOpen = true">记录核对 / 使用帮助</button><button @click="load(false)"><RefreshCw :size="15" />刷新</button></template>
     </PageHeader>
-    <div class="record-tabs" role="tablist" aria-label="批次记录类型">
-      <button type="button" role="tab" :aria-selected="activeTab === 'live'" :class="{ active: activeTab === 'live' }" @click="activeTab='live'">真实批次</button>
-      <button type="button" role="tab" :aria-selected="activeTab === 'demo'" :class="{ active: activeTab === 'demo' }" @click="activeTab='demo'">历史演示</button>
-    </div>
-    <p v-if="activeTab === 'demo'" class="demo-note">模拟结果仅用于展示批量流程，不代表真实账号处理成功。</p>
+    <RecoveryPanel />
     <AsyncStateNotice v-if="loadState === 'stale'" :state="loadState" :message="loadError" @retry="load(failedAppend)" />
     <section class="records-surface">
       <div v-if="loadState === 'loading'" class="empty"><RefreshCw :size="24" class="spin"/><strong>正在加载记录</strong></div>
@@ -15,9 +11,9 @@
       <div v-else-if="rows.length" class="records-list">
         <article v-for="batch in rows" :key="batch.id">
           <div class="tool"><strong>{{ batch.toolName }}</strong><span>{{ formatDate(batch.startedAt) }}</span></div>
-          <div><small>{{ activeTab === 'demo' ? '演示项' : '账号数' }}</small><strong>{{ batch.total }}</strong></div>
+          <div><small>账号数</small><strong>{{ batch.total }}</strong></div>
           <div><small>已结束</small><strong>{{ batch.processed }}</strong></div>
-          <div><small>{{ activeTab === 'demo' ? '演示异常' : '需要操作' }}</small><strong>{{ batch.attention }}</strong></div>
+          <div><small>需要操作</small><strong>{{ batch.attention }}</strong></div>
           <span :class="['status', `is-${batch.status}`]">{{ statusText(batch.status) }}</span>
           <button v-if="batch.detailAccessible !== false" class="detail-link" type="button" :aria-label="`查看${batch.toolName}批次详情`" @click="openDetails(batch)">查看详情</button>
           <small v-else class="detail-link">其他设备执行，仅摘要；详情请在原电脑查看</small>
@@ -25,13 +21,13 @@
       </div>
       <div v-else class="empty">
         <span><Archive :size="24" /></span>
-        <strong>{{ activeTab === 'demo' ? '还没有批量演示记录' : '还没有真实批次记录' }}</strong>
-        <p>{{ activeTab === 'demo' ? '这里仅保留旧演示记录，不提供新的演示入口。' : '当前没有真实批次记录。可到工作台查看工具开放状态与准备项。' }}</p>
+        <strong>还没有真实批次记录</strong>
+        <p>当前没有真实批次记录。可到工作台查看工具开放状态与准备项。</p>
         <router-link v-if="activeTab === 'live'" to="/business/workspace">查看工具与准备项</router-link>
       </div>
     </section>
     <footer v-if="rows.length" class="pagination">
-      <span>已显示 {{ rows.length }} 条<template v-if="activeTab === 'demo'"> / 共 {{ store.demoHistoryTotal }} 条</template></span>
+      <span>已显示 {{ rows.length }} 条</span>
       <button v-if="hasMore" type="button" :disabled="loadingMore" @click="load(true)">{{ loadingMore ? '正在加载…' : '加载更多' }}</button>
       <span v-else>已显示全部记录</span>
     </footer>
@@ -40,8 +36,8 @@
       <div v-else-if="detailError" role="alert"><p>{{ detailError }}</p><button type="button" @click="retryDetails">重新加载详情</button></div>
       <template v-else-if="detail">
         <h2 class="detail-title">{{ detail.toolName }}</h2>
-        <p>{{ detail.kind === 'demo' ? '模拟演示' : '真实执行' }} · {{ statusText(detail.status) }} · {{ detail.total }} 个账号</p>
-        <p class="detail-disclosure">{{ detail.kind === 'demo' ? '完成、人工操作、异常均为演示案例，不代表真实平台结果，也无需继续处理历史案例。' : '这里只展示持久化的批次结果。不会从历史记录重新启动浏览器或自动恢复真实任务。' }}</p>
+        <p>真实执行 · {{ statusText(detail.status) }} · {{ detail.total }} 个账号</p>
+        <p class="detail-disclosure">这里只展示持久化的批次结果。本机恢复入口会先核对恢复分类，不会从历史结果直接重启任务。</p>
         <p v-if="detail.kind === 'live'" class="detail-disclosure">“未完成”不是“确定未写入”。结果不明时，应先在原电脑核对平台上的同一对象，再决定是否重新处理；本页不会判断业务是否可重试。导出结果用于核对，不是自动重试清单。</p>
         <div class="detail-table-wrap"><table class="detail-table"><thead><tr><th>账号序号</th><th>原表行号</th><th>状态</th><th>结果</th></tr></thead><tbody><tr v-for="item in detail.items" :key="item.label"><td>{{ item.label }}</td><td>{{ item.sourceRow || '本机未保留' }}</td><td>{{ item.status }}</td><td>{{ item.result }}</td></tr></tbody></table></div>
         <p v-if="!detail.items.length">该批次尚无账号结果记录。</p>
@@ -56,7 +52,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElDrawer } from 'element-plus'
 import { Archive, CircleAlert, Download, RefreshCw } from '@lucide/vue'
-import { getBusinessBatch, getDemoBatch } from '@/utils/api'
+import { getBusinessBatch } from '@/utils/api'
 import { authService } from '@/utils/auth'
 import { unwrapApiData } from '@/features/demo/model'
 import { historyCsv, parseHistoryDetail, type HistoryDetail } from '@/features/business/history'
@@ -64,6 +60,7 @@ import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
 import BusinessHelpDrawer from '@/features/business/BusinessHelpDrawer.vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import RecoveryPanel from '@/features/recovery/RecoveryPanel.vue'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 const store = useBusinessWorkspaceStore()
 const helpOpen = ref(false)
@@ -75,16 +72,14 @@ const loadState = ref<AsyncDataState>('loading')
 let loadSequence = 0
 const loadingMore = ref(false)
 const failedAppend = ref(false)
-const hasMore = computed(() => activeTab.value === 'demo' ? rows.value.length < store.demoHistoryTotal : store.liveHistoryHasMore)
+const hasMore = computed(() => store.liveHistoryHasMore)
 const drawerOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const detail = ref<HistoryDetail | null>(null)
 let selectedBatch: BatchRow | null = null
 let detailSequence = 0
-const rows = computed<BatchRow[]>(() => activeTab.value === 'demo'
-  ? store.demoHistory.map(batch => ({ id: batch.id, toolName: batch.tool_name_snapshot, startedAt: batch.started_at || batch.created_at, total: batch.row_count, processed: batch.played_count + batch.skipped_count + batch.error_count, attention: batch.error_count, status: batch.status }))
-  : store.history.map(batch => ({ id: batch.id, toolName: batch.tool_name, startedAt: batch.started_at, total: batch.total_count, processed: batch.completed_count + batch.failed_count, attention: batch.waiting_count, status: batch.status, detailAccessible: batch.detail_accessible })))
+const rows = computed<BatchRow[]>(() => store.history.map(batch => ({ id: batch.id, toolName: batch.tool_name, startedAt: batch.started_at, total: batch.total_count, processed: batch.completed_count + batch.failed_count, attention: batch.waiting_count, status: batch.status, detailAccessible: batch.detail_accessible })))
 const load = async (append = false) => {
   if (append && loadingMore.value) return
   const requestSequence = ++loadSequence
@@ -93,8 +88,7 @@ const load = async (append = false) => {
   loadState.value = rows.value.length ? 'data' : 'loading'
   loadError.value = ''
   try {
-    if (activeTab.value === 'demo') await store.loadDemoHistory(append)
-    else await store.loadHistory(append)
+    await store.loadHistory(append)
     if (requestSequence !== loadSequence) return
     loadState.value = settledDataState(rows.value.length)
   } catch (error) {
@@ -120,7 +114,7 @@ async function openDetails(batch: BatchRow): Promise<void> {
   detailError.value = ''
   detail.value = null
   try {
-    const result = await (kind === 'demo' ? getDemoBatch(batch.id) : getBusinessBatch(batch.id))
+    const result = await getBusinessBatch(batch.id)
     if (sequence !== detailSequence || token !== authService.getAuth()?.token) return
     detail.value = parseHistoryDetail(kind, unwrapApiData(result), store.getSourceRows?.(kind, batch.id) || {})
   } catch (error) {

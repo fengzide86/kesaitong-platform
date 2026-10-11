@@ -1,10 +1,10 @@
 <template>
   <div class="agency-management">
     <PageHeader
-      title="代理与交付"
-      description="管理代理归属，核对收款，发放授权，统一跟进售后。"
+      :title="section === 'requests' ? '代理售后' : section === 'commission' ? '代理返佣' : '代理与交付'"
+      :description="section === 'requests' ? '在同一详情核对客户与关联订单，查看问题并完成回复。' : section === 'commission' ? '核对代理佣金与结算记录，保留实际确认凭据。' : '管理代理归属，核对收款，发放授权，跟进客户交付。'"
     >
-      <template #actions>
+      <template v-if="section !== 'requests' && section !== 'commission'" #actions>
         <el-button @click="router.push('/admin/staff-accounts')">
           关联代理账号
         </el-button>
@@ -18,11 +18,12 @@
       class="owner-notice"
     />
     <nav
+      v-if="section !== 'requests' && section !== 'commission'"
       class="owner-tabs"
       aria-label="代理管理分区"
     >
       <button
-        v-for="(label, key) in sectionLabels"
+        v-for="(label, key) in deliverySections"
         :key="key"
         type="button"
         :class="{ active: section === key }"
@@ -45,6 +46,7 @@ import AgencyCommissionPanel from './AgencyCommissionPanel.vue'
 import { sectionLabels, type Section } from './model'
 const router = useRouter()
 const route = useRoute()
+const deliverySections = { agencies: sectionLabels.agencies, customers: sectionLabels.customers, orders: sectionLabels.orders, licenses: sectionLabels.licenses }
 const section = computed<Section>(() => {
   const value = route.query.section
   return typeof value === 'string' && Object.hasOwn(sectionLabels, value) ? value as Section : 'agencies'

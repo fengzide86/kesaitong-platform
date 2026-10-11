@@ -1,17 +1,12 @@
 <template>
   <div class="records-page">
-    <PageHeader eyebrow="活动记录" title="工具记录" description="演示记录与真实执行记录完全分开，不会混合统计。">
+    <PageHeader eyebrow="活动记录" title="工具记录" description="查看真实执行结果与本机恢复状态。">
       <template #actions>
         <router-link class="support-link" to="/user/ai-chat"><MessageCircle :size="16" />联系帮助</router-link>
       </template>
     </PageHeader>
 
-    <div class="record-tabs" role="tablist" aria-label="记录类型">
-      <button type="button" role="tab" :aria-selected="activeTab === 'demo'" :class="{ active: activeTab === 'demo' }" @click="activeTab = 'demo'">演示记录</button>
-      <button type="button" role="tab" :aria-selected="activeTab === 'live'" :class="{ active: activeTab === 'live' }" @click="activeTab = 'live'">真实执行</button>
-    </div>
-
-    <p v-if="activeTab === 'demo'" class="record-disclosure">仅记录模拟流程是否走完，不代表真实平台任务成功。</p>
+    <RecoveryPanel />
     <AsyncStateNotice v-if="staleError" state="stale" :message="staleError" @retry="loadRecords(failedAppend)" />
 
     <section class="records-card" :aria-busy="loading">
@@ -30,21 +25,21 @@
             <span>{{ formatTime(record.time) }}</span>
           </div>
           <div class="record-badges">
-            <span :class="['kind-badge', record.kind]">{{ record.kind === 'demo' ? '模拟' : '真实' }}</span>
+            <span class="kind-badge live">真实</span>
             <span :class="['result-badge', statusClass(record.status)]">{{ statusText(record.status, record.kind) }}</span>
           </div>
           <div class="record-actions">
-            <button v-if="record.kind === 'live'" type="button" @click="openDetail(record)">查看结果</button>
-            <button type="button" @click="useAgain(record)">{{ record.kind === 'demo' ? '再次演示' : '再次使用' }}</button>
+            <button type="button" @click="openDetail(record)">查看结果</button>
+            <button v-if="record.status === 'succeeded'" type="button" @click="useAgain(record)">作为新任务使用</button>
             <button v-if="record.kind === 'live' && record.status === 'failed'" type="button" class="support" @click="contactSupport(record)">联系帮助</button>
           </div>
         </article>
       </div>
       <div v-else class="empty-records">
         <History :size="42" :stroke-width="1.5" />
-        <h3>{{ activeTab === 'demo' ? '还没有演示记录' : '还没有真实执行记录' }}</h3>
-        <p v-if="activeTab === 'live'">当前没有真实执行记录。</p>
-        <router-link v-else to="/user/tools">选择一个工具开始演示</router-link>
+        <h3>还没有真实执行记录</h3>
+        <p>真实工具完成处理后，结果会显示在这里。</p>
+        <router-link to="/user/tools">查看工具与准备项</router-link>
       </div>
     </section>
     <footer v-if="rows.length" class="record-pagination"><span>已显示 {{ rows.length }} / 共 {{ totals[activeTab] }} 条</span><button v-if="rows.length < totals[activeTab]" type="button" :disabled="loadingMore" @click="loadRecords(true)">{{ loadingMore ? '正在加载…' : '加载更多' }}</button><span v-else>已显示全部记录</span></footer>
@@ -69,14 +64,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { z } from 'zod'
 import { useRouter } from 'vue-router'
 import { Ban, Check, CircleAlert, History, LoaderCircle, MessageCircle } from '@lucide/vue'
-import { getDemoRunsPage, getExecutionsPage, getExecution } from '@/utils/api'
+import { getExecutionsPage, getExecution } from '@/utils/api'
 import { authService } from '@/utils/auth'
 import { usePlatformStore } from '@/stores/platform'
-import { demoRunListSchema } from '@/features/demo/model'
 import { executionRecordListSchema, executionRecordSchema, type ExecutionRecord } from '@/features/user/model'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { flushPendingDemoReceipts } from '@/features/automation/demo-receipts'
+import RecoveryPanel from '@/features/recovery/RecoveryPanel.vue'
+import { prepareSupportContext } from '@/features/ai/supportHandoff'
 
 type RecordKind = 'demo' | 'live'
 interface RecordRow {
@@ -91,8 +86,7 @@ interface RecordRow {
 
 const router = useRouter()
 const platformStore = usePlatformStore()
-const activeTab = ref<RecordKind>('demo')
-const demoRows = ref<RecordRow[]>([])
+const activeTab = ref<RecordKind>('live')
 const liveRows = ref<RecordRow[]>([])
 const loading = ref(true)
 const loadError = ref('')
@@ -103,7 +97,7 @@ const totals = ref({ demo: 0, live: 0 })
 const pages = ref({ demo: 0, live: 0 })
 const pageSize = 20
 let requestSequence = 0
-const rows = computed(() => activeTab.value === 'demo' ? demoRows.value : liveRows.value)
+const rows = computed(() => liveRows.value)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
@@ -154,13 +148,12 @@ function useAgain(record: RecordRow) {
 }
 
 function contactSupport(record: RecordRow) {
-  localStorage.setItem('toolbox_support_context', JSON.stringify({
-    run_id: record.id,
-    tool_id: record.toolId,
+  prepareSupportContext({
     tool_name: record.toolName,
-    platform_key: platformStore.currentPlatform,
-    error_code: record.errorCode,
-  }))
+    problem_code: record.errorCode,
+    execution_mode: 'live',
+    run_status: record.status,
+  }, platformStore.currentPlatform)
   void router.push('/user/ai-chat')
 }
 
@@ -181,19 +174,7 @@ async function loadRecords(append = false) {
     const params = { platform_key: platform, page: append ? pages.value[kind] + 1 : 1, page_size: pageSize }
     let nextRows: RecordRow[]
     let total: number
-    if (kind === 'demo') {
-      const response = z.object({ data: demoRunListSchema, total: z.number().int().nonnegative() }).parse(await getDemoRunsPage(params))
-      total = response.total
-      nextRows = response.data.map(record => ({
-        id: record.id,
-        kind: 'demo',
-        toolId: String(record.tool_id),
-        toolName: record.tool_name_snapshot,
-        status: record.status,
-        time: record.started_at || record.created_at,
-        errorCode: record.error_code,
-      }))
-    } else {
+    {
       const response = z.object({ data: executionRecordListSchema, total: z.number().int().nonnegative() }).parse(await getExecutionsPage(params))
       total = response.total
       nextRows = response.data.map(record => ({
@@ -207,7 +188,7 @@ async function loadRecords(append = false) {
       }))
     }
     if (!current()) return
-    const target = kind === 'demo' ? demoRows : liveRows
+    const target = liveRows
     target.value = append ? [...new Map([...target.value, ...nextRows].map(record => [String(record.id), record])).values()] : nextRows
     totals.value[kind] = total
     pages.value[kind] = params.page
@@ -225,13 +206,12 @@ watch(activeTab, () => { void loadRecords() })
 watch(() => platformStore.currentPlatform, () => {
   detailSequence += 1
   detailVisible.value = false
-  demoRows.value = []
   liveRows.value = []
   totals.value = { demo: 0, live: 0 }
   pages.value = { demo: 0, live: 0 }
   void loadRecords()
 })
-onMounted(() => { void loadRecords(); void flushPendingDemoReceipts() })
+onMounted(() => { void loadRecords() })
 onUnmounted(() => { requestSequence += 1; detailSequence += 1 })
 </script>
 

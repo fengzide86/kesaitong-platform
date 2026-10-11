@@ -27,7 +27,7 @@ describe('strict historical installer identity and location hint', () => {
     expect(builder).toContain('APP_GUID: guid')
     expect(readInstallerIdentity()).toEqual({
       appId: 'com.amazon.toolbox', appGuid: '159e8ec2-4c1f-5b99-a3ea-a9467c2587ec',
-      builderVersion: '26.8.1', uuidNamespace: NSIS_UUID_NAMESPACE,
+      builderVersion: '26.15.3', uuidNamespace: NSIS_UUID_NAMESPACE,
       installKey: `Software\\${NSIS_APP_GUID}`,
       uninstallKey: `Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${NSIS_APP_GUID}`,
     })
@@ -38,7 +38,7 @@ describe('strict historical installer identity and location hint', () => {
     expect(() => readInstallerIdentity({ build: { appId: NSIS_APP_ID, nsis: { guid: NSIS_APP_GUID } } })).toThrow('custom NSIS GUID')
   })
 
-  it.each(['1.8.5', '1.8.7', '1.8.8'])('checks actual installed ASAR package version %s', async version => {
+  it.each(['1.8.5', '1.8.7', '1.8.8', '1.8.14'])('checks actual installed ASAR package version %s', async version => {
     mkdirSync(scratchParent, { recursive: true })
     const directory = mkdtempSync(join(scratchParent, 'kst-identity-test-'))
     scratchDirectories.push(directory)
@@ -106,6 +106,17 @@ describe('strict historical installer identity and location hint', () => {
     expect(script).toContain('Uninstaller left installation registry keys')
     expect(script).toContain('Uninstaller left application shortcuts')
     expect(script).toContain('registryAndShortcutsRemoved = $true')
+  })
+
+  it('pins current production 1.8.14 without weakening old upgrade fixtures', () => {
+    const workflow = readFileSync(resolve('.github/workflows/test.yml'), 'utf8')
+    expect(script).toContain("'1.8.14' = 'nsis-upgrade-fixture-1.8.14.json'")
+    const upgrade = workflow.split(/\r?\n/).find(line => line.includes("-PreviousVersion '1.8.14'"))
+    expect(upgrade).toContain('-DiagnosticAttempts 1')
+    expect(upgrade).not.toContain('-LegacyInstallLocationHint')
+    const fixture = JSON.parse(readFileSync(resolve('scripts/nsis-upgrade-fixture-1.8.14.json'), 'utf8'))
+    expect(fixture.version).toBe('1.8.14')
+    expect(fixture.sha512).toMatch(/^[a-f0-9]{128}$/)
   })
 
   it.skipIf(process.platform !== 'win32')('parses the PowerShell harness without executing registry or installer actions', () => {

@@ -1,0 +1,16 @@
+{
+  "expires": "2026-10-25",
+  "scope": "Development/build dependencies only; runtime audit must have zero findings.",
+  "entries": [
+    {
+      "package": "braces",
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "reason": "Upstream latest 3.0.3 has no patched release. Used by trusted local source globs in build-time PurgeCSS; not shipped as a runtime dependency. Do not process untrusted glob patterns. Recheck upstream before expiry."
+    },
+    {
+      "package": "sprintf-js",
+      "advisory": "GHSA-hp3w-g68c-fv3c",
+      "reason": "Upstream latest 1.1.3 has no patched release. Transitive build/download logger; no user-supplied format strings and absent from production dependency graph. Recheck upstream before expiry."
+    }
+  ]
+}

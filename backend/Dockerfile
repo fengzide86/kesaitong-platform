@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.10-slim-bookworm AS dependencies
+FROM python:3.12-slim-bookworm AS dependencies
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,10 +11,10 @@ RUN groupadd --gid 10001 toolbox \
 
 WORKDIR /app
 
-COPY backend/requirements.txt backend/requirements-dev.txt backend/constraints-py310.txt /tmp/requirements/
+COPY backend/requirements.txt backend/requirements-dev.txt backend/constraints-py312.txt /tmp/requirements/
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip \
-    && python -m pip install -c /tmp/requirements/constraints-py310.txt -r /tmp/requirements/requirements.txt \
+    && python -m pip install -c /tmp/requirements/constraints-py312.txt -r /tmp/requirements/requirements.txt \
     && python -m pip check
 
 FROM dependencies AS source
@@ -64,6 +64,6 @@ EXPOSE 8000
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=4 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3).read()"]
+  CMD ["python", "-m", "core.healthcheck"]
 
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]

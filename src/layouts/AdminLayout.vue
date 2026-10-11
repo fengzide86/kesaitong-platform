@@ -12,8 +12,9 @@
     <div class="layout">
       <AdminSidebar :class="{ 'mobile-open': showMobileSidebar }" />
       <main class="content admin-content">
-        <AppNoticeQueue />
+        <AppNoticeQueue :customer-announcements="false" />
         <Breadcrumb />
+        <AdminSectionNav />
         <router-view :key="platformKey" v-slot="{ Component }">
           <Suspense>
             <template #default>
@@ -34,6 +35,7 @@ import { ref, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import AdminSidebar from '@/components/AdminSidebar.vue'
+import AdminSectionNav from '@/components/AdminSectionNav.vue'
 import Breadcrumb from '@/components/Breadcrumb.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import AppNoticeQueue from '@/features/shell/AppNoticeQueue.vue'

@@ -1,5 +1,9 @@
 <template>
-  <section class="run-console" data-testid="business-run-console">
+  <section v-if="legacyDemoBlocked" class="legacy-demo-retired" data-testid="legacy-demo-retired" role="alert">
+    <strong>旧演示入口已停用</strong><p>历史演示数据仍被保留，但不会作为真实工具记录或执行结果展示。</p>
+    <button type="button" @click="emit('new')">返回工具准备</button>
+  </section>
+  <section v-else class="run-console" data-testid="business-run-console">
     <header class="run-header">
       <div class="batch-identity">
         <span class="professional-badge">{{ store.isDemoBatch ? '交互演示' : '自动执行' }}</span>
@@ -27,7 +31,7 @@
       <article class="is-running"><span>运行中</span><strong>{{ runningCount }}</strong><small>{{ store.isDemoBatch ? '并发演示' : '依次处理' }}</small></article>
       <article class="is-success"><span>已完成</span><strong>{{ completedCount }}</strong><small>{{ store.isDemoBatch ? '完成案例' : '执行已完成' }}</small></article>
       <article class="is-attention"><span>需关注</span><strong>{{ waitingCount }}</strong><small>{{ store.isDemoBatch ? '人工操作案例' : '等待你操作' }}</small></article>
-      <article class="is-danger"><span>异常</span><strong>{{ failedCount }}</strong><small>{{ store.isDemoBatch ? '异常结果案例' : '可查看并重试' }}</small></article>
+      <article class="is-danger"><span>异常</span><strong>{{ failedCount }}</strong><small>{{ store.isDemoBatch ? '异常结果案例' : '核对后再恢复' }}</small></article>
     </div>
 
     <section class="execution-surface">
@@ -136,8 +140,9 @@
               </div>
             </div>
             <button v-if="!store.isDemoBatch && store.selectedItem.status === 'waiting_user'" class="primary-action warning" type="button" @click="completeAction">我已完成，继续处理</button>
-            <button v-else-if="!store.isDemoBatch && store.selectedItem.status === 'failed' && store.isActive" class="primary-action" type="button" @click="restartItem">重新发起此账号</button>
-            <div v-else-if="!store.isDemoBatch && store.selectedItem.status === 'failed'" class="scope-note"><span>批次已结束，原始输入已清理。请先导出结果核对，再重新导入需要处理的账号。</span><button type="button" @click="closeDetails(); emit('new')">重新导入并新建</button></div>
+            <button v-else-if="!store.isDemoBatch && store.selectedItem.status === 'failed' && store.isActive" class="primary-action" type="button" :disabled="!retryAllowed(store.selectedItem)" @click="restartItem">{{ retryAllowed(store.selectedItem) ? '重试已核对的账号' : '结果待核对，不能直接重试' }}</button>
+            <div v-else-if="!store.isDemoBatch && store.selectedItem.status === 'failed'" class="scope-note"><span>批次已结束，原始输入已清理。请在下方核对结果，再选择原文件恢复可重试行。</span></div>
+            <RecoveryPanel v-if="!store.isDemoBatch && ['failed', 'cancelled'].includes(store.selectedItem.status)" :batch-id="store.snapshot.batchId" />
             <div class="scope-note"><ShieldCheck :size="15" /><span>{{ store.isDemoBatch ? '这是本地逻辑演示，不会启动外部平台浏览器。' : '账号登录现场仅保存在本机，服务器只接收脱敏状态。' }}</span></div>
           </template>
         </aside>
@@ -171,12 +176,22 @@ import { demoProgress, endedAccountCount, executionStage, stagePresentation } fr
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
 import { showToast } from '@/utils'
 import { historyCsv, snapshotHistoryDetail } from './history'
+import RecoveryPanel from '@/features/recovery/RecoveryPanel.vue'
+import { recoveryLabels, recoveryRecordSchema } from '@/shared/ipc/recovery-contract'
+import { allowLegacyDemoFixture } from './legacy-demo-policy'
 const BusinessHelpDrawer = defineAsyncComponent(() => import('./BusinessHelpDrawer.vue'))
 
 type StatusFilter = 'all' | 'running' | 'attention' | 'failed' | 'completed'
 
 const emit = defineEmits<{ exit: []; new: [] }>()
+const props = withDefaults(defineProps<{ allowInternalDemo?: boolean }>(), { allowInternalDemo: false })
 const store = useBusinessWorkspaceStore()
+const legacyDemoBlocked = computed(() => store.isDemoBatch && !(allowLegacyDemoFixture(props.allowInternalDemo) || store.legacyDemoFixturesEnabled))
+function retryAllowed(item: BatchItem): boolean { const parsed = recoveryRecordSchema.safeParse(item.recovery); return parsed.success && parsed.data.retryAllowed }
+async function refreshRecovery() {
+  const snapshot = await window.electronAPI?.batch?.getSnapshot().catch(() => null)
+  if (snapshot?.batchId && snapshot.batchId === store.snapshot.batchId) store.snapshot = snapshot
+}
 const drawerOpen = ref(false)
 const helpOpen = ref(false)
 const query = ref('')
@@ -219,7 +234,18 @@ const actionDescription = computed(() => {
   if (item.status === 'running') return store.isDemoBatch ? '该账号正在与其他账号同时推进演示步骤。' : '正在自动操作该账号的平台页面。'
   if (item.status === 'waiting_user') return item.message || (store.isDemoBatch ? '该账号展示了需要关注的人工操作案例。' : '请在下方页面完成操作，再点击继续处理。当前任务尚未完成。')
   if (item.status === 'completed') return item.message || (store.isDemoBatch ? '该账号已展示完成案例。' : '该账号的执行已完成。')
-  if (item.status === 'failed') return item.message || (store.isDemoBatch ? '该账号展示了异常结果案例。' : store.isActive ? '该账号未能完成，可以重新发起。' : '批次已结束，请核对结果后重新导入需要处理的账号。')
+  if (item.status === 'failed') {
+    if (store.isDemoBatch) return item.message || '该账号展示了异常结果案例。'
+    const parsed = recoveryRecordSchema.safeParse(item.recovery)
+    const record = parsed.success ? parsed.data : null
+    const classification = record?.classification || 'needs_review'
+    const description = classification === 'verified' || classification === 'manual_completed'
+      ? `${recoveryLabels[classification]}，不会再次处理此行。`
+      : record?.retryAllowed
+        ? `${recoveryLabels[classification]}；${store.isActive ? '可建立独立新尝试。' : '请重新选择原文件，仅恢复允许重试的行。'}`
+        : '执行结果待核对，请先查看证据或到平台核对；不能直接重试。'
+    return item.message ? `${description} 执行信息：${item.message}` : description
+  }
   if (item.status === 'cancelled') return '该账号已随批次退出。'
   return '账号等待进入执行流程。'
 })
@@ -252,7 +278,10 @@ function resultText(item: BatchItem): string {
   if (item.status === 'cancelled') return '已随批次退出'
   if (item.status === 'waiting_user') return item.message || '需要你完成操作'
   if (item.status === 'completed') return item.message || '已完成'
-  if (item.status === 'failed') return item.message || '执行未完成'
+  if (item.status === 'failed') {
+    const parsed = recoveryRecordSchema.safeParse(item.recovery)
+    return parsed.success ? recoveryLabels[parsed.data.classification] : '结果待核对'
+  }
   return item.message || '等待结果'
 }
 function durationFor(item: BatchItem): string {
@@ -291,16 +320,19 @@ async function restartItem(): Promise<void> {
 }
 
 onMounted(() => {
+  window.addEventListener('toolbox:recovery-updated', refreshRecovery)
   clockTimer = setInterval(() => { now.value = Date.now() }, 1_000)
   window.addEventListener('keydown', handleKeydown)
 })
 onUnmounted(() => {
+  window.removeEventListener('toolbox:recovery-updated', refreshRecovery)
   if (clockTimer) clearInterval(clockTimer)
   window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
 <style scoped>
+.legacy-demo-retired{display:grid;gap:12px;padding:24px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text)}.legacy-demo-retired p{margin:0;color:var(--color-text-secondary);line-height:1.6}.legacy-demo-retired button{justify-self:start;padding:9px 16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-primary);cursor:pointer}
 .utility-button{min-height:34px;padding:6px 10px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-primary);font-size:var(--type-meta);white-space:nowrap;cursor:pointer}.storage-warning{grid-column:1/-1;color:var(--color-warning)}
 .progress-description{color:var(--color-text-secondary);font-size:var(--type-meta);white-space:nowrap}
 .run-console{height:100%;min-height:0;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px}

@@ -4,6 +4,7 @@ import FeedbackView from '@/views/admin/FeedbackView.vue'
 import { mountWithPinia } from '@/tests/helpers'
 import { usePlatformStore } from '@/stores/platform'
 import type { AdminFeedback } from '@/features/admin/model'
+vi.mock('vue-router', () => ({ useRouter: () => ({ currentRoute: { value: { query: {} } }, replace: vi.fn() }) }))
 
 const mocks = vi.hoisted(() => ({ page: vi.fn(), toast: vi.fn() }))
 vi.mock('@/utils/api', () => ({ getFeedbacksPage: (...args: unknown[]) => mocks.page(...args), updateFeedback: vi.fn(), API_BASE: '' }))
@@ -20,7 +21,7 @@ function mountFeedback() {
     PageHeader: true, AsyncStateNotice: true, AdminDetailDrawer: true, 'el-dialog': true,
     DataToolbar: { template: '<div><slot/><slot name="summary"/></div>' },
     'el-card': { template: '<section><slot/></section>' }, 'el-table': true, 'el-table-column': true,
-    'el-select': true, 'el-option': true,
+    'el-select': true, 'el-option': true, 'el-button': true, 'el-tag': true, 'el-image': true, 'el-form': true, 'el-form-item': true, 'el-input': true,
     'el-pagination': { props: ['currentPage', 'total', 'pageSize'], emits: ['current-change'], template: '<button data-testid="next-page" @click="$emit(\'current-change\', 2)">下一页</button>' },
   } } })
 }

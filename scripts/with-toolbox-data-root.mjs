@@ -35,6 +35,8 @@ const env = {
   ELECTRON_CACHE: directories.electronCache,
   ELECTRON_BUILDER_CACHE: directories.electronBuilderCache,
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH || directories.playwrightBrowsers,
+  // Multiple independent KST workspaces share this cache; one must not collect another's browsers.
+  PLAYWRIGHT_SKIP_BROWSER_GC: process.env.PLAYWRIGHT_SKIP_BROWSER_GC || '1',
   npm_config_cache: process.env.npm_config_cache || directories.npmCache,
 }
 

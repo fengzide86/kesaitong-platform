@@ -30,6 +30,11 @@ const announcement = {
 describe('announcement center store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    sessionStorage.clear()
+    localStorage.clear()
+    sessionStorage.setItem('toolbox_role', 'user')
+    sessionStorage.setItem('toolbox_auth', JSON.stringify({ token: 'customer-session' }))
+    sessionStorage.setItem('toolbox_user', JSON.stringify({ auth_code_id: 1, device_id: 'device-one' }))
     vi.clearAllMocks()
     api.getAnnouncementFeed.mockResolvedValue([announcement])
     api.markAnnouncementRead.mockResolvedValue({ success: true })
@@ -55,5 +60,52 @@ describe('announcement center store', () => {
     expect(api.dismissAnnouncement).toHaveBeenCalledWith(1)
     expect(store.unreadCount).toBe(0)
     expect(store.critical).toBeNull()
+  })
+
+  it.each(['super_admin', 'operator', 'support', 'agent'])('does not request the customer feed for %s', async role => {
+    sessionStorage.setItem('toolbox_role', role)
+    const store = useAnnouncementStore()
+    await store.load(true)
+    expect(api.getAnnouncementFeed).not.toHaveBeenCalled()
+    expect(store.items).toEqual([])
+  })
+
+  it('discards an old customer response after switching to staff', async () => {
+    let resolve!: (value: unknown) => void
+    api.getAnnouncementFeed.mockReturnValue(new Promise(done => { resolve = done }))
+    const store = useAnnouncementStore()
+    const pending = store.load()
+    sessionStorage.setItem('toolbox_role', 'super_admin')
+    window.dispatchEvent(new Event('toolbox:user-updated'))
+    resolve([announcement])
+    await pending
+    expect(store.items).toEqual([])
+    expect(store.critical).toBeNull()
+    expect(store.loading).toBe(false)
+  })
+
+  it('clears customer notices on logout and fetches only the new customer scope', async () => {
+    const store = useAnnouncementStore()
+    await store.load()
+    sessionStorage.clear()
+    window.dispatchEvent(new Event('toolbox:auth-cleared'))
+    expect(store.items).toEqual([])
+    sessionStorage.setItem('toolbox_role', 'user')
+    sessionStorage.setItem('toolbox_auth', JSON.stringify({ token: 'other-session' }))
+    sessionStorage.setItem('toolbox_user', JSON.stringify({ auth_code_id: 2, device_id: 'device-two' }))
+    api.getAnnouncementFeed.mockResolvedValue([{ ...announcement, id: 2, title: '新客户公告' }])
+    await store.load()
+    expect(store.items.map(item => item.id)).toEqual([2])
+    expect(api.getAnnouncementFeed).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not acknowledge an old notice after the customer identity changes', async () => {
+    const store = useAnnouncementStore()
+    await store.load()
+    const item = store.items[0]!
+    sessionStorage.setItem('toolbox_auth', JSON.stringify({ token: 'changed-session' }))
+    await store.dismiss(item)
+    expect(api.dismissAnnouncement).not.toHaveBeenCalled()
+    expect(store.items).toEqual([])
   })
 })

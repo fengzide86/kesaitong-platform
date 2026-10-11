@@ -76,7 +76,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
             content["error_code"] = exc.detail["code"]
     else:
         content = {"success": False, "message": exc.detail}
-    return JSONResponse(status_code=exc.status_code, content=content)
+    return JSONResponse(status_code=exc.status_code, content=content, headers=exc.headers)
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:

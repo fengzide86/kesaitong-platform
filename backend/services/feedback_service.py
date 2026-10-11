@@ -4,7 +4,7 @@
 """
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,7 +66,7 @@ class FeedbackService:
                 data=[self._serialize_feedback(f) for f in feedbacks]
             )
     
-    async def get_feedback_by_id(self, feedback_id: int) -> dict[str, Any]:
+    async def get_feedback_by_id(self, feedback_id: int, platform_key: str | None = None) -> dict[str, Any]:
         """根据 ID 获取工单详情"""
         result = await self.db.execute(
             select(Feedback).where(Feedback.id == feedback_id)
@@ -75,6 +75,8 @@ class FeedbackService:
         
         if not feedback:
             return error_response("工单不存在", ErrorCodes.RESOURCE_NOT_FOUND)
+        if platform_key and feedback.platform_key != platform_key:
+            raise HTTPException(status_code=403, detail="该工单不属于当前平台，请切换平台后查看")
         
         return success_response(data=self._serialize_feedback(feedback, detailed=True))
     
@@ -234,6 +236,8 @@ class FeedbackService:
             "priority": feedback.priority,
             "admin_reply": feedback.admin_reply,
             "created_at": utc_iso(feedback.created_at),
+            "replied_at": utc_iso(feedback.replied_at),
+            "updated_at": utc_iso(feedback.updated_at),
             "platform_key": feedback.platform_key,
             "capability_key": feedback.capability_key,
             "tool_id": feedback.tool_id,
@@ -243,8 +247,6 @@ class FeedbackService:
             data["screenshot"] = feedback.screenshot
             data["screenshots"] = feedback.screenshots
             data["status_history"] = feedback.status_history
-            data["replied_at"] = utc_iso(feedback.replied_at)
-            data["updated_at"] = utc_iso(feedback.updated_at)
             data["run_log_id"] = feedback.run_log_id
         
         return data

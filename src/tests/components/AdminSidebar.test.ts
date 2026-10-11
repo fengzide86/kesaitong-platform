@@ -79,7 +79,7 @@ describe('AdminSidebar', () => {
       await flushPromises()
 
       const menuItems = wrapper.findAll('.menu-nav-item')
-      expect(menuItems.length).toBe(16)
+      expect(menuItems.length).toBe(6)
     })
 
     it('应该显示正确的菜单标签', async () => {
@@ -90,20 +90,11 @@ describe('AdminSidebar', () => {
 
       const labels = wrapper.findAll('.menu-label').map(el => el.text())
       expect(labels).toContain('行动中心')
-      expect(labels).toContain('授权码管理')
-      expect(labels).toContain('订单与套餐')
-      expect(labels).toContain('分润管理')
-      expect(labels).toContain('公账支出')
-      expect(labels).toContain('用户管理')
-      expect(labels).toContain('工单管理')
-      expect(labels).toContain('知识库管理')
-      expect(labels).toContain('客服规则管理')
-      expect(labels).toContain('公告管理')
-      expect(labels).toContain('应用更新')
-      expect(labels).toContain('物流费率中心')
-      expect(labels).toContain('系统设置')
-      expect(labels).toContain('后台账号管理')
-      expect(labels).toContain('代理与交付')
+      expect(labels).toContain('客户与授权')
+      expect(labels).toContain('订单与代理')
+      expect(labels).toContain('售后支持')
+      expect(labels).toContain('经营财务')
+      expect(labels).toContain('产品与系统')
       expect(labels).not.toContain('退出登录')
     })
 
@@ -122,19 +113,19 @@ describe('AdminSidebar', () => {
       expect(labels).not.toContain('系统设置')
       expect(labels).not.toContain('后台账号管理')
       expect(labels).not.toContain('代理与交付')
-      expect(labels).toContain('客服规则管理')
-      expect(wrapper.findAll('.menu-group-title').map(group => group.text())).toEqual(['客户交付', '客户支持'])
+      expect(labels).not.toContain('经营财务')
+      expect(labels).toContain('售后支持')
+      expect(wrapper.findAll('a.menu-nav-item').find(link => link.text() === '产品与系统')?.attributes('href')).toBe('#/admin/announcements')
     })
 
-    it('按交付支持结算配置分组且不重复任何入口', async () => {
+    it('六个主入口不重复，细分页面只在当前区域展开', async () => {
       const wrapper = mount(AdminSidebar, { global: { plugins: [createPinia(), mockRouter] } })
       await flushPromises()
 
-      expect(wrapper.findAll('.menu-group-title').map(group => group.text())).toEqual(['客户交付', '客户支持', '经营结算', '平台配置'])
+      expect(wrapper.findAll('.menu-nav-item')).toHaveLength(6)
       const paths = wrapper.findAll('a.menu-nav-item').map(link => link.attributes('href'))
       expect(new Set(paths).size).toBe(paths.length)
-      expect(wrapper.find('[aria-labelledby="admin-nav-delivery"]').text()).toContain('代理与交付')
-      expect(wrapper.find('[aria-labelledby="admin-nav-finance"]').text()).toContain('公账支出')
+      expect(wrapper.findAll('.menu-group-title')).toHaveLength(0)
     })
 
     it('代理账号不渲染内部后台菜单', async () => {
@@ -169,7 +160,7 @@ describe('AdminSidebar', () => {
 
       const activeItems = wrapper.findAll('.menu-nav-item.is-active')
       expect(activeItems.length).toBe(1)
-      expect(activeItems[0].text()).toContain('订单与套餐')
+      expect(activeItems[0].text()).toContain('订单与代理')
     })
   })
 

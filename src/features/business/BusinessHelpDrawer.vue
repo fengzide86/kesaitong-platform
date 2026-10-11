@@ -24,7 +24,13 @@
       <p v-if="loadError" role="alert">{{ loadError }}</p>
       <p v-else-if="loading">正在加载…</p>
       <p v-else-if="!tickets.length">暂无求助记录</p>
-      <article v-for="ticket in tickets" :key="ticket.id"><strong>{{ ticket.title || '使用帮助' }}</strong><p>{{ ticket.admin_reply || '客服尚未回复，请稍后查看。' }}</p></article>
+      <article v-for="ticket in tickets" :key="ticket.id">
+        <header><strong>{{ ticket.title || '使用帮助' }}</strong><span>{{ ticketState(ticket.status) }}</span></header>
+        <small>工单 #{{ ticket.id }}</small>
+        <small v-if="ticket.replied_at || ticket.updated_at || ticket.created_at">{{ ticket.replied_at ? '最近回复' : ticket.updated_at ? '最近更新' : '提交时间' }}：{{ formatChatTime(ticket.replied_at || ticket.updated_at || ticket.created_at) }}</small>
+        <p>{{ ticket.admin_reply || '客服尚未回复，请稍后查看。' }}</p>
+        <p class="ticket-next">{{ ticket.status === 'resolved' ? '请按回复核对结果；仍有问题时提供本工单编号继续联系。' : '补充说明时提供本工单编号，无需重复提交相同问题。' }}</p>
+      </article>
     </section>
   </el-drawer>
 </template>
@@ -35,6 +41,7 @@ import { z } from 'zod'
 import { createFeedback, getMyFeedbacks } from '@/utils/api'
 import { authService } from '@/utils/auth'
 import { useBusinessWorkspaceStore } from '@/stores/businessWorkspace'
+import { formatChatTime } from '@/features/ai/presentation'
 const props = defineProps<{ modelValue: boolean; entryPoint?: string; context?: { toolName: string; recordKind: 'demo' | 'live'; status: string; total: number } }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const store = useBusinessWorkspaceStore()
@@ -46,7 +53,8 @@ const sent = ref(false)
 const error = ref('')
 const loadError = ref('')
 const loading = ref(false)
-const ticketSchema = z.array(z.object({ id: z.union([z.string(), z.number()]), title: z.string().nullish(), admin_reply: z.string().nullish() }))
+const ticketSchema = z.array(z.object({ id: z.union([z.string(), z.number()]), title: z.string().nullish(), status: z.string().nullish(), admin_reply: z.string().nullish(), created_at: z.string().nullish(), replied_at: z.string().nullish(), updated_at: z.string().nullish() }))
+const ticketState = (state?: string | null) => state ? ({ pending: '待处理', processing: '处理中', resolved: '已解决' }[state] || '状态待确认') : '状态待确认'
 const tickets = ref<z.infer<typeof ticketSchema>>([])
 let sequence = 0
 async function load(): Promise<void> {
@@ -83,5 +91,9 @@ watch(() => props.modelValue, open => { if (open) void load(); else sequence += 
 onUnmounted(() => { sequence += 1 })
 </script>
 <style scoped>
+.help-copy article header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+.help-copy article header span { flex-shrink: 0; color: var(--color-primary); font-size: 12px; }
+.help-copy article small { display: block; font-size: 12px; margin-bottom: 6px; }
+.help-copy .ticket-next { margin-top: 10px; font-size: 12px; }
 .help-copy{display:grid;gap:12px;color:var(--color-text-secondary);font-size:var(--type-control);line-height:1.7}.help-copy h3,.help-copy p{margin:0}.help-copy h3{color:var(--color-text);display:flex;justify-content:space-between;align-items:center;gap:10px}.help-copy label{font-weight:600}.help-copy select,.help-copy textarea{box-sizing:border-box;max-width:100%;width:100%;border:1px solid var(--color-border);border-radius:9px;padding:10px;background:var(--color-surface);color:var(--color-text);font:inherit}.help-copy button{min-height:36px;padding:8px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-primary-soft);color:var(--color-primary);cursor:pointer}.help-copy button:disabled{opacity:.5;cursor:not-allowed}.help-copy article{padding:12px;border-radius:10px;background:var(--color-surface-soft);overflow-wrap:anywhere}.help-copy [role=alert]{color:var(--color-danger)}
 </style>

@@ -25,6 +25,14 @@ import type {
 import type { RunnerEvent, RunnerPreflightResult } from './automation-contract.js'
 import type { UpdateDeferPhase, UpdateSnapshot } from './update-contract.js'
 import type { LocalArtifactReadRequest, LocalArtifactReadResult } from './artifact-contract.js'
+import type { RecoveryBridge } from './recovery-contract.js'
+import type { FileInputSelectionRequest, FileInputSelection, FileInputValidationRequest, FileInputValidationResult } from './file-input-contract.js'
+
+export interface FileInputBridge {
+  select(request: FileInputSelectionRequest): Promise<FileInputSelection | null>
+  validate(request: FileInputValidationRequest): Promise<FileInputValidationResult>
+  clear(): Promise<void>
+}
 
 export interface LocalArtifactBridge {
   read(request: LocalArtifactReadRequest): Promise<LocalArtifactReadResult>
@@ -99,6 +107,7 @@ export interface BatchBridge {
 }
 
 export interface AutomationBridge {
+  prepareBrowser(platform: 'amazon' | 'aliexpress'): Promise<{ partition: string }>
   start(tool: AutomationTool): Promise<AutomationStartResult>
   preflight(tool: AutomationTool): Promise<AutomationPreflightResult>
   pause(): Promise<AutomationStatusResult>
@@ -133,12 +142,14 @@ export interface OpenExternalResult {
 }
 
 export interface ToolboxElectronApi {
+  recovery?: RecoveryBridge
   runtime?: { controlApiBase?: string; deviceId?: string; deviceName?: string }
   updates?: UpdateBridge
   demoActivity?: DemoActivityBridge
   batch?: BatchBridge
   automation?: AutomationBridge
   artifacts?: LocalArtifactBridge
+  files?: FileInputBridge
   credentialStore?: CredentialStoreBridge
   notifications?: NotificationBridge
   freight?: FreightBridge

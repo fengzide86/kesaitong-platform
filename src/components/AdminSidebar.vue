@@ -6,72 +6,37 @@
     </div>
 
     <!-- 导航菜单 -->
-    <nav v-if="role !== 'agent'" class="sidebar-menu-nav">
-      <router-link to="/admin/dashboard" class="menu-nav-item" active-class="is-active">
-        <LayoutDashboard :size="14" class="menu-icon" />
-        <span class="menu-label">行动中心</span>
+    <nav v-if="areas.length" class="sidebar-menu-nav" aria-label="管理工作区">
+      <router-link
+        v-for="area in areas"
+        :key="area.id"
+        :to="selection?.area.id === area.id ? route.fullPath : area.items[0]!.to"
+        class="menu-nav-item"
+        :class="{ 'is-active': selection?.area.id === area.id }"
+        active-class=""
+        exact-active-class=""
+        :aria-current="selection?.area.id === area.id ? 'location' : undefined"
+      >
+        <component :is="areaIcons[area.id]" :size="16" class="menu-icon" />
+        <span class="menu-label">{{ area.label }}</span>
       </router-link>
-      <section v-for="group in navigationGroups" :key="group.id" class="menu-group" :aria-labelledby="`admin-nav-${group.id}`">
-        <h2 :id="`admin-nav-${group.id}`" class="menu-group-title">{{ group.title }}</h2>
-        <router-link v-for="item in group.items" :key="item.path" :to="item.path" class="menu-nav-item" active-class="is-active">
-          <component :is="item.icon" :size="14" class="menu-icon" />
-          <span class="menu-label">{{ item.label }}</span>
-        </router-link>
-      </section>
     </nav>
 
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
-import { authService } from '@/utils/auth'
-import { hasStaffPermission, type StaffPermission } from '@/features/auth/permissions'
+import type { Component } from 'vue'
+import { useAdminNavigation } from '@/features/admin/useAdminNavigation'
+import type { AdminAreaId } from '@/features/admin/navigation'
 import BrandLockup from '@/components/brand/BrandLockup.vue'
-import {
-  LayoutDashboard, Key, BriefcaseBusiness, Receipt, Percent, Users, Wrench,
-  BookOpen, MessageSquare, Megaphone, PackageCheck, Settings, ShieldUser, Truck, WalletCards
-} from '@lucide/vue'
+import { LayoutDashboard, Users, Receipt, LifeBuoy, WalletCards, Settings } from '@lucide/vue'
 
-const role = computed(() => authService.getRole())
-const can = (permission: StaffPermission): boolean => hasStaffPermission(role.value, permission)
-
-interface NavigationItem {
-  path: string
-  label: string
-  icon: Component
-  visible?: boolean
+const { route, areas, selection } = useAdminNavigation()
+const areaIcons: Record<AdminAreaId, Component> = {
+  action: LayoutDashboard, customers: Users, orders: Receipt,
+  support: LifeBuoy, finance: WalletCards, system: Settings,
 }
-
-const navigationGroups = computed(() => {
-  const groups: { id: string; title: string; items: NavigationItem[] }[] = [
-    { id: 'delivery', title: '客户交付', items: [
-      { path: '/admin/authcodes', label: '授权码管理', icon: Key },
-      { path: '/admin/business-access', label: '专业工作台', icon: BriefcaseBusiness, visible: role.value !== 'support' },
-      { path: '/admin/orders', label: '订单与套餐', icon: Receipt },
-      { path: '/admin/users', label: '用户管理', icon: Users },
-      { path: '/admin/agency', label: '代理与交付', icon: BriefcaseBusiness, visible: can('agency.manage') },
-    ] },
-    { id: 'support', title: '客户支持', items: [
-      { path: '/admin/feedback', label: '工单管理', icon: Wrench },
-      { path: '/admin/knowledge', label: '知识库管理', icon: BookOpen },
-      { path: '/admin/ai-chat', label: '客服规则管理', icon: MessageSquare, visible: can('rules.write') },
-      { path: '/admin/announcements', label: '公告管理', icon: Megaphone },
-    ] },
-    { id: 'finance', title: '经营结算', items: [
-      { path: '/admin/profit', label: '分润管理', icon: Percent, visible: can('profit.read') },
-      { path: '/admin/expenses', label: '公账支出', icon: WalletCards, visible: can('expenses.read') },
-    ] },
-    { id: 'configuration', title: '平台配置', items: [
-      { path: '/admin/updates', label: '应用更新', icon: PackageCheck, visible: can('updates.manage') },
-      { path: '/admin/freight-rates', label: '物流费率中心', icon: Truck, visible: can('settings.manage') },
-      { path: '/admin/settings', label: '系统设置', icon: Settings, visible: can('settings.manage') },
-      { path: '/admin/staff-accounts', label: '后台账号管理', icon: ShieldUser, visible: can('staff.manage') },
-    ] },
-  ]
-  return groups.map(group => ({ ...group, items: group.items.filter(item => item.visible !== false) }))
-    .filter(group => group.items.length > 0)
-})
 </script>
 
 <style scoped>
@@ -103,15 +68,15 @@ const navigationGroups = computed(() => {
 
 .sidebar-menu-nav {
   flex-grow: 1;
-  padding: 18px 12px;
+  padding: 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
   overflow-y: auto;
 }
 
 .menu-nav-item {
-  min-height: 38px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -127,14 +92,12 @@ const navigationGroups = computed(() => {
   box-sizing: border-box;
 }
 
-.menu-group { display: grid; gap: 3px; }
-.menu-group-title { margin: 14px 12px 5px; color: var(--color-text-secondary); font-size: var(--type-meta); font-weight: 700; line-height: 1.5; }
-
-.menu-icon { width: 15px; height: 15px; color: var(--color-text-tertiary); stroke-width: 1.8px; transition: color var(--motion-fast); flex-shrink: 0; }
+.menu-icon { width: 16px; height: 16px; color: var(--color-text-tertiary); stroke-width: 1.8px; transition: color var(--motion-fast); flex-shrink: 0; }
 
 .menu-label { color: var(--color-text-secondary); font-size:var(--type-meta); font-weight: 600; transition: color var(--motion-fast); white-space: nowrap; }
 
 .menu-nav-item:hover { background: #f2f4f7; }
+.menu-nav-item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 
 .menu-nav-item:hover .menu-icon,
 .menu-nav-item:hover .menu-label { color: var(--color-text); }

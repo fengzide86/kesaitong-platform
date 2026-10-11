@@ -125,11 +125,10 @@ async function finishHistoryBatch(page: Page, batch: DemoBatch): Promise<DemoBat
 
 async function openDemoHistory(page: Page): Promise<void> {
   await page.goto('/#/business/records')
-  await expect(page.getByRole('tab', { name: '真实批次', exact: true })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('还没有真实批次记录', { exact: true })).toBeVisible()
   await expect(page.locator('.records-list article')).toHaveCount(0)
-  await page.getByRole('tab', { name: '历史演示', exact: true }).click()
-  await expect(page.locator('.demo-note')).toContainText('不代表真实账号处理成功')
+  await expect(page.getByRole('tab', { name: '历史演示', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /再次演示|开始演示/ })).toHaveCount(0)
 }
 
 const browserErrors = new WeakMap<Page, string[]>()
@@ -187,7 +186,7 @@ test('C 端真实授权激活、历史演示 API 留档与普通入口隐藏，�
   await page.screenshot({ path: join(runtime, 'consumer-demo-hidden.png'), fullPage: true })
 })
 
-test('B 端真实 API 建立八项历史演示，父子落库、隔离展示与脱敏导出', async ({ page }) => {
+test('B 端兼容 API 保留八项历史演示，客户记录不展示或导出旧演示', async ({ page }) => {
   await authorize(page, 'business')
   await expectNoPublicDemo(page, 'business')
   const history = await finishHistoryBatch(page, await createHistoryBatch(page, 'business-completed-history'))
@@ -213,32 +212,12 @@ test('B 端真实 API 建立八项历史演示，父子落库、隔离展示与�
   await page.getByRole('button', { name: '刷新授权', exact: true }).click()
   await expect(page.locator('.limits-grid')).toContainText('1 / 5 台设备')
   await openDemoHistory(page)
-  await expect(page.locator('.records-list article').first()).toContainText('演示完成')
-  await page.locator('.records-list article').first().getByRole('button', { name: /查看.*批次详情/ }).click()
-  const drawer = page.locator('.el-drawer:visible').last()
-  await expect(drawer.locator('.detail-table tbody tr')).toHaveCount(8)
-  await expect(drawer).toContainText('人工操作案例（无待办）')
-  await expect(drawer).toContainText('异常案例')
-  await expect(drawer).toContainText('不代表真实平台结果')
-  const downloaded = page.waitForEvent('download')
-  await drawer.getByRole('button', { name: '导出脱敏结果', exact: true }).click()
-  const download = await downloaded
-  expect(download.suggestedFilename()).toBe('KST-demo-批次结果.csv')
-  const exportedPath = join(runtime, 'historical-demo-results.csv')
-  await download.saveAs(exportedPath)
-  const exported = readFileSync(exportedPath, 'utf8')
-  expect(exported.trim().split('\r\n')).toHaveLength(9)
-  expect(exported).toContain('模拟演示')
-  expect(exported).not.toMatch(/demo_batch_|demo_item_|password|cookie|account_label|@example/)
-  for (const item of history.items) expect(exported).not.toContain(item.item_ref)
-  await drawer.getByRole('button', { name: '关闭', exact: true }).click()
-  await page.screenshot({ path: join(runtime, 'business-demo-history.png'), fullPage: true })
+  await expect(page.getByRole('button', { name: '导出脱敏结果', exact: true })).toHaveCount(0)
+  await page.screenshot({ path: join(runtime, 'business-demo-history-hidden.png'), fullPage: true })
   await page.reload()
-  // Reload defaults to real records; old examples never become live results.
-  await expect(page.getByRole('tab', { name: '真实批次', exact: true })).toHaveAttribute('aria-selected', 'true')
+  // Old compatibility data remains stored but never becomes customer results.
   await expect(page.getByText('还没有真实批次记录', { exact: true })).toBeVisible()
-  await page.getByRole('tab', { name: '历史演示', exact: true }).click()
-  await expect(page.locator('.records-list article').first()).toContainText('演示完成')
+  await expect(page.getByRole('tab', { name: '历史演示', exact: true })).toHaveCount(0)
   const persisted = await api(page, `/api/demo/batches/${batchId}`) as { status: string; items: unknown[] }
   expect(persisted.status).toBe('completed')
   expect(persisted.items).toHaveLength(8)
@@ -268,8 +247,6 @@ test('B 端历史取消终态与新记录独立，事件重传不重建批次且
   expect(second.id).not.toBe(first.id)
   expectMetadataOnly(page, second)
   await openDemoHistory(page)
-  await expect(page.locator('.records-list')).toContainText('已退出')
-  await expect(page.locator('.records-list')).toContainText('演示完成')
   const own = await api(page, '/api/demo/batches') as { data: Array<{ id: string }>; total: number }
   expect(own.total).toBe(2)
   expect(new Set(own.data.map(row => row.id))).toEqual(new Set([first.id, second.id]))
@@ -290,7 +267,6 @@ test('B 端离线历史读取不伪称自动恢复，联网重读保留取消终
   await authorize(page, 'business_cancel')
   await expectNoPublicDemo(page, 'business')
   await openDemoHistory(page)
-  await expect(page.locator('.records-list')).toContainText('已退出')
   const before = database()
   await context.setOffline(true)
   try {
@@ -306,8 +282,6 @@ test('B 端离线历史读取不伪称自动恢复，联网重读保留取消终
     await context.setOffline(false)
   }
   await openDemoHistory(page)
-  await expect(page.locator('.records-list')).toContainText('已退出')
-  await expect(page.locator('.records-list')).toContainText('演示完成')
   expect(database().batches).toEqual(before.batches)
   expect(database().items).toEqual(before.items)
   expectMetadataOnly(page, await api(page, '/api/demo/batches'))
@@ -474,7 +448,9 @@ test('代理真实交付闭环：建档、提交订单、负责人收款发放�
     expect(support.order_id).toBe(order.id)
     await expect(page.locator('.el-table__row').filter({ hasText: supportContent })).toContainText('待处理')
 
-    await owner.getByRole('navigation', { name: '代理管理分区' }).getByRole('button', { name: '售后申请' }).click()
+    await owner.getByRole('navigation', { name: '管理工作区' }).getByRole('link', { name: '售后支持', exact: true }).click()
+    await owner.getByRole('navigation', { name: '售后支持页面' }).getByRole('link', { name: '代理售后', exact: true }).click()
+    await expect(owner).toHaveURL(/#\/admin\/agency\?section=requests/)
     await owner.locator('.el-table__row').filter({ hasText: supportContent }).getByRole('button', { name: '查看详情' }).click()
     ownerDrawer = owner.locator('.el-drawer:visible').last()
     await ownerDrawer.getByPlaceholder('说明实际处理情况，不把未完成的退款或延期描述为已完成。').fill(supportReply)

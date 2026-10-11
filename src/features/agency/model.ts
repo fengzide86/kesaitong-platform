@@ -60,6 +60,17 @@ export function statusLabel(value: string): string {
 export function requestKindLabel(value: ServiceRequest['kind']): string {
   return { support: '使用支持', refund: '退款申请', extension: '延期申请' }[value]
 }
+/** Validity comes from the server effective state, and always takes precedence over activation. */
+export function canDeliverLicense(raw: unknown): boolean {
+  const license = licenseSchema.safeParse(raw)
+  return license.success && ['active', 'unused'].includes(license.data.status)
+}
+export function licenseActivationLabel(raw: unknown): string {
+  const license = licenseSchema.safeParse(raw)
+  if (!license.success) return '待核对'
+  if (!canDeliverLicense(license.data)) return statusLabel(license.data.status)
+  return license.data.activated ? '已激活' : '待激活'
+}
 export function money(value: number): string {
   return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value)
 }

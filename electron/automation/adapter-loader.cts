@@ -21,7 +21,10 @@ interface AdapterTool extends UnknownRecord {
 }
 
 const MAX_ARTIFACT_BYTES = 512 * 1024;
-const ALLOWED_HOSTS = new Set(['idtrade.cn', 'localhost', '127.0.0.1']);
+// The V2 hostname comes from the observed platform audit. Do not allow the
+// vendor's entire domain tree or real seller portals; URL/port guards remain
+// enforced independently by the Runner.
+const ALLOWED_HOSTS = new Set(['idtrade.cn', 'www.bjysoft.cn', 'localhost', '127.0.0.1']);
 const ALLOWED_ACTIONS = new Set(['fill', 'select', 'click', 'check', 'upload', 'waitFor', 'assertText', 'calculate']);
 const ALLOWED_SELECTORS = new Set(['css', 'id', 'name', 'testId', 'label', 'placeholder', 'text', 'role']);
 const ALLOWED_INPUT_TYPES = new Set(['text', 'number', 'file', 'select']);

@@ -16,6 +16,7 @@ const {
   detectPlaywrightInterruption,
   executePlaywrightAction,
   isTransientActionError,
+  resolveValue,
 } = require('./automation/action-engine.cjs');
 const { persistPageScan, scanPlaywrightPage } = require('./automation/page-scanner.cjs');
 const { CheckpointStore } = require('./automation/checkpoint-store.cjs');
@@ -23,6 +24,7 @@ const { startSandboxServer } = require('./automation/sandbox-server.cjs');
 const { parseFreightWorkbook } = require('./freight/rate-pack.cjs');
 const { quoteFreight } = require('../src/shared/freight/rate-engine.js');
 const { resolveSignedAdapter } = require('./automation/adapter-loader.cjs');
+const { assertAllowedTarget } = require('./automation/target-policy.cjs');
 const {
   AUTOMATION_PROTOCOL_ERROR_CODE,
   hostRequestSchema,
@@ -185,6 +187,9 @@ class AutomationRuntime {
     this.tool = { ...tool };
     const resolvedAdapter = await this.resolveAdapter(tool);
     this.script = resolvedAdapter.adapter;
+    if (tool.executionMode === 'live' && this.script.sandbox && process.env.TOOLBOX_INTERNAL_DEMO !== '1') {
+      throw this.runnerError('LEGACY_DEMO_DISABLED', '真实执行入口不能使用旧演示适配器。');
+    }
     this.adapterSource = resolvedAdapter.source;
     if (this.scriptStatus(tool, this.script) !== 'ready') {
       throw this.runnerError('TOOL_SCRIPT_NOT_READY', '当前工具的自动化脚本尚未就绪，已禁止执行');
@@ -358,7 +363,8 @@ class AutomationRuntime {
         this.validateInput(input);
         fs.mkdirSync(PROFILE_ROOT, { recursive: true });
         fs.mkdirSync(ARTIFACT_ROOT, { recursive: true });
-        const checkpointKey = this.tool.executionContext?.sessionId || `${this.script.key}_${this.tool.id || 'tool'}`;
+        // A new attempt must never skip prior form-filling or click checkpoints.
+        const checkpointKey = this.runId || `${this.script.key}_${this.tool.id || 'tool'}`;
         this.checkpoint = new CheckpointStore(path.join(PROFILE_ROOT, 'checkpoints'), checkpointKey, String(this.script.key || ''), input);
 
         if (this.script.sandbox && !MOCK_MODE) {
@@ -502,13 +508,21 @@ class AutomationRuntime {
       this.checkpoint?.mark(action.id);
       return;
     }
-    const attempts = Math.min(Math.max(Number(action.retries) || 2, 1), 4);
+    // Unknown adapters may autosave on fill/select; conservatively mark all
+    // UI changes before dispatch. ACK is durable in the main-process ledger.
+    const potentialMutation = ['fill', 'select', 'click', 'check', 'upload'].includes(String(action.kind));
+    const guarded = potentialMutation && this.tool.executionMode === 'live' && !this.script.sandbox;
+    const attempts = guarded ? 1 : Math.min(Math.max(Number(action.retries) || 2, 1), 4);
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       await this.waitWhilePaused();
       this.ensureActive();
       await this.handleInterruptionIfNeeded();
       await this.throttle();
+      // Both embedded and Playwright uploads must prove that this exact path
+      // was picked in the owning desktop window and is still readable.
+      if (!MOCK_MODE && action.kind === 'upload') await this.hostRequest('files.validate-upload', { filePath: resolveValue(action, input) });
+      if (guarded) await this.hostRequest('recovery.before-mutation', { actionId: action.id });
       try {
         if (MOCK_MODE) await this.sleep(20);
         else if (this.tool.browserMode === 'embedded-cdp') await this.hostRequest('browser.action', { action, input }, Number(action.timeoutMs) || 15000);
@@ -603,12 +617,15 @@ class AutomationRuntime {
     if (grant.runnerApiVersion && grant.runnerApiVersion !== PROTOCOL_VERSION) throw this.runnerError('RUNNER_VERSION_MISMATCH', '工具与本地 Runner 协议版本不兼容');
     if (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now()) throw this.runnerError('GRANT_EXPIRED', '工具启动授权已过期，请重新打开工具');
 
-    const encodedToken = encodeURIComponent(grant.token);
     const endpoints = ['/api/tools/launch-grant/verify', '/api/tools/launch-token/verify'];
     let lastError;
     for (const endpoint of endpoints) {
       try {
-        const response = await fetch(`${CONTROL_API_BASE}${endpoint}?token=${encodedToken}`, { method: 'POST', headers: { 'X-Toolbox-Version': process.env.TOOLBOX_CLIENT_VERSION || 'unknown' } });
+        const response = await fetch(`${CONTROL_API_BASE}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Toolbox-Version': process.env.TOOLBOX_CLIENT_VERSION || 'unknown' },
+          body: JSON.stringify({ token: grant.token }),
+        });
         const body = asRecord(await response.json());
         const data = asRecord(body.data);
         if (response.status === 404 && endpoint.includes('launch-grant')) continue;
@@ -676,13 +693,7 @@ class AutomationRuntime {
   }
 
   assertAllowedTarget(targetUrl: string): void {
-    const url = new URL(targetUrl);
-    const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-    const allowed = (this.script.allowedHosts || []).some(host => hostname === host || hostname.endsWith(`.${host}`));
-    if (!allowed) throw this.runnerError('TARGET_HOST_NOT_ALLOWED', `当前适配器不允许访问该域名：${hostname}`);
-    if (/sellercentral\.amazon|sellercenter\.aliexpress/i.test(hostname)) {
-      throw this.runnerError('REAL_COMMERCE_HOST_BLOCKED', '比赛模拟平台适配器禁止在真实电商后台运行');
-    }
+    assertAllowedTarget(targetUrl, this.script.allowedHosts || []);
   }
 
   pause() { if (this.status !== 'running') return { status: this.status }; this.status = 'paused'; this.emit(EVENTS.RUN_PAUSED); return { status: this.status }; }

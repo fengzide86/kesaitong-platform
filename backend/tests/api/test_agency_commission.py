@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -49,7 +49,7 @@ async def test_monthly_settlement_is_single_use_and_revision_guarded(client, age
     assert (await client.put(f"/api/agency/agencies/{agency_id}/commission-policy", headers=setup["owner"], json={"rate": "0.100000", "expected_rate": None})).status_code == 200
     _, order = await customer_and_order(client, setup)
     await client.post(f"/api/agency/orders/{order['id']}/mark-paid", headers=setup["owner"])
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = datetime.now(UTC).strftime("%Y-%m")
     preview = (await client.get(f"/api/agency/agencies/{agency_id}/commission-settlement-preview?month={month}", headers=setup["owner"])).json()["data"]
     assert preview["amount"] == "9.90" and preview["count"] == 1
     response = await client.post(f"/api/agency/agencies/{agency_id}/commission-settlements", headers=setup["owner"], json={"month": month, "expected_revision": preview["revision"], "note": "已线下结算"})
@@ -172,7 +172,7 @@ async def test_historical_preview_excludes_later_refunds(client, agency_setup, d
 async def test_new_ledger_entry_invalidates_unconfirmed_preview(client, agency_setup):
     setup = agency_setup
     agency_id = await enable_commission(client, setup)
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = datetime.now(UTC).strftime("%Y-%m")
     stale = await preview_month(client, setup, agency_id, month)
     _, order = await customer_and_order(client, setup)
     assert (await client.post(f"/api/agency/orders/{order['id']}/mark-paid", headers=setup["owner"])).status_code == 200
@@ -197,7 +197,7 @@ async def test_invalid_or_future_settlement_month_is_422(client, agency_setup, m
 async def test_commission_mutations_and_preview_require_owner(client, agency_setup, staff_headers_factory):
     setup = agency_setup
     agency_id = setup["agencies"][0].id
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = datetime.now(UTC).strftime("%Y-%m")
     for headers in [setup["a"], await staff_headers_factory("operator", "commission-operator"), await staff_headers_factory("support", "commission-support")]:
         assert (await client.get(f"/api/agency/agencies/{agency_id}/commission-settlement-preview", headers=headers, params={"month": month})).status_code == 403
         assert (await client.post(f"/api/agency/agencies/{agency_id}/commission-settlements", headers=headers, json={"month": month, "expected_revision": "a" * 64, "note": "越权确认"})).status_code == 403

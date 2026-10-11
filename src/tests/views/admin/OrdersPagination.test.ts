@@ -1,20 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 import OrdersView from '@/views/admin/OrdersView.vue'
 import { mountWithPinia } from '@/tests/helpers'
 import { authService } from '@/utils/auth'
 import { usePlatformStore } from '@/stores/platform'
 import type { AdminOrder } from '@/features/admin/model'
 
-const mocks = vi.hoisted(() => ({ page: vi.fn(), plans: vi.fn(), export: vi.fn(), toast: vi.fn() }))
+const mocks = vi.hoisted(() => ({ page: vi.fn(), detail: vi.fn(), plans: vi.fn(), export: vi.fn(), toast: vi.fn(), push: vi.fn(), replace: vi.fn(), route: { query: {} } }))
 vi.mock('@/utils/api', () => ({
   getOrdersPage: (...args: unknown[]) => mocks.page(...args),
+  getOrder: (...args: unknown[]) => mocks.detail(...args),
   getPlansAdmin: (...args: unknown[]) => mocks.plans(...args),
   exportOrders: (...args: unknown[]) => mocks.export(...args),
   createOrder: vi.fn(), markOrderPaid: vi.fn(), cancelOrder: vi.fn(), refundOrder: vi.fn(),
 }))
 vi.mock('@/utils', () => ({ showToast: (...args: unknown[]) => mocks.toast(...args) }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => mocks.route, useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }))
 vi.mock('element-plus', () => ({ ElMessageBox: { prompt: vi.fn() } }))
 
 const order = (id: number, status = 'pending') => ({ id, order_no: `ORDER-${id}`, amount: 99, status })
@@ -27,11 +29,13 @@ function deferred<T>() {
 }
 function mountOrders() {
   return mountWithPinia(OrdersView, { global: { stubs: {
-    PageHeader: true, AsyncStateNotice: true, AdminDetailDrawer: true,
+    PageHeader: true, AsyncStateNotice: true, AdminDetailDrawer: { props: ['modelValue'], template: '<section v-if="modelValue" data-testid="order-detail"><slot/><slot name="footer"/></section>' },
     DataToolbar: { template: '<div><slot/><slot name="summary"/><slot name="actions"/></div>' },
     'el-card': { template: '<section><slot name="header"/><slot/></section>' },
     'el-table': true, 'el-table-column': true, 'el-select': true, 'el-option': true,
     'el-input': true, 'el-tag': true, 'el-dropdown': true,
+    'el-dropdown-item': true, 'el-dropdown-menu': true,
+    'el-alert': { props: ['title'], template: '<p>{{title}}</p>' },
     'el-pagination': { props: ['currentPage', 'total', 'pageSize'], emits: ['current-change'], template: '<button data-testid="next-page" @click="$emit(\'current-change\', 2)">下一页</button>' },
     'el-button': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot/></button>' },
   } } })
@@ -39,14 +43,90 @@ function mountOrders() {
 interface OrderViewState {
   orders: AdminOrder[]; total: number; page: number; filterStatus: string; loadError: string
   changePage: (page: number) => void; exportOrdersData: () => Promise<void>
+  detailOrder: AdminOrder | null; openOrderDetail: (order: unknown) => Promise<void>; detailError: string; showDetailDrawer: boolean
+  filterSource: 'direct' | 'agency' | 'all'; canOperateOrder: (order: unknown) => boolean
 }
 
 describe('订单远端分页与筛选一致性', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mocks.route = reactive({ query: {} })
     authService.setRole('operator')
     mocks.page.mockResolvedValue(result(1))
     mocks.plans.mockResolvedValue([])
+    mocks.detail.mockResolvedValue(order(1))
+  })
+
+  it('直接定位跨页订单并显示独立收款授权状态，不靠第一页查找', async () => {
+    mocks.route.query = { record_id: '301' }
+    mocks.detail.mockResolvedValue({ ...order(301, 'refunded'), auth_code_id: 9, auth_code_status: 'active', customer_name: '关联客户', customer_id: 5, agency_id: 2 })
+    const wrapper = mountOrders()
+    await flushPromises()
+    expect(mocks.detail).toHaveBeenCalledWith(301, expect.any(Object))
+    const detail = wrapper.get('[data-testid="order-detail"]')
+    expect(detail.text()).toContain('关联客户')
+    expect(detail.text()).toContain('金额退款不等于授权停用')
+    expect(detail.text()).toContain('核对关联授权')
+    await detail.findAll('button').find(item => item.text() === '核对关联授权')!.trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/admin/authcodes', query: { auth_code_id: '9', return_to: '/admin/orders?record_id=301' } })
+    wrapper.unmount()
+  })
+  it('旧详情的慢请求不覆盖新详情或恢复已经关闭的抽屉', async () => {
+    const slow = deferred<ReturnType<typeof order>>()
+    const wrapper = mountOrders()
+    await flushPromises()
+    const state = wrapper.vm as unknown as OrderViewState
+    mocks.detail.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(order(2))
+    void state.openOrderDetail(order(1))
+    await state.openOrderDetail(order(2))
+    slow.resolve(order(1))
+    await flushPromises()
+    expect(state.detailOrder?.id).toBe(2)
+    wrapper.unmount()
+  })
+  it.each([{}, { record_id: 'invalid' }])('返回列表或非法编号时清除旧详情并废弃慢响应 %s', async query => {
+    mocks.route.query = { record_id: '1' }
+    const slow = deferred<ReturnType<typeof order>>()
+    mocks.detail.mockReturnValueOnce(slow.promise)
+    const wrapper = mountOrders()
+    await flushPromises()
+    mocks.route.query = query
+    await flushPromises()
+    slow.resolve(order(1))
+    await flushPromises()
+    const state = wrapper.vm as unknown as OrderViewState
+    expect(state.showDetailDrawer).toBe(false)
+    expect(state.detailOrder).toBeNull()
+    expect(wrapper.find('[data-testid="order-detail"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('从授权核对回到订单时恢复原筛选和分页', async () => {
+    mocks.route.query = { record_id: '301', page: '2', status: 'refunded' }
+    mocks.detail.mockResolvedValue({ ...order(301, 'refunded'), auth_code_id: 9, auth_code_status: 'active' })
+    const wrapper = mountOrders()
+    await flushPromises()
+    expect(mocks.page).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, status: 'refunded', source: 'direct' }))
+    await wrapper.get('[data-testid="order-detail"]').findAll('button').find(item => item.text() === '核对关联授权')!.trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/admin/authcodes', query: { auth_code_id: '9', return_to: '/admin/orders?record_id=301&page=2&status=refunded' } })
+    wrapper.unmount()
+  })
+  it.each(['super_admin', 'operator', 'support'] as const)('保留 %s 的代理订单发现入口但不开启普通写操作', async role => {
+    authService.setRole(role)
+    const wrapper = mountOrders()
+    await flushPromises()
+    const state = wrapper.vm as unknown as OrderViewState
+    state.filterSource = 'agency'
+    await flushPromises()
+    expect(mocks.page).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'agency', page: 1 }))
+    expect(state.canOperateOrder({ ...order(3), agency_id: 1 })).toBe(false)
+    expect(state.canOperateOrder(order(4))).toBe(role !== 'support')
+    mocks.export.mockRejectedValue(new Error('stop-download'))
+    await state.exportOrdersData()
+    expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ source: 'agency' }))
+    state.filterSource = 'all'
+    await flushPromises()
+    expect(mocks.page).toHaveBeenLastCalledWith(expect.objectContaining({ source: undefined }))
+    wrapper.unmount()
   })
 
   it('显示后端全部数量并请求第二页，不把第一页当全部', async () => {
@@ -69,11 +149,11 @@ describe('订单远端分页与筛选一致性', () => {
     state.filterStatus = 'paid'
     usePlatformStore().setAdminPlatform('amazon')
     await flushPromises()
-    expect(mocks.page).toHaveBeenLastCalledWith({ page: 1, page_size: 20, status: 'paid', platform_key: 'amazon' })
+    expect(mocks.page).toHaveBeenLastCalledWith({ page: 1, page_size: 20, status: 'paid', platform_key: 'amazon', source: 'direct' })
     // Deliberately reject before browser download; the request must still use the exact visible scope.
     mocks.export.mockRejectedValue(new Error('offline'))
     await state.exportOrdersData()
-    expect(mocks.export).toHaveBeenCalledWith({ status: 'paid', platform_key: 'amazon' })
+    expect(mocks.export).toHaveBeenCalledWith({ status: 'paid', platform_key: 'amazon', source: 'direct' })
     wrapper.unmount()
   })
 

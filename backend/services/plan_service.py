@@ -12,6 +12,7 @@ from core.audit import log_admin_action
 from core.cache import CacheKeys, cache
 from core.exceptions import ConflictException, NotFoundException, ValidationException
 from domains.access import (
+    effective_license_status_sql,
     fixed_plan_entitlements,
     normalize_entitlements,
     resolve_plan_code,
@@ -196,7 +197,7 @@ class PlanService:
             active_codes_result = await self.db.execute(
                 select(func.count(AuthCode.id)).where(
                     AuthCode.plan_id == plan.id,
-                    AuthCode.status.in_(["active", "unused"]),
+                    effective_license_status_sql().in_(["active", "unused"]),
                 )
             )
             active_codes = int(active_codes_result.scalar() or 0)
@@ -225,12 +226,13 @@ class PlanService:
         plan = result.scalar_one_or_none()
         if not plan:
             raise NotFoundException("套餐不存在")
+        effective_status = effective_license_status_sql()
         code_result = await self.db.execute(
             select(
                 func.count(AuthCode.id),
-                func.sum(case((AuthCode.status == "active", 1), else_=0)),
-                func.sum(case((AuthCode.status == "unused", 1), else_=0)),
-                func.sum(case((AuthCode.status == "expired", 1), else_=0)),
+                func.sum(case((effective_status == "active", 1), else_=0)),
+                func.sum(case((effective_status == "unused", 1), else_=0)),
+                func.sum(case((effective_status == "expired", 1), else_=0)),
             ).where(AuthCode.plan_id == plan_id)
         )
         total_codes, active_codes, unused_codes, expired_codes = code_result.one()

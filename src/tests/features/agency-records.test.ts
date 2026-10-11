@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import ElementPlus, { ElInput, ElSelect, ElMessageBox } from 'element-plus'
+import ElementPlus, { ElInput, ElSelect, ElMessageBox, ElPagination } from 'element-plus'
 import type { MessageBoxData } from 'element-plus'
 import AgencyRecordsView from '@/features/agency/AgencyRecordsView.vue'
 import AgentOverviewView from '@/features/agency/AgentOverviewView.vue'
@@ -9,11 +10,13 @@ const mocks = vi.hoisted(() => ({
   agencies: vi.fn(), customers: vi.fn(), orders: vi.fn(), licenses: vi.fn(), requests: vi.fn(), plans: vi.fn(), summary: vi.fn(),
   createCustomer: vi.fn(), createAgency: vi.fn(), createOrder: vi.fn(), createRequest: vi.fn(), updateCustomer: vi.fn(),
   updateAgency: vi.fn(), markPaid: vi.fn(), deliver: vi.fn(), respond: vi.fn(), exportOrders: vi.fn(), showToast: vi.fn(),
+  customer: vi.fn(), order: vi.fn(), license: vi.fn(), request: vi.fn(), push: vi.fn(), replace: vi.fn(),
+  refundOrder: vi.fn(), cancelOrder: vi.fn(),
   route: { query: {} },
 }))
 vi.mock('@/features/agency/api', () => ({ agencyApi: mocks }))
 vi.mock('@/utils', () => ({ showToast: mocks.showToast }))
-vi.mock('vue-router', () => ({ useRoute: () => mocks.route }))
+vi.mock('vue-router', () => ({ useRoute: () => mocks.route, useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }))
 const created_at = '2026-09-21T01:00:00Z'
 const customer: Customer = { id: 3, name: '学生客户', agency_id: 1, agency_name: '青蓝代理', created_at }
 const order = { id: 4, customer_id: 3, customer_name: '学生客户', agency_id: 1, order_no: 'TEST-ORDER', plan_id: 5, plan_name: '赛期套餐', amount: 99, status: 'pending', auth_code: null, created_at }
@@ -27,13 +30,111 @@ function render(section: Section, owner = false) {
 }
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.route.query = {}
+  mocks.route = reactive({ query: {} })
   for (const method of ['agencies', 'customers', 'orders', 'licenses', 'requests'] as const) mocks[method].mockResolvedValue(empty)
   mocks.plans.mockResolvedValue([])
 })
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.restoreAllMocks() })
 
 describe('partner records workflows', () => {
+  it('reads a deep linked order by id even if it is not in the current page', async () => {
+    mocks.route.query = { record_id: '404' }
+    mocks.order.mockResolvedValue({ ...order, id: 404, order_no: 'OLDER-ORDER' })
+    const wrapper = render('orders', true)
+    await flushPromises()
+    expect(mocks.order).toHaveBeenCalledWith(404)
+    expect(wrapper.get('.test-drawer').text()).toContain('OLDER-ORDER')
+  })
+  it('filters every related collection by the explicit customer and preselects it when creating', async () => {
+    mocks.route.query = { customer_id: '3', create: '1' }
+    mocks.customer.mockResolvedValue(customer)
+    const wrapper = render('orders')
+    await flushPromises()
+    expect(mocks.orders).toHaveBeenCalledWith(expect.objectContaining({ customer_id: 3 }))
+    const select = wrapper.findAllComponents(ElSelect).find(item => item.element.closest('.record-form'))
+    expect(select?.props('modelValue')).toBe(3)
+    expect(wrapper.text()).toContain('学生客户')
+  })
+  it('opens customer related lists with an exact scope, not a text search', async () => {
+    mocks.customers.mockResolvedValue({ ...empty, data: [customer], total: 1 })
+    const wrapper = render('customers', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '查看 / 编辑')!.trigger('click')
+    await flushPromises()
+    expect(mocks.licenses).toHaveBeenCalledWith(expect.objectContaining({ customer_id: 3 }))
+    await wrapper.get('[data-testid="customer-create-order"]').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/admin/agency', query: { section: 'orders', customer_id: '3', create: '1' } })
+  })
+  it('uses effective license validity before activation in the customer summary', async () => {
+    mocks.customers.mockResolvedValue({ ...empty, data: [customer], total: 1 })
+    const base = { agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-CODE', activated: false, created_at }
+    mocks.licenses.mockResolvedValue({ ...empty, total: 2, data: [{ ...base, id: 1, plan_name: '过期套餐', status: 'expired' }, { ...base, id: 2, plan_name: '有效套餐', status: 'unused' }] })
+    const wrapper = render('customers', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '查看 / 编辑')!.trigger('click')
+    await flushPromises()
+    const licenseSummary = wrapper.get('[aria-label="客户关联业务"]').findAll('.journey-group')[1]!
+    expect(licenseSummary.text()).toContain('过期套餐已到期')
+    expect(licenseSummary.text()).toContain('有效套餐待激活')
+  })
+  it('does not turn a denied customer deep link into a global create form', async () => {
+    mocks.route.query = { customer_id: '91', create: '1' }
+    mocks.customer.mockRejectedValue(new Error('记录不存在或不属于当前代理'))
+    const wrapper = render('orders')
+    await flushPromises()
+    expect(wrapper.text()).toContain('记录不存在或不属于当前代理')
+    expect(wrapper.find('.record-form').exists()).toBe(false)
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+  })
+  it('does not fetch an unscoped list or open create for a malformed customer id', async () => {
+    mocks.route.query = { customer_id: 'not-an-id', create: '1' }
+    const wrapper = render('orders')
+    await flushPromises()
+    expect(mocks.orders).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('客户档案编号无效')
+    await wrapper.findAll('.heading-actions button')[1]!.trigger('click')
+    expect(wrapper.find('.record-form').exists()).toBe(false)
+  })
+  it('reopens a different deep link and ignores the earlier unfinished detail', async () => {
+    let complete!: (value: unknown) => void
+    mocks.route.query = { record_id: '4' }
+    mocks.order.mockReturnValueOnce(new Promise(resolve => { complete = resolve })).mockResolvedValueOnce({ ...order, id: 8, order_no: 'SECOND-DETAIL' })
+    const wrapper = render('orders', true)
+    await flushPromises()
+    mocks.route.query = { record_id: '8' }
+    await flushPromises()
+    expect(wrapper.get('.test-drawer').text()).toContain('SECOND-DETAIL')
+    complete(order)
+    await flushPromises()
+    expect(wrapper.get('.test-drawer').text()).toContain('SECOND-DETAIL')
+  })
+  it('restores a scoped second page from the URL and writes new pagination without a stale record id', async () => {
+    mocks.route.query = { customer_id: '3', page: '2', q: '赛期', status: 'paid', agency_id: '1' }
+    mocks.customer.mockResolvedValue(customer)
+    const wrapper = render('orders', true)
+    await flushPromises()
+    expect(mocks.orders).toHaveBeenLastCalledWith({ page: 2, page_size: 20, q: '赛期', status: 'paid', agency_id: 1, customer_id: 3 })
+    wrapper.getComponent(ElPagination).vm.$emit('current-change', 3)
+    await flushPromises()
+    expect(mocks.replace).toHaveBeenCalledWith({ query: { customer_id: '3', page: '3', q: '赛期', status: 'paid', agency_id: '1' } })
+    mocks.route.query = { customer_id: '3', page: '2', q: '赛期', status: 'paid', agency_id: '1' }
+    await flushPromises()
+    expect(mocks.orders).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, q: '赛期', customer_id: 3 }))
+  })
+  it('shows the current support order and verified license without claiming reply means refund', async () => {
+    const request = { id: 9, agency_id: 1, customer_id: 3, customer_name: '学生客户', order_id: 4, kind: 'refund', content: '申请退款', status: 'open', created_at }
+    const auth_code = { id: 1, agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-CODE', plan_name: '赛期套餐', status: 'unused', activated: false, created_at }
+    mocks.requests.mockResolvedValue({ ...empty, data: [request], total: 1 })
+    mocks.order.mockResolvedValue({ ...order, status: 'paid', auth_code })
+    const wrapper = render('requests', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '查看详情')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.test-drawer').text()).toContain('关联订单 TEST-ORDER')
+    expect(wrapper.get('.test-drawer').text()).toContain('不会自动退款或延长授权')
+    await wrapper.findAll('button').find(item => item.text() === '核对关联授权')!.trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith({ path: '/admin/agency', query: { section: 'licenses', record_id: '1' } })
+  })
   it('validates a customer drawer and sends no caller-controlled agency for agents', async () => {
     const wrapper = render('customers')
     await flushPromises()
@@ -87,6 +188,35 @@ describe('partner records workflows', () => {
     expect(wrapper.findAll('button').some(item => item.text() === '确认已收款')).toBe(false)
     expect(wrapper.findAll('button').some(item => item.text() === '发放授权')).toBe(false)
     expect(mocks.markPaid).not.toHaveBeenCalled()
+    expect(wrapper.findAll('button').some(item => item.text() === '取消订单' || item.text() === '登记线下退款')).toBe(false)
+  })
+  it('retains owner refund handling in the agency area and reads the resulting separate license state', async () => {
+    const prompt = vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '已线下退款', action: 'confirm' } as MessageBoxData)
+    const auth_code = { id: 1, agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-CODE', plan_name: '赛期套餐', status: 'unused', activated: false, created_at }
+    mocks.orders.mockResolvedValue({ ...empty, data: [{ ...order, status: 'paid', auth_code }], total: 1 })
+    mocks.refundOrder.mockResolvedValue({ ...order, status: 'refunded', auth_code })
+    const wrapper = render('orders', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '查看详情')!.trigger('click')
+    await wrapper.findAll('button').find(item => item.text() === '登记线下退款')!.trigger('click')
+    await flushPromises()
+    expect(prompt).toHaveBeenCalledWith(expect.stringContaining('不会停用授权'), '登记线下退款', expect.any(Object))
+    expect(mocks.refundOrder).toHaveBeenCalledWith(4, '已线下退款')
+    expect(wrapper.get('.test-drawer').text()).toContain('金额退款不等于授权停用')
+    expect(wrapper.get('.test-drawer').text()).toContain('待激活')
+    expect(wrapper.get('.test-drawer').findAll('button').some(item => item.text() === '复制授权码')).toBe(false)
+  })
+  it('cancels a pending agency order only after an owner supplies the reason', async () => {
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '客户取消购买', action: 'confirm' } as MessageBoxData)
+    mocks.orders.mockResolvedValue({ ...empty, data: [order], total: 1 })
+    mocks.cancelOrder.mockResolvedValue({ ...order, status: 'cancelled' })
+    const wrapper = render('orders', true)
+    await flushPromises()
+    await wrapper.findAll('button').find(item => item.text() === '查看详情')!.trigger('click')
+    await wrapper.findAll('button').find(item => item.text() === '取消订单')!.trigger('click')
+    await flushPromises()
+    expect(mocks.cancelOrder).toHaveBeenCalledWith(4, '客户取消购买')
+    expect(wrapper.get('.test-drawer').text()).toContain('不再进行收款或授权交付')
   })
   it('keeps refunds visible as refunded even when a historic authorization exists', async () => {
     const auth_code = { id: 1, agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-CODE', plan_name: '赛期套餐', status: 'frozen', activated: false, created_at }
@@ -120,6 +250,31 @@ describe('partner records workflows', () => {
     await flushPromises()
     await wrapper.findAll('button').find(button => button.text() === '查看详情')!.trigger('click')
     expect(wrapper.get('.test-drawer').text()).toContain('不要再次交付')
+    expect(wrapper.get('.test-drawer').findAll('button').some(button => button.text() === '复制授权码')).toBe(false)
+  })
+
+  it('does not offer an expired authorization for delivery or label it as waiting for activation', async () => {
+    const auth_code = { id: 1, agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-EXPIRED', plan_name: '赛期套餐', status: 'expired', activated: false, expires_at: '2026-01-01T00:00:00Z', created_at }
+    mocks.licenses.mockResolvedValue({ ...empty, data: [auth_code], total: 1 })
+    const wrapper = render('licenses')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已到期')
+    expect(wrapper.text()).not.toContain('待激活')
+    expect(wrapper.find('.records-table .el-tag--danger').exists()).toBe(true)
+    await wrapper.findAll('button').find(button => button.text() === '查看详情')!.trigger('click')
+    const detail = wrapper.get('.test-drawer')
+    expect(detail.text()).toContain('不要再次交付')
+    expect(detail.find('.el-tag--danger').text()).toBe('已到期')
+    expect(detail.findAll('button').some(button => button.text() === '复制授权码')).toBe(false)
+  })
+
+  it('uses the server effective status to hide expired order delivery controls', async () => {
+    const auth_code = { id: 1, agency_id: 1, customer_id: 3, order_id: 4, code: 'TEST-EXPIRED', plan_name: '赛期套餐', status: 'expired', activated: false, created_at }
+    mocks.orders.mockResolvedValue({ ...empty, data: [{ ...order, status: 'paid', auth_code }], total: 1 })
+    const wrapper = render('orders')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '查看详情')!.trigger('click')
+    expect(wrapper.get('.test-drawer').text()).toContain('授权已到期')
     expect(wrapper.get('.test-drawer').findAll('button').some(button => button.text() === '复制授权码')).toBe(false)
   })
   it('creates orders only after selecting a customer and a valid plan', async () => {

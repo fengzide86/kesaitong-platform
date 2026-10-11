@@ -39,6 +39,7 @@ export interface ActiveTool extends UnknownRecord {
     batchId?: string
     itemId?: string
     input?: UnknownRecord
+    fileInputKeys?: string[]
   }
 }
 

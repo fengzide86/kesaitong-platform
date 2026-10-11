@@ -3,12 +3,14 @@
 支持 Redis 缓存，提供统一的缓存接口
 """
 
+import asyncio
 import json
-from collections.abc import Callable
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.config import settings
-from core.logging import get_logger
+from core.logging import get_logger, redact_sensitive
 
 logger = get_logger(__name__)
 
@@ -20,41 +22,99 @@ class CacheManager:
         self.redis: Any | None = None
         self.redis_error: str | None = None
         self._initialized = False
+        self._init_lock = asyncio.Lock()
+        self._next_retry_at = 0.0
+        self.retry_interval = 5.0
+        self.operation_timeout = 2.0
+
+    def _failed(self, action: str, error: Exception) -> None:
+        self.redis_error = str(redact_sensitive(str(error))) or type(error).__name__
+        self._next_retry_at = time.monotonic() + self.retry_interval
+        # A cache key may contain an authorization code; do not log keys/URLs.
+        logger.warning("Redis %s 失败 (%s): %s", action, type(error).__name__, self.redis_error)
+
+    def _healthy(self) -> None:
+        recovered = self.redis_error is not None
+        self.redis_error = None
+        self._next_retry_at = 0.0
+        if recovered:
+            logger.info("Redis 连接已恢复")
+
+    async def _operation(self, action: str, operation: Callable[[], Awaitable[Any]]) -> Any:
+        try:
+            result = await asyncio.wait_for(operation(), timeout=self.operation_timeout)
+            self._healthy()
+            return result
+        except Exception as error:
+            self._failed(action, error)
+            raise
 
     async def init(self) -> None:
-        """初始化 Redis 连接"""
-        if self._initialized:
+        """Initialize once, but retry a failed connection without restarting.
+
+        Keep a stable client pool after a failed PING. Blacklist/logout users of
+        the same client can reconnect too; never silently replace their client
+        with an unrelated in-memory store on a transient startup failure.
+        """
+        if self._initialized and self.redis_error is None:
             return
-
-        if settings.REDIS_URL:
-            try:
-                import redis.asyncio as aioredis
-
-                self.redis = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-                # 测试连接
-                await self.redis.ping()
+        if self.redis_error and time.monotonic() < self._next_retry_at:
+            return
+        async with self._init_lock:
+            if self._initialized and self.redis_error is None:
+                return
+            if not settings.REDIS_URL:
+                logger.info("未配置 Redis，缓存功能停用；本机认证后备存储由各模块管理")
                 self.redis_error = None
-                logger.info(f"Redis 连接成功: {settings.REDIS_URL}")
                 self._initialized = True
-            except Exception as e:
-                logger.warning(f"Redis 连接失败，将使用内存缓存: {e}")
-                self.redis = None
-                self.redis_error = str(e)
+                return
+            try:
+                if self.redis is None:
+                    import redis.asyncio as aioredis
+                    self.redis = aioredis.from_url(
+                        settings.REDIS_URL, encoding="utf-8", decode_responses=True,
+                        socket_connect_timeout=1.0, socket_timeout=1.0,
+                        health_check_interval=30, retry_on_timeout=False,
+                    )
+                await self._operation("PING", self.redis.ping)
+                logger.info("Redis 连接成功")
                 self._initialized = True
-        else:
-            logger.info("未配置 Redis，使用内存缓存")
-            self.redis_error = None
-            self._initialized = True
+            except Exception:
+                # The failed operation already recorded safe, bounded detail.
+                self._initialized = True
+
+    async def check_health(self) -> dict[str, Any]:
+        if self.redis is None and not settings.REDIS_URL:
+            return {"status": "not_configured"}
+        if self.redis is None:
+            await self.init()
+        if self.redis_error and time.monotonic() < self._next_retry_at:
+            return {"status": "error", "error": self.redis_error}
+        if self.redis is not None:
+            try:
+                await self._operation("PING", self.redis.ping)
+                return {"status": "ok"}
+            except Exception:
+                pass
+        return {"status": "error", "error": self.redis_error or "Redis 已配置但连接不可用"}
+
+    async def _ready_client(self) -> Any | None:
+        if self.redis is None:
+            await self.init()
+        if self.redis_error and time.monotonic() < self._next_retry_at:
+            return None
+        return self.redis
 
     async def get(self, key: str) -> Any | None:
         """获取缓存数据"""
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                data = await self.redis.get(key)
+                data = await self._operation("GET", lambda: client.get(key))
                 if data:
                     return json.loads(data)
-            except Exception as e:
-                logger.error(f"Redis GET 错误 [{key}]: {e}")
+            except Exception:
+                pass
         return None
 
     async def set(self, key: str, value: Any, ttl: int = 300) -> bool:
@@ -65,23 +125,25 @@ class CacheManager:
             value: 缓存值（必须是 JSON 可序列化的）
             ttl: 过期时间（秒），默认5分钟
         """
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
                 data = json.dumps(value, ensure_ascii=False, default=str)
-                await self.redis.setex(key, ttl, data)
+                await self._operation("SET", lambda: client.setex(key, ttl, data))
                 return True
-            except Exception as e:
-                logger.error(f"Redis SET 错误 [{key}]: {e}")
+            except Exception:
+                pass
         return False
 
     async def delete(self, key: str) -> bool:
         """删除缓存"""
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                await self.redis.delete(key)
+                await self._operation("DELETE", lambda: client.delete(key))
                 return True
-            except Exception as e:
-                logger.error(f"Redis DELETE 错误 [{key}]: {e}")
+            except Exception:
+                pass
         return False
 
     async def delete_pattern(self, pattern: str) -> int:
@@ -93,59 +155,70 @@ class CacheManager:
         Returns:
             删除的键数量
         """
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                cursor = 0
-                deleted_count = 0
-                while True:
-                    cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
-                    if keys:
-                        deleted_count += await self.redis.delete(*keys)
-                    if cursor == 0:
-                        break
-                return deleted_count
-            except Exception as e:
-                logger.error(f"Redis DELETE_PATTERN 错误 [{pattern}]: {e}")
+                async def scan_and_delete() -> int:
+                    cursor = 0
+                    deleted_count = 0
+                    while True:
+                        cursor, keys = await client.scan(cursor, match=pattern, count=100)
+                        if keys:
+                            deleted_count += await client.delete(*keys)
+                        if cursor == 0:
+                            return deleted_count
+                return int(await self._operation("DELETE_PATTERN", scan_and_delete))
+            except Exception:
+                pass
         return 0
 
     async def exists(self, key: str) -> bool:
         """检查键是否存在"""
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                return await self.redis.exists(key) > 0
-            except Exception as e:
-                logger.error(f"Redis EXISTS 错误 [{key}]: {e}")
+                return bool(await self._operation("EXISTS", lambda: client.exists(key)) > 0)
+            except Exception:
+                pass
         return False
 
     async def incr(self, key: str, amount: int = 1, ttl: int | None = None) -> int | None:
         """原子递增"""
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                value = await self.redis.incrby(key, amount)
-                if ttl and value == amount:  # 首次设置时设置过期时间
-                    await self.redis.expire(key, ttl)
-                return value
-            except Exception as e:
-                logger.error(f"Redis INCR 错误 [{key}]: {e}")
+                async def increment() -> int:
+                    value = await client.incrby(key, amount)
+                    if ttl and value == amount:
+                        await client.expire(key, ttl)
+                    return int(value)
+                return int(await self._operation("INCR", increment))
+            except Exception:
+                pass
         return None
 
     async def get_ttl(self, key: str) -> int:
         """获取键的剩余过期时间（秒）"""
-        if self.redis:
+        client = await self._ready_client()
+        if client is not None:
             try:
-                return await self.redis.ttl(key)
-            except Exception as e:
-                logger.error(f"Redis TTL 错误 [{key}]: {e}")
+                return int(await self._operation("TTL", lambda: client.ttl(key)))
+            except Exception:
+                pass
         return -1
 
     async def close(self) -> None:
         """关闭 Redis 连接"""
         if self.redis:
             try:
-                await self.redis.close()
+                closer = getattr(self.redis, "aclose", None) or self.redis.close
+                await asyncio.wait_for(closer(), timeout=self.operation_timeout)
                 logger.info("Redis 连接已关闭")
-            except Exception as e:
-                logger.error(f"Redis 关闭错误: {e}")
+            except Exception as error:
+                self._failed("CLOSE", error)
+        self.redis = None
+        self._initialized = False
+        self._next_retry_at = 0.0
 
 
 # ===== 缓存键常量 =====

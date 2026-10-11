@@ -29,11 +29,14 @@
       class="support-ticket"
     >
       <header><strong>{{ ticket.title }}</strong><span>{{ statusLabel(ticket.status) }}</span></header>
+      <div class="ticket-reference">工单 #{{ ticket.id }}</div>
       <small>{{ formatChatTime(ticket.created_at) }}</small>
+      <small v-if="ticket.replied_at || ticket.updated_at" class="ticket-updated">{{ ticket.replied_at ? '最近回复' : '最近更新' }}：{{ formatChatTime(ticket.replied_at || ticket.updated_at) }}</small>
       <details><summary>查看问题内容</summary><p>{{ ticket.content }}</p></details>
       <div class="staff-reply">
         <strong>工作人员回复</strong><p>{{ ticket.admin_reply || '尚未回复，请稍后刷新查看。' }}</p>
       </div>
+      <p class="ticket-next">{{ ticket.status === 'resolved' ? '请按回复核对结果；仍有问题时可提供本工单编号继续联系。' : '工作人员正在跟进。补充问题时提供本工单编号，无需重复提交相同问题。' }}</p>
     </article>
     <template #footer>
       <div class="ticket-paging">
@@ -64,7 +67,7 @@ import { z } from 'zod'
 import { getMyFeedbacks } from '@/utils/api'
 import { formatChatTime } from '@/features/ai/presentation'
 const visible = defineModel<boolean>({ default: false })
-const ticketSchema = z.object({ id: z.union([z.number(), z.string()]), title: z.string(), content: z.string(), status: z.string(), admin_reply: z.string().nullable().optional(), created_at: z.string().nullable().optional() })
+const ticketSchema = z.object({ id: z.union([z.number(), z.string()]), title: z.string(), content: z.string(), status: z.string(), admin_reply: z.string().nullable().optional(), created_at: z.string().nullable().optional(), replied_at: z.string().nullish(), updated_at: z.string().nullish() })
 const tickets = ref<z.infer<typeof ticketSchema>[]>([])
 const page = ref(1), loading = ref(false), hasNext = ref(false), error = ref('')
 let requestId = 0
@@ -86,6 +89,9 @@ async function load(target: number) {
 </script>
 <style scoped>
 p, small { color: var(--color-text-secondary); font-size: 13px; line-height: 1.7; }
+.ticket-reference { margin-bottom: 6px; color: var(--color-text-secondary); font-size: 12px; }
+.ticket-updated { display: block; }
+.ticket-next { margin: 12px 0 0; }
 .support-ticket { border: 1px solid var(--color-border); border-radius: 12px; padding: 18px; margin: 16px 0; }
 header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 14px; }
 header span { color: var(--color-primary); white-space: nowrap; font-size: 12px; }

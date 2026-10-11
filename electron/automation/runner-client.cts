@@ -48,6 +48,7 @@ export class RunnerClient {
   private child: ChildProcess | null = null
   private readonly pending = new Map<string, PendingCommand>()
   private sequence = 0
+  private runActive = false
 
   constructor({ scriptPath, env = {}, onEvent = () => undefined, onHostRequest = null, forkFn = fork, timeoutMs = 45000 }: RunnerClientOptions) {
     this.scriptPath = scriptPath
@@ -90,6 +91,8 @@ export class RunnerClient {
     }
     const message = parsed.data
     if (message.type === 'event') {
+      if (message.event.type === 'run.started') this.runActive = true
+      if (['run.completed', 'run.failed', 'run.cancelled'].includes(message.event.type)) this.runActive = false
       this.onEvent(message.event)
       return
     }
@@ -126,6 +129,10 @@ export class RunnerClient {
     }
     this.pending.clear()
     this.child = null
+    if (this.runActive) {
+      this.runActive = false
+      this.onEvent({ protocolVersion: 1, eventId: `runner_exit_${Date.now()}`, type: 'run.failed', timestamp: Date.now(), error: { code: 'RUNNER_PROCESS_INTERRUPTED', message: '执行进程意外退出，平台结果待核对；请勿重复提交。' } })
+    }
   }
 
   command(command: RunnerCommandName, payload: UnknownRecord = {}): Promise<unknown> {

@@ -13,6 +13,7 @@ const fixtureFiles = Object.freeze({
   '1.8.5': './nsis-upgrade-fixture.json',
   '1.8.7': './nsis-upgrade-fixture-1.8.7.json',
   '1.8.8': './nsis-upgrade-fixture-1.8.8.json',
+  '1.8.14': './nsis-upgrade-fixture-1.8.14.json',
 })
 
 // Only reviewed, immutable releases may seed an upgrade. Never resolve a

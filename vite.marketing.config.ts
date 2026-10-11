@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, normalizePath, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { isMarketingSource, marketingHeaders, marketingRedirects, publicHttpsUrl } from './src/marketing/build-policy'
+import { marketingSitemap, marketingStaticRoutes, renderMarketingSeo } from './src/marketing/seo'
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url))
 const marketingRoot = path.join(projectRoot, 'src', 'marketing')
@@ -23,12 +24,8 @@ export default defineConfig(({ command }) => {
   const publicArtifactPlugin: Plugin = {
     name: 'kst-marketing-only',
     enforce: 'post',
-    transformIndexHtml() {
-      return publicUrl ? [
-        { tag: 'link', attrs: { rel: 'canonical', href: publicUrl }, injectTo: 'head' },
-        { tag: 'meta', attrs: { property: 'og:url', content: publicUrl }, injectTo: 'head' },
-        { tag: 'meta', attrs: { property: 'og:image', content: new URL('/pwa-512x512.png', publicUrl).toString() }, injectTo: 'head' },
-      ] : []
+    transformIndexHtml(html) {
+      return renderMarketingSeo(html, '/', publicUrl)
     },
     generateBundle: {
       order: 'post',
@@ -40,7 +37,11 @@ export default defineConfig(({ command }) => {
         if (forbidden.length) this.error(`Marketing bundle imports application modules: ${forbidden.join(', ')}`)
         const index = bundle['index.html']
         if (!index || index.type !== 'asset') this.error('Marketing index.html was not generated')
-        this.emitFile({ type: 'asset', fileName: '404.html', source: index.source })
+        const html = typeof index.source === 'string' ? index.source : Buffer.from(index.source).toString('utf8')
+        for (const route of marketingStaticRoutes) {
+          this.emitFile({ type: 'asset', fileName: `${route}/index.html`, source: renderMarketingSeo(html, `/${route}/`, publicUrl) })
+        }
+        this.emitFile({ type: 'asset', fileName: '404.html', source: renderMarketingSeo(html, '/404.html', publicUrl) })
         this.emitFile({ type: 'asset', fileName: '_headers', source: marketingHeaders })
         this.emitFile({ type: 'asset', fileName: '_redirects', source: marketingRedirects })
         this.emitFile({ type: 'asset', fileName: 'marketing-version.json', source: JSON.stringify({
@@ -48,7 +49,8 @@ export default defineConfig(({ command }) => {
           builtAt: new Date().toISOString(), publicUrl, downloadUrl,
           sourcePolicy: 'marketing-only-v1', sourceModuleCount: new Set(sourceModules).size,
         }, null, 2) })
-        this.emitFile({ type: 'asset', fileName: 'robots.txt', source: 'User-agent: *\nAllow: /\n' })
+        this.emitFile({ type: 'asset', fileName: 'robots.txt', source: `User-agent: *\nAllow: /\n\nSitemap: ${new URL('/sitemap.xml', publicUrl).href}\n` })
+        this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: marketingSitemap(publicUrl) })
         for (const fileName of ['favicon.ico', 'favicon-16x16.png', 'favicon-32x32.png', 'apple-touch-icon.png', 'pwa-512x512.png']) {
           this.emitFile({ type: 'asset', fileName, source: readFileSync(path.join(projectRoot, 'public', fileName)) })
         }

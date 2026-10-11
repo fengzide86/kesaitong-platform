@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import console from 'node:console'
 import path from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { PATCHED_KNOWN_FOLDER_BLOCK, SAFE_POINTER_COPY } from './prepare-nsis-template.mjs'
 
@@ -73,26 +76,62 @@ SectionEnd
 `
 }
 
-export function runKnownFolderProbe() {
+async function resolveInstalledBuilderCompiler(root, build, cacheRoot) {
+  // Resolve through the builder's own dependency context, including pnpm layouts.
+  // The current builder owns the archive checksum, URL-hashed cache directory,
+  // compiler location and NSISDIR; an old locally populated cache is not proof.
+  const projectRequire = createRequire(path.join(root, 'package.json'))
+  const builderMetadata = projectRequire.resolve('electron-builder/package.json')
+  const builderRequire = createRequire(builderMetadata)
+  const { getMakeNsisPath } = builderRequire('app-builder-lib/out/toolsets/windows.js')
+  if (typeof getMakeNsisPath !== 'function') throw new Error('Installed electron-builder does not expose its NSIS compiler resolver')
+  const previousCache = process.env.ELECTRON_BUILDER_CACHE
+  process.env.ELECTRON_BUILDER_CACHE = cacheRoot
+  try {
+    return await getMakeNsisPath(build.toolsets?.nsis, build.nsis?.customNsisBinary)
+  } finally {
+    if (previousCache === undefined) delete process.env.ELECTRON_BUILDER_CACHE
+    else process.env.ELECTRON_BUILDER_CACHE = previousCache
+  }
+}
+
+export async function resolveNsisCompiler({ root = process.cwd(), env = process.env, fileExists = existsSync, resolveBuilderCompiler = resolveInstalledBuilderCompiler } = {}) {
+  const dataRoot = path.resolve(env.TOOLBOX_DATA_ROOT || 'D:/AmazonToolboxData')
+  let selected
+  if (env.KST_NSIS_HOME) {
+    const nsisRoot = path.resolve(env.KST_NSIS_HOME)
+    const compiler = [path.join(nsisRoot, 'Bin', 'makensis.exe'), path.join(nsisRoot, 'makensis.exe')].find(fileExists)
+    if (!compiler) throw new Error('KST_NSIS_HOME does not contain makensis.exe; refusing to fall back to another compiler')
+    selected = { path: compiler, env: { NSISDIR: nsisRoot } }
+  } else {
+    const metadata = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'))
+    // Match with-toolbox-data-root.mjs, which sets the build cache explicitly.
+    const cacheRoot = path.join(dataRoot, 'electron-builder-cache')
+    selected = await resolveBuilderCompiler(root, metadata.build || {}, cacheRoot)
+  }
+  if (!selected?.path || !fileExists(selected.path)) throw new Error('The installed builder resolved a missing NSIS compiler')
+  if (path.basename(selected.path).toLowerCase() !== 'makensis.exe') throw new Error('NSIS memory probe requires the reviewed native Windows makensis.exe')
+  return selected
+}
+
+export async function runKnownFolderProbe() {
   if (process.platform !== 'win32') throw new Error('The real NSIS memory probe requires Windows')
   const dataRoot = path.resolve(process.env.TOOLBOX_DATA_ROOT || 'D:/AmazonToolboxData')
-  const nsisRoot = process.env.KST_NSIS_HOME || path.join(dataRoot, 'electron-builder-cache/nsis/nsis-3.0.4.1-nsis-3.0.4.1')
-  const compiler = path.join(nsisRoot, 'makensis.exe')
-  if (!existsSync(compiler)) throw new Error('NSIS compiler not found; build the candidate first or set KST_NSIS_HOME')
+  const compiler = await resolveNsisCompiler()
   const parent = path.join(dataRoot, 'installer-smoke')
   mkdirSync(parent, { recursive: true })
   const directory = mkdtempSync(path.join(parent, 'kst-nsis-memory-probe-'))
   const executable = path.join(directory, 'pointer-copy-probe.exe')
   const source = path.join(directory, 'pointer-copy-probe.nsi')
   writeFileSync(source, renderKnownFolderProbe(executable), 'utf8')
-  const compiled = spawnSync(compiler, ['/INPUTCHARSET', 'UTF8', '/V2', source], { encoding: 'utf8', windowsHide: true, timeout: 30_000 })
+  const compiled = spawnSync(compiler.path, ['/INPUTCHARSET', 'UTF8', '/V2', source], { env: { ...process.env, ...compiler.env }, encoding: 'utf8', windowsHide: true, timeout: 30_000 })
   if (compiled.error || compiled.status !== 0) throw new Error(`NSIS probe compilation failed: ${compiled.error?.message || compiled.stderr || compiled.stdout}`)
   const result = spawnSync(executable, [], { encoding: 'utf8', windowsHide: true, timeout: 20_000 })
-  const report = { kind: 'nsis-memory-api-probe', passed: !result.error && result.status === 0, exitCode: result.status, error: result.error?.message, assertions: ['guard-page-unicode', 'guard-page-empty', 'register-and-stack-preservation', 'known-folder-fallback'], executable }
+  const report = { kind: 'nsis-memory-api-probe', passed: !result.error && result.status === 0, exitCode: result.status, error: result.error?.message, assertions: ['guard-page-unicode', 'guard-page-empty', 'register-and-stack-preservation', 'known-folder-fallback'], compiler: compiler.path, nsisDirectory: compiler.env?.NSISDIR, executable }
   writeFileSync(path.join(directory, 'result.json'), JSON.stringify(report, null, 2), 'utf8')
   if (!report.passed) throw new Error(`NSIS memory probe failed (${result.status}); evidence: ${directory}`)
   console.log(`nsis_known_folder_memory_probe=passed evidence=${directory}`)
   return report
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runKnownFolderProbe()
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await runKnownFolderProbe()

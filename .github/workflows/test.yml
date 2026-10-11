@@ -7,6 +7,23 @@ on:
     branches: [main]
 
 jobs:
+  dependency-security:
+    name: Dependency security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.node-version'
+      - run: npm run security:dependencies:npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Audit exact Python dependency closure
+        run: |
+          python -m venv "$RUNNER_TEMP/audit-venv"
+          "$RUNNER_TEMP/audit-venv/bin/python" -m pip install pip-audit==2.10.1
+          "$RUNNER_TEMP/audit-venv/bin/python" -m pip_audit --no-deps --disable-pip -r backend/constraints-py312.txt
   frontend:
     name: Frontend and Electron contracts
     runs-on: ubuntu-latest
@@ -16,8 +33,9 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.node-version'
           cache: npm
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - run: npm run release:policy
       - run: npm run security:audit
@@ -66,19 +84,21 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: |
             backend/requirements-dev.txt
             backend/requirements.txt
-            backend/constraints-py310.txt
+            backend/constraints-py312.txt
       - run: python -m pip install -r backend/requirements-dev.txt
+      - name: Fail-closed review gate regressions
+        run: python -m pytest scripts/tests/test_review_gates.py scripts/tests/test_backend_security_live.py -q
       - name: Verify production dependency closure in a clean venv
         shell: bash
         run: |
           python -m venv "$RUNNER_TEMP/toolbox-production-venv"
           "$RUNNER_TEMP/toolbox-production-venv/bin/python" -m pip install \
-            -c backend/constraints-py310.txt \
+            -c backend/constraints-py312.txt \
             -r backend/requirements.txt
           "$RUNNER_TEMP/toolbox-production-venv/bin/python" -m pip check
           "$RUNNER_TEMP/toolbox-production-venv/bin/python" \
@@ -175,12 +195,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: |
             backend/requirements-dev.txt
             backend/requirements.txt
-            backend/constraints-py310.txt
+            backend/constraints-py312.txt
       - run: python -m pip install -r backend/requirements-dev.txt
       - name: Upgrade immutable 1.8.8 MariaDB history and verify rollback guards
         run: python scripts/verify_mariadb_upgrade.py
@@ -189,10 +209,11 @@ jobs:
       - name: Upgrade an empty MariaDB database through every Alembic migration
         working-directory: backend
         run: python -m alembic upgrade head
-      - name: Verify MariaDB order, activation, renewal and attachment concurrency
+      - name: Verify MariaDB order, activation, admin and profit-policy concurrency
         run: >-
           python -m pytest
           backend/tests/integration/test_mariadb_order_concurrency.py
+          backend/tests/integration/test_mariadb_hardening.py
           --rootdir=backend -q -rs
       - uses: actions/upload-artifact@v7
         if: always()
@@ -210,8 +231,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.node-version'
           cache: npm
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - uses: actions/download-artifact@v8
         with:
@@ -237,8 +259,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.node-version'
           cache: npm
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - uses: actions/download-artifact@v8
         with:
@@ -274,17 +297,18 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.node-version'
           cache: npm
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - run: python -m pip install -r backend/requirements-dev.txt
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e:real
+      - run: node --test scripts/tests/real-e2e-evidence.test.mjs && npm run test:e2e:real
         env:
           KST_REAL_E2E_ROOT: ${{ runner.temp }}/kst-real-e2e
       - uses: actions/upload-artifact@v7
@@ -293,6 +317,7 @@ jobs:
           name: real-backend-acceptance
           path: |
             ${{ runner.temp }}/kst-real-e2e/**/results.json
+            ${{ runner.temp }}/kst-real-e2e/**/process-redacted.log
             ${{ runner.temp }}/kst-real-e2e/**/artifacts/**
           if-no-files-found: ignore
           retention-days: 7
@@ -305,8 +330,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.18.0'
+          node-version-file: '.node-version'
           cache: npm
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - name: Verify Windows launchers, Unicode shortcuts and immutable upgrade fixtures
         run: npx vitest run src/tests/scripts/toolboxLaunchers.test.ts src/tests/scripts/nsisUpgradeFixtures.test.ts src/tests/scripts/nsisLegacyInstallHint.test.ts src/tests/scripts/windowsShortcutReader.test.ts
@@ -354,10 +380,14 @@ jobs:
         run: node scripts/prepare-nsis-upgrade.mjs
         env:
           NSIS_BASELINE_VERSION: '1.8.7'
-      - name: Fetch immutable 1.8.8 release for current-production upgrade acceptance
+      - name: Fetch immutable 1.8.8 release for historical upgrade acceptance
         run: node scripts/prepare-nsis-upgrade.mjs
         env:
           NSIS_BASELINE_VERSION: '1.8.8'
+      - name: Fetch pinned current-production 1.8.14 release for upgrade acceptance
+        run: node scripts/prepare-nsis-upgrade.mjs
+        env:
+          NSIS_BASELINE_VERSION: '1.8.14'
       - name: Save only byte-verified legacy installer fixtures
         if: steps.historical-installers.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
@@ -381,6 +411,9 @@ jobs:
       - name: Verify original 1.8.8 clean install and real upgrade, runtime and uninstall
         shell: pwsh
         run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.8' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.8.exe' -DiagnosticAttempts 1
+      - name: Verify current-production 1.8.14 upgrade, runtime and uninstall
+        shell: pwsh
+        run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.14' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.14.exe' -DiagnosticAttempts 1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

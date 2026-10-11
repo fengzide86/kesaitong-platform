@@ -1,4 +1,5 @@
-# Generated for Python 3.10 from backend/requirements-dev.txt.
+# LEGACY REFERENCE ONLY: no active installer uses this file; use constraints-py312.txt.
+# Generated for the former Python 3.10 baseline.
 # Regenerate from a pip --dry-run JSON report before intentional dependency updates.
 
 aiomysql==0.2.0

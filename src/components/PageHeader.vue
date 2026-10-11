@@ -68,7 +68,9 @@ watch(
 
 onMounted(() => {
   if (typeof window === 'undefined' || !window.matchMedia) return
-  mediaQuery = window.matchMedia('(min-width: 768px)')
+  // With a desktop sidebar, several action buttons otherwise consume the whole
+  // title at 1025–1180px. Reuse the existing in-page action row for that range.
+  mediaQuery = window.matchMedia('(min-width: 1181px)')
   updateActionPlacement()
   mediaQuery.addEventListener?.('change', updateActionPlacement)
 })

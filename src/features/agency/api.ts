@@ -26,6 +26,18 @@ export const agencyApi = {
   async customers(params: ApiQueryParams = {}): Promise<Page<Customer>> {
     return pageSchema(customerSchema).parse(await api.get('/api/agency/customers', params, readOptions))
   },
+  async customer(id: number): Promise<Customer> {
+    return customerSchema.parse(await api.get(`/api/agency/customers/${id}`, {}, { cache: false }))
+  },
+  async order(id: number): Promise<AgencyOrder> {
+    return orderSchema.parse(await api.get(`/api/agency/orders/${id}`, {}, { cache: false }))
+  },
+  async license(id: number): Promise<AgencyLicense> {
+    return licenseSchema.parse(await api.get(`/api/agency/licenses/${id}`, {}, { cache: false }))
+  },
+  async request(id: number): Promise<ServiceRequest> {
+    return serviceRequestSchema.parse(await api.get(`/api/agency/requests/${id}`, {}, { cache: false }))
+  },
   async orders(params: ApiQueryParams = {}): Promise<Page<AgencyOrder>> {
     return pageSchema(orderSchema).parse(await api.get('/api/agency/orders', params, readOptions))
   },
@@ -58,6 +70,16 @@ export const agencyApi = {
   },
   async deliver(id: number): Promise<AgencyOrder> {
     return z.object({ data: orderSchema }).parse(await api.post(`/api/agency/orders/${id}/deliver`)).data
+  },
+  async refundOrder(id: number, reason: string): Promise<AgencyOrder> {
+    const payload: Schemas['OrderTransitionRequest'] = { reason }
+    await api.post(`/api/orders/${id}/refund`, payload)
+    return agencyApi.order(id)
+  },
+  async cancelOrder(id: number, reason: string): Promise<AgencyOrder> {
+    const payload: Schemas['OrderTransitionRequest'] = { reason }
+    await api.post(`/api/orders/${id}/cancel`, payload)
+    return agencyApi.order(id)
   },
   async createRequest(payload: Schemas['AgencyRequestCreate']): Promise<ServiceRequest> {
     return z.object({ data: serviceRequestSchema }).parse(await api.post('/api/agency/requests', payload)).data

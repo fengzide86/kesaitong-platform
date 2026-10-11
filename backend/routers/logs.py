@@ -2,8 +2,6 @@
 运行日志路由模块
 包含日志的创建、查询、筛选、导出等接口
 """
-import csv
-import io
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any, NoReturn
@@ -13,6 +11,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.capabilities import has_capability
+from core.csv_export import csv_row as _csv_row
 from core.dependencies import get_current_user
 from core.logging import get_logger
 from database import get_db
@@ -46,10 +46,14 @@ async def _stream_logs_csv(bind: Any, query: Any) -> AsyncIterator[str]:
             ])
 
 
-def _csv_row(values: list[object]) -> str:
-    output = io.StringIO(newline="")
-    csv.writer(output).writerow(values)
-    return output.getvalue()
+def _staff_log_reader(context: dict[str, Any]) -> bool:
+    if not context.get("staff_id"):
+        return False
+    if context.get("force_password_reset"):
+        raise HTTPException(status_code=403, detail="首次登录或密码重置后必须先修改密码")
+    if not has_capability(context.get("role", ""), "backoffice.read"):
+        raise HTTPException(status_code=403, detail="当前后台角色无权查看运行记录")
+    return True
 
 
 @router.get("", response_model=LogPageResponse)
@@ -79,14 +83,10 @@ async def get_logs(
     query = select(RunLog)
     
     # 权限控制：普通用户只能查看自己的日志
-    if current_user.get("role") != "admin":
-        user_id = current_user.get("user_id")  # 强制使用当前用户ID
-    elif user_id:
-        query = query.where(RunLog.user_id == user_id)
-    
-    # 普通用户强制只能看自己的
-    if current_user.get("role") != "admin":
+    if not _staff_log_reader(current_user):
         query = query.where(RunLog.user_id == current_user.get("user_id"))
+    elif user_id is not None:
+        query = query.where(RunLog.user_id == user_id)
     
     # 日期范围筛选
     if start_date:
@@ -156,9 +156,9 @@ async def export_logs(
     query = select(RunLog)
     
     # 权限控制：普通用户只能导出自己的日志
-    if current_user.get("role") != "admin":
+    if not _staff_log_reader(current_user):
         query = query.where(RunLog.user_id == current_user.get("user_id"))
-    elif user_id:
+    elif user_id is not None:
         query = query.where(RunLog.user_id == user_id)
     if start_date:
         try:
@@ -198,9 +198,9 @@ async def get_log_tools(
     """获取日志中的工具名称列表（用于筛选下拉框）"""
     query = select(RunLog.tool_name).distinct()
 
-    if current_user.get("role") != "admin":
+    if not _staff_log_reader(current_user):
         query = query.where(RunLog.user_id == current_user.get("user_id"))
-    elif user_id:
+    elif user_id is not None:
         query = query.where(RunLog.user_id == user_id)
     
     query = query.where(RunLog.tool_name.isnot(None))

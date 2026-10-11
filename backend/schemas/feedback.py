@@ -80,6 +80,8 @@ class FeedbackSummaryResponse(BaseModel):
     priority: str
     admin_reply: str | None = None
     created_at: str | None = None
+    replied_at: str | None = None
+    updated_at: str | None = None
     platform_key: str | None = None
     capability_key: str | None = None
     tool_id: str | None = None
@@ -89,8 +91,6 @@ class FeedbackDetailResponse(FeedbackSummaryResponse):
     screenshot: str | None = None
     screenshots: str | None = None
     status_history: str | None = None
-    replied_at: str | None = None
-    updated_at: str | None = None
     run_log_id: int | None = None
 
 

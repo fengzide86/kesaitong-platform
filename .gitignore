@@ -1,5 +1,6 @@
 # ===== 依赖目录 =====
 node_modules/
+node_modules.before-hardening.link/
 __pycache__/
 *.pyc
 *.pyo
@@ -70,6 +71,10 @@ build/
 MANIFEST
 
 # ===== 测试产物 =====
+release-admin-ux/
+release-hardening/
+release-hardening-final/
+release-hardening-accepted/
 test-results/
 playwright-report/
 .automation-profiles/

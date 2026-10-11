@@ -51,6 +51,22 @@ const requirePersistentExcludes = filename => {
 }
 
 const metadata = JSON.parse(read('package.json'))
+const nodeVersion = read('.node-version').trim()
+if (!/^22\.\d+\.\d+$/.test(nodeVersion)) throw new Error('.node-version must pin a supported project Node 22 patch')
+const workflow = read('.github/workflows/test.yml')
+const setupNodeCount = [...workflow.matchAll(/uses:\s*actions\/setup-node@/g)].length
+const pinnedNodeCount = [...workflow.matchAll(/node-version-file:\s*['"]?\.node-version['"]?\s*$/gm)].length
+if (!setupNodeCount || setupNodeCount !== pinnedNodeCount || /^\s*node-version:/m.test(workflow)) {
+  throw new Error('Every CI setup-node step must read .node-version without a competing hardcoded version')
+}
+const setupPythonCount = [...workflow.matchAll(/uses:\s*actions\/setup-python@/g)].length
+const python312Count = [...workflow.matchAll(/python-version:\s*['"]3\.12['"]/g)].length
+if (!setupPythonCount || setupPythonCount !== python312Count) throw new Error('Every Python CI job must use the Python 3.12 baseline')
+if (metadata.packageManager !== 'npm@12.2.0') throw new Error('Dependency resolution must use the tested npm 12.2.0 baseline')
+requireText('scripts/toolbox-cli.mjs', ["'Dependency security'"])
+requireText('backend/Dockerfile', ['FROM python:3.12-slim-bookworm'])
+requireText('ops/deploy/deploy-backend.sh', ['python3.12 -m venv'])
+requireText('.github/workflows/test.yml', ["NSIS_BASELINE_VERSION: '1.8.14'", 'pip-audit==2.10.1'])
 if (!metadata.scripts?.['verify:release']) throw new Error('package.json must expose verify:release')
 if (metadata.scripts?.['release:mariadb-gate'] !== 'node scripts/verify-release-mariadb-gate.mjs') {
   throw new Error('package.json must expose the guarded release:mariadb-gate')
@@ -141,12 +157,13 @@ requireText('scripts/verify-release-mariadb-gate.mjs', [
   "delete environment.TOOLBOX_CI_ATTESTED_SHA",
   "'npm run test:mariadb:required'",
 ])
-requireText('backend/Dockerfile', ['constraints-py310.txt', '-c /tmp/requirements/constraints-py310.txt'])
+requireText('backend/Dockerfile', ['constraints-py312.txt', '-c /tmp/requirements/constraints-py312.txt'])
 requireText('backend/requirements.txt', ['httpx==0.27.2'])
 rejectText('backend/requirements-dev.txt', ['httpx=='])
-requireText('backend/constraints-py310.txt', [
-  'async-timeout==5.0.1',
-  'exceptiongroup==1.3.1',
+requireText('backend/constraints-py312.txt', [
+  '# Generated for Python 3.12',
+  'fastapi==0.135.4',
+  'starlette==1.3.1',
 ])
 requireText('backend/start.bat', ['"%PYTHON%" -c "import main"'])
 requireText('scripts/check_python_constraint_closure.py', [
@@ -207,7 +224,7 @@ requireText('ops/deploy/deploy-backend.sh', [
   'chown root:toolbox "${STAGING_DIR}" "${STAGING_DIR}/backend"',
   'chmod 0750 "${STAGING_DIR}" "${STAGING_DIR}/backend"',
   'runuser -u toolbox -- test -r "${STAGING_DIR}/backend/requirements.txt"',
-  'runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py310.txt"',
+  'runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py312.txt"',
   'install -d -o root -g toolbox -m 0750 "${STAGING_DIR}/backend/updates"',
   'chmod -R a+rX "${VENV_BUILD_DIR}"',
   'runuser -u toolbox -- "${VENV_BUILD_DIR}/bin/python" -m pip check',
@@ -243,7 +260,7 @@ requireOrder('ops/deploy/deploy-backend.sh', [
   'require_commands \\',
   '"${ACTIVE_VENV_PYTHON}" - "${BACKEND_DIR}/.env"',
   'tar -xzf "${ARCHIVE_PATH}" -C "${STAGING_DIR}"',
-  'runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py310.txt"',
+  'runuser -u toolbox -- test -r "${STAGING_DIR}/backend/constraints-py312.txt"',
   'install -d -o root -g toolbox -m 0750 "${STAGING_DIR}/backend/updates"',
   'VENV_BUILD_MARKER="${VENV_ROOT}/.${EXPECTED_VERSION}-${RELEASE_ID}-${EXPECTED_COMMIT:0:12}.building"',
   '# Freeze writes before taking the attachment and database snapshots.',
@@ -293,6 +310,7 @@ rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbo
 // The existing frontend/production release gate runs these real filesystem
 // regressions as well as static invariants, including migrated compatibility
 // roots and directory/symbolic-link escapes. No deployment script is executed.
+execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/nsis-artifact-location.test.mjs')], { cwd: root, stdio: 'inherit' })
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
   cwd: root,
   stdio: 'inherit',

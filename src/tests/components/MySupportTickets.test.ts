@@ -24,6 +24,8 @@ interface Ticket {
   status: string
   admin_reply?: string | null
   created_at?: string
+  replied_at?: string | null
+  updated_at?: string | null
 }
 const ticket = (id: number, overrides: Partial<Ticket> = {}): Ticket => ({
   id, title: `安装问题 ${id}`, content: `需要说明安装步骤 ${id}`, status: 'pending',
@@ -50,6 +52,16 @@ beforeEach(() => { vi.resetAllMocks(); mocks.getMyFeedbacks.mockResolvedValue([]
 afterEach(() => wrappers.splice(0).forEach(wrapper => wrapper.unmount()))
 
 describe('my support ticket drawer', () => {
+  it('shows a shared ticket number and server reply time without treating a reply as resolution', async () => {
+    mocks.getMyFeedbacks.mockResolvedValue([ticket(42, { status: 'processing', admin_reply: '请核对设备', replied_at: '2026-10-11T03:30:00Z' })])
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.get('.support-ticket').text()).toContain('工单 #42')
+    expect(wrapper.get('.support-ticket').text()).toContain('最近回复：2026-10-11T03:30:00Z')
+    expect(wrapper.get('.support-ticket').text()).toContain('处理中')
+    expect(wrapper.get('.support-ticket').text()).not.toContain('已解决')
+  })
+
   it('loads only after opening and separates loading from the empty state', async () => {
     const pending = deferred()
     mocks.getMyFeedbacks.mockReturnValue(pending.promise)
