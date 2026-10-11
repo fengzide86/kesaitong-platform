@@ -2,6 +2,8 @@ import base64
 import hashlib
 import io
 import json
+import os
+import stat
 
 import pytest
 import yaml
@@ -10,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
+import domains.updates.service as service_module
 import routers.updates as updates_module
 from core.dependencies import require_super_admin
 from domains.updates.service import UpdateReleaseService
@@ -374,9 +377,84 @@ async def test_interrupted_copy_preserves_old_release_and_retries(tmp_path, monk
             service.publish("2.0.1")
     for name, content in previous.items():
         assert (service.releases_dir / name).read_bytes() == content
-    assert not list(service.staging_dir.glob(".publishing-*"))
+    assert not list(service.releases_dir.glob(".publishing-*"))
     assert service.publish("2.0.1")["status"] == "published"
     assert (service.releases_dir / "setup-2.0.1.exe").read_bytes() == b"new"
     # A later stage-file corruption must not mutate the published copy.
     (service.staging_dir / "2.0.1" / "setup-2.0.1.exe").write_bytes(b"changed")
     assert (service.releases_dir / "setup-2.0.1.exe").read_bytes() == b"new"
+
+
+@pytest.mark.asyncio
+async def test_public_permission_failure_keeps_previous_manifest(tmp_path, monkeypatch):
+    service = UpdateReleaseService(tmp_path / "updates")
+    await stage_fixture_release(service, "2.9.0", "setup-2.9.0.exe", b"previous")
+    service.publish("2.9.0")
+    previous_manifest = (service.releases_dir / "latest.yml").read_bytes()
+    await stage_fixture_release(service, "3.0.0", "setup-3.0.0.exe", b"candidate")
+    monkeypatch.setattr(service, "_prepare_public_file", lambda _path: (_ for _ in ()).throw(
+        HTTPException(409, "synthetic public permission failure")
+    ))
+
+    with pytest.raises(HTTPException, match="synthetic public permission failure"):
+        service.publish("3.0.0")
+    assert (service.releases_dir / "latest.yml").read_bytes() == previous_manifest
+    assert not list(service.releases_dir.glob(".latest.yml.tmp"))
+    assert not list(service.releases_dir.glob(".publishing-*"))
+    assert not list(service.staging_dir.glob(".publishing-*"))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX group ownership is not available on Windows")
+@pytest.mark.asyncio
+async def test_publishing_temp_inode_inherits_release_setgid(tmp_path):
+    service = UpdateReleaseService(tmp_path / "updates")
+    os.chmod(service.releases_dir, 0o2750)
+    release_gid = service.releases_dir.stat().st_gid
+    await stage_fixture_release(service, "3.1.0", "setup-3.1.0.exe", b"setgid-candidate")
+
+    service.publish("3.1.0")
+
+    for name in ("setup-3.1.0.exe", "setup-3.1.0.exe.blockmap", "latest.yml"):
+        metadata = (service.releases_dir / name).stat()
+        assert metadata.st_gid == release_gid
+        assert stat.S_IMODE(metadata.st_mode) == 0o640
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX group ownership is not available on Windows")
+def test_public_file_is_repaired_to_release_group_and_mode(tmp_path):
+    if os.geteuid() != 0:
+        pytest.skip("changing a fixture file to a different gid requires root in CI")
+    service = UpdateReleaseService(tmp_path / "updates")
+    path = service.releases_dir / "setup.exe"
+    path.write_bytes(b"complete")
+    release_gid = service.releases_dir.stat().st_gid
+    candidates = [gid for gid in os.getgroups() + [0] if gid != release_gid]
+    if not candidates:
+        pytest.skip("no alternate local gid available")
+    old_gid = candidates[0]
+    os.chown(path, -1, old_gid)
+    os.chmod(path, 0o600)
+
+    service._prepare_public_file(path)
+
+    metadata = path.stat()
+    assert metadata.st_gid == release_gid
+    assert stat.S_IMODE(metadata.st_mode) == 0o640
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX ownership APIs are not available on Windows")
+def test_public_file_chown_error_is_reported(monkeypatch, tmp_path):
+    if os.geteuid() != 0:
+        pytest.skip("changing a fixture file to a different gid requires root in CI")
+    service = UpdateReleaseService(tmp_path / "updates")
+    path = service.releases_dir / "setup.exe"
+    path.write_bytes(b"complete")
+    release_gid = service.releases_dir.stat().st_gid
+    candidates = [gid for gid in os.getgroups() + [0] if gid != release_gid]
+    if not candidates:
+        pytest.skip("no alternate local gid available")
+    os.chown(path, -1, candidates[0])
+    monkeypatch.setattr(service_module.os, "chown", lambda *_args: (_ for _ in ()).throw(PermissionError("synthetic chown")))
+
+    with pytest.raises(HTTPException, match="组权限无法校正"):
+        service._prepare_public_file(path)

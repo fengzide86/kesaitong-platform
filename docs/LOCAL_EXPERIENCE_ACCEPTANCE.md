@@ -9,6 +9,8 @@
 - CI 补充脱敏后端过程日志，保留真实异常堆栈，不上传测试凭据文件或原始过程日志。9 项日志/凭据清理回归通过，证据读取、写入或关流失败仍执行 owned 凭据清理，动态生成的授权码同样脱敏。
 - 上述最终修复的六条真实后端旅程一次 6/6 通过（无跳过、无重试），证据 `ci-fixes/real-final/run-mCnUK5`；凭据文件已清理，脱敏过程日志未匹配 JWT、测试授权或动态授权码。此为本地真实后端，不代表生产或外部亚马逊平台执行。
 - 最终后端完整覆盖回归更新为 **881 通过、14 个 MariaDB 项跳过、0 失败**，行覆盖 85.62%（16206/18928，项目原报告包含测试源码）；本次改动执行行覆盖 96.10%（74/77），通过 80% 门槛。证据 `ci-fixes/backend-final-with-streaming.*`；实库项由新 CI 独立执行，不把历史实库通过冒充本次结果。
+- 发布前补验发现更新文件硬链接会保留私有暂存 inode 的组，可能让 Nginx 无法读取新安装包。已修复为在公开更新目录创建随机临时 inode，复制并 fsync 完整后才校正/回读 `www-data` 组与 `0640` 权限，再建立硬链接；清单同样校验，失败保留旧清单并清理临时文件。更新服务专项 **19 通过、3 个 Windows POSIX 项跳过**，证据 `ci-fixes/update-permission-fix-final.*`；Linux CI 负责真实 setgid/chown 分支。
+- 官网只下载候选仍以官网对话最新模拟体验源码为准，未改 source/artifact/preview，也未连接公网。候选发布状态改为 schemaVersion=2 原子状态、O_EXCL 锁、断点树恢复、提交 checkpoint 识别和 `force-with-lease` 并发保护；`publication-recovery.test.mjs` 与守卫共 **19/19**，`check-local` 通过。候选没有 `publication-state.json`，未执行 prepare/publish；必须等核心正式发布产生真实 verified/released 回读后才能更新官网安装包地址。
 - 服务器已并列准备 `/opt/kst-runtimes/python-3.12.15` 和 `/usr/local/bin/python3.12`，保留系统 Python 3.10 与原 1.8.14 venv，未重启业务服务。标准库、默认 CA/主机名 HTTPS 校验、Redis PING、数据库结构导出权限及 Nginx 配置预检通过；结构导出不等于完整数据备份/恢复演练。准备证据位于 `D:\AmazonToolboxData\release-workflows\preflight-1.8.15`。
 - 官网以已发布来源 `0f637bc12a176df8b2137ecfe4e8343078981973`、公开提交 `863cb7f617504b08cf3790b50fb52864954ecd77` 为准。本轮先只发布系统；如更新官网下载地址，只使用该冻结源码且必须在新包公网验收后进行，不能覆盖为旧模拟体验。
 

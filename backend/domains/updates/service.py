@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import uuid
@@ -172,6 +173,9 @@ class UpdateReleaseService:
             if version_key == current_key:
                 if not self._published_files_match(verified_files, manifest_name):
                     raise HTTPException(409, f"v{version} 已发布，但线上文件与暂存内容不一致")
+                for item in verified_files:
+                    name = "latest.yml" if item["name"] == manifest_name else item["name"]
+                    self._prepare_public_file(self.releases_dir / name)
                 published_path = source / "published.json"
                 published = json.loads(published_path.read_text(encoding="utf-8")) if published_path.exists() else {}
                 return {
@@ -205,24 +209,31 @@ class UpdateReleaseService:
                 continue
             published_file = self.releases_dir / name
             if published_file.exists():
+                self._prepare_public_file(published_file)
                 continue
-            descriptor, temporary_name = tempfile.mkstemp(prefix=".publishing-", dir=self.staging_dir)
+            # Create the complete temporary inode in the public release
+            # directory. Its setgid bit assigns the download group at create
+            # time; toolbox is not allowed to chown files to www-data.
+            descriptor, temporary_name = tempfile.mkstemp(prefix=".publishing-", dir=self.releases_dir)
             temporary = Path(temporary_name)
             os.close(descriptor)
             try:
                 shutil.copy2(source / name, temporary)
-                os.chmod(temporary, 0o640)
                 with temporary.open("r+b") as prepared:
                     os.fsync(prepared.fileno())
+                self._prepare_public_file(temporary)
                 # Staging and public directories share a parent/filesystem.
                 # link is atomic and fails, rather than overwriting a collision.
                 os.link(temporary, published_file)
             finally:
                 temporary.unlink(missing_ok=True)
         manifest_temp = self.releases_dir / ".latest.yml.tmp"
-        shutil.copy2(source / manifest_name, manifest_temp)
-        os.chmod(manifest_temp, 0o640)
-        os.replace(manifest_temp, self.releases_dir / "latest.yml")
+        try:
+            shutil.copy2(source / manifest_name, manifest_temp)
+            self._prepare_public_file(manifest_temp)
+            os.replace(manifest_temp, self.releases_dir / "latest.yml")
+        finally:
+            manifest_temp.unlink(missing_ok=True)
         published_at = datetime.now(UTC).isoformat()
         (source / "published.json").write_text(
             json.dumps({"version": version, "published_at": published_at}, ensure_ascii=False), encoding="utf-8"
@@ -234,6 +245,36 @@ class UpdateReleaseService:
             "published_at": published_at,
             "is_latest": True,
         }
+
+    def _prepare_public_file(self, path: Path) -> None:
+        """Make a complete artifact readable only by its owner and release group.
+
+        Hard links retain the private staging inode's group; the public
+        directory's setgid bit applies to newly created files, not links.
+        Correct and verify permissions *before* exposing a link or manifest.
+        Also repair identical artifacts retained by an interrupted publication.
+        Windows keeps its ACL model and must never call POSIX ownership APIs.
+        """
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode):
+            raise HTTPException(409, "公开更新文件必须是普通文件")
+        if os.name == "posix":
+            release_gid = self.releases_dir.stat().st_gid
+            if metadata.st_gid != release_gid:
+                chown = getattr(os, "chown", None)
+                if not callable(chown):
+                    raise HTTPException(409, "当前系统不支持公开更新文件组权限校正")
+                try:
+                    chown(path, -1, release_gid)
+                except OSError as error:
+                    raise HTTPException(409, "公开更新文件组权限无法校正，未切换下载清单") from error
+            os.chmod(path, 0o640)
+            verified = path.lstat()
+            if verified.st_gid != release_gid or stat.S_IMODE(verified.st_mode) != 0o640:
+                raise HTTPException(409, "公开更新文件权限校验失败，未切换下载清单")
+        else:
+            # Windows chmod supports the read-only flag, not POSIX group bits.
+            os.chmod(path, 0o640)
 
     def list_releases(self) -> list[dict[str, object]]:
         releases: list[dict[str, object]] = []
