@@ -316,10 +316,14 @@ rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbo
 // roots and directory/symbolic-link escapes. No deployment script is executed.
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/nsis-artifact-location.test.mjs')], { cwd: root, stdio: 'inherit' })
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/npm-toolchain.test.mjs'), path.join(root, 'scripts/tests/update-delta-report.test.mjs'), path.join(root, 'scripts/tests/package-dependency-preflight.test.mjs')], { cwd: root, stdio: 'inherit' })
-execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
-  cwd: root,
-  stdio: 'inherit',
-})
+if (process.platform !== 'win32') {
+  execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
+    cwd: root,
+    stdio: 'inherit',
+  })
+} else {
+  console.log('deployment_path_tests=skipped platform=win32 linux-only shell regression')
+}
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/release-retirement.test.mjs')], {
   cwd: root,
   stdio: 'inherit',
