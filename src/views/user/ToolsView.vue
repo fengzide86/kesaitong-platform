@@ -397,6 +397,7 @@ function toolActionText(tool: ToolCatalogItem): string {
 }
 
 function cardActionText(tool: ToolCatalogItem): string {
+  if (liveUnavailable(tool)) return '下载桌面端'
   // Cards with guidance always open the read-only detail surface first. Keep
   // the CTA honest instead of implying that a click immediately starts work.
   if (!hasToolDetails(tool)) return toolActionText(tool)

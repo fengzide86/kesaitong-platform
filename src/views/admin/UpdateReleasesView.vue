@@ -32,7 +32,7 @@
           <template #default="{ row }"><div class="file-list"><span v-for="file in row.files" :key="file.name">{{ file.name }} · {{ formatBytes(file.size) }}</span></div></template>
         </el-table-column>
         <el-table-column label="状态" width="150">
-          <template #default="{ row }"><StatusBadge :status="row.is_latest ? 'completed' : row.status === 'published' ? 'neutral' : 'warning'">{{ row.is_latest ? '当前更新版本' : row.status === 'published' ? '历史已发布' : '待发布' }}</StatusBadge></template>
+          <template #default="{ row }"><StatusBadge :status="row.is_latest ? 'completed' : row.status === 'published' ? 'neutral' : 'warning'">{{ row.is_latest ? '当前更新版本' : row.status === 'published' ? '历史已发布' : '待发布' }}</StatusBadge><span v-if="row.status === 'published'" class="release-published-state">已发布</span></template>
         </el-table-column>
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
@@ -298,4 +298,5 @@ onBeforeUnmount(() => { disposed = true; uploadController?.abort() })
 <style scoped>
 .upload-status{margin-top:16px;padding:14px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface-soft);color:var(--color-text);font-size:var(--type-control)}
 .upload-status p{margin:8px 0;color:var(--color-text-secondary);line-height:1.6;overflow-wrap:anywhere}.upload-status :deep(.el-progress){margin-top:12px}.drawer-actions{flex-wrap:wrap}
+.release-published-state{display:inline-flex;align-items:center;margin-left:7px;color:var(--color-success);font-size:var(--type-meta);font-weight:700}
 </style>

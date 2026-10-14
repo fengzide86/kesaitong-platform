@@ -15543,44 +15543,79 @@
             "title": "Adapterversion"
           },
           "allowedRoutes": {
-            "items": {
-              "$ref": "#/components/schemas/TargetRoute"
-            },
-            "maxItems": 24,
-            "title": "Allowedroutes",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TargetRoute"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowedroutes"
           },
           "capabilities": {
-            "items": {
-              "const": "template.create.v1",
-              "enum": [
-                "template.create.v1"
-              ],
-              "type": "string"
-            },
-            "maxItems": 1,
-            "title": "Capabilities",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "const": "template.create.v1",
+                  "enum": [
+                    "template.create.v1"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
           },
           "edition": {
-            "enum": [
-              "v2",
-              "v3",
-              "unknown"
+            "anyOf": [
+              {
+                "enum": [
+                  "v2",
+                  "v3",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Edition",
-            "type": "string"
+            "title": "Edition"
           },
           "evidence": {
-            "$ref": "#/components/schemas/TargetEvidence"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "executionScopes": {
-            "items": {
-              "$ref": "#/components/schemas/TargetExecutionScope"
-            },
-            "maxItems": 32,
-            "title": "Executionscopes",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TargetExecutionScope"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executionscopes"
           },
           "reviewStatus": {
             "enum": [
@@ -15599,9 +15634,7 @@
         },
         "required": [
           "revision",
-          "reviewStatus",
-          "edition",
-          "evidence"
+          "reviewStatus"
         ],
         "title": "TargetProfileReview",
         "type": "object"
