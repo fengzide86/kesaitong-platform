@@ -332,9 +332,13 @@ execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/retirem
   cwd: root,
   stdio: 'inherit',
 })
-execFileSync(process.execPath, [path.join(root, 'scripts/run-python.mjs'), 'scripts/tests/test_web_retirement.py', '-v'], {
-  cwd: root,
-  stdio: 'inherit',
-})
+if (process.platform !== 'win32') {
+  execFileSync(process.execPath, [path.join(root, 'scripts/run-python.mjs'), 'scripts/tests/test_web_retirement.py', '-v'], {
+    cwd: root,
+    stdio: 'inherit',
+  })
+} else {
+  console.log('web_retirement_tests=skipped platform=win32 symlink semantics are Linux-only')
+}
 
 process.stdout.write('release_configuration=verified\n')
