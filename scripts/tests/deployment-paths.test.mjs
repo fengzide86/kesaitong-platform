@@ -105,8 +105,9 @@ for (const name of scripts) {
   test(`${name}: original, migrated, current-only roots work; foreign and dangling roots fail`, () => {
     const f = fixture()
     try {
-      const invoke = `${functionBody(source, 'canonical_deployment_root')}\ncanonical_deployment_root ${quote(shellPath(f.legacy))} ${quote(shellPath(f.current))}`
+      const currentRoot = canonicalShellPath(f.current)
       fs.mkdirSync(f.legacy)
+      const invoke = `${functionBody(source, 'canonical_deployment_root')}\ncanonical_deployment_root ${quote(canonicalShellPath(f.legacy))} ${quote(currentRoot)}`
       assert.equal(succeeds(invoke), canonicalShellPath(f.legacy))
       fs.rmdirSync(f.legacy)
       assert.equal(succeeds(invoke), canonicalShellPath(f.current))
