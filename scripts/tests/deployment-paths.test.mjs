@@ -33,6 +33,14 @@ function findShell() {
 }
 
 const shell = findShell()
+const canonicalShellPath = value => {
+  const candidate = shellPath(value)
+  if (process.platform !== 'win32') return candidate
+  const result = spawnSync(shell, ['-c', `readlink -e -- ${quote(candidate)}`], {
+    encoding: 'utf8', windowsHide: true,
+  })
+  return result.status === 0 ? result.stdout.trim() : candidate
+}
 function run(source) {
   return spawnSync(shell, ['-c', `export PATH="/usr/bin:$PATH"\nset -eu\n${source}`], {
     encoding: 'utf8', windowsHide: true, timeout: 15000,
@@ -79,7 +87,7 @@ function executable(directory) {
   fs.chmodSync(python, 0o755)
 }
 function venvContext(source, f) {
-  return `${functionBody(source, 'validate_venv_target')}\nVENV_ROOT=${quote(shellPath(path.join(f.current, 'venvs')))}\nLEGACY_VENV=${quote(shellPath(path.join(f.current, 'backend/.venv')))}\n`
+  return `${functionBody(source, 'validate_venv_target')}\nVENV_ROOT=${quote(canonicalShellPath(path.join(f.current, 'venvs')))}\nLEGACY_VENV=${quote(canonicalShellPath(path.join(f.current, 'backend/.venv')))}\n`
 }
 
 for (const name of scripts) {
@@ -99,11 +107,11 @@ for (const name of scripts) {
     try {
       const invoke = `${functionBody(source, 'canonical_deployment_root')}\ncanonical_deployment_root ${quote(shellPath(f.legacy))} ${quote(shellPath(f.current))}`
       fs.mkdirSync(f.legacy)
-      assert.equal(succeeds(invoke), shellPath(f.legacy))
+      assert.equal(succeeds(invoke), canonicalShellPath(f.legacy))
       fs.rmdirSync(f.legacy)
-      assert.equal(succeeds(invoke), shellPath(f.current))
+      assert.equal(succeeds(invoke), canonicalShellPath(f.current))
       link(f.current, f.legacy)
-      assert.equal(succeeds(invoke), shellPath(f.current))
+      assert.equal(succeeds(invoke), canonicalShellPath(f.current))
       fs.unlinkSync(f.legacy)
       link(f.outside, f.legacy)
       rejects(invoke)
@@ -146,9 +154,9 @@ test('restore-backup.sh: backup guard normalizes legacy input but rejects root, 
     fs.mkdirSync(backup, { recursive: true })
     fs.mkdirSync(sibling, { recursive: true })
     link(f.outside, path.join(backups, 'escape'))
-    const context = `${functionBody(source, 'validate_backup_target')}\nBACKUP_ROOT=${quote(shellPath(backups))}\n`
+    const context = `${functionBody(source, 'validate_backup_target')}\nBACKUP_ROOT=${quote(canonicalShellPath(backups))}\n`
     for (const target of [backup, path.join(f.legacy, 'backups/pre-release')]) {
-      assert.equal(succeeds(`${context}validate_backup_target ${quote(shellPath(target))}\nprintf '%s' "$BACKUP_DIR"`), shellPath(backup))
+      assert.equal(succeeds(`${context}validate_backup_target ${quote(shellPath(target))}\nprintf '%s' "$BACKUP_DIR"`), canonicalShellPath(backup))
     }
     for (const target of [backups, sibling, f.outside, path.join(backups, 'escape'), `${backups}/../../outside`, path.join(backups, 'missing')]) {
       rejects(`${context}validate_backup_target ${quote(shellPath(target))}`)
@@ -181,10 +189,10 @@ test('restore-backup.sh: old/new service metadata and old/new saved pointers pre
     rejects(context + inspect)
     const pointer = path.join(backup, 'current-venv.target')
     for (const target of [release, path.join(f.legacy, 'venvs/release')]) {
-      fs.writeFileSync(pointer, `${shellPath(target)}\n`)
+      fs.writeFileSync(pointer, `${canonicalShellPath(target)}\n`)
       assert.equal(succeeds(context + inspect), 'switch')
     }
-    fs.writeFileSync(pointer, `${shellPath(f.outside)}\n`)
+    fs.writeFileSync(pointer, `${canonicalShellPath(f.outside)}\n`)
     rejects(context + inspect)
     fs.unlinkSync(pointer)
     fs.writeFileSync(`${pointer}.missing`, '')
