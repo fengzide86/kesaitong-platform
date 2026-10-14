@@ -19,7 +19,7 @@ function fixture(withDependencies = false): string {
   temporaryRoots.push(temporary)
   const root = path.join(temporary, '中文 路径 & 空格!')
   mkdirSync(path.join(root, 'scripts'), { recursive: true })
-  for (const file of ['toolbox-cli.mjs', 'toolbox-entry.bat', 'launch-toolbox.ps1', 'with-toolbox-data-root.mjs', 'run-python.mjs']) {
+  for (const file of ['toolbox-cli.mjs', 'toolbox-entry.bat', 'launch-toolbox.ps1', 'with-toolbox-data-root.mjs', 'run-python.mjs', 'npm-toolchain.mjs']) {
     copyFileSync(path.join(repository, 'scripts', file), path.join(root, 'scripts', file))
   }
   for (const entry of entries) copyFileSync(path.join(repository, entry), path.join(root, entry))
@@ -28,7 +28,8 @@ function fixture(withDependencies = false): string {
       console.error('Cloudflare configuration missing'); process.exitCode = 17
     }
   `)
-  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1.2.3', scripts: {
+  copyFileSync(path.join(repository, '.node-version'), path.join(root, '.node-version'))
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version: '1.2.3', packageManager: 'npm@12.2.0', scripts: {
     'desktop:verify-installer': 'node -e "require(\'fs\').writeFileSync(\'pack-built.txt\', \'audited fixture\')"',
     'marketing:publish': 'node -e "console.error(\'Cloudflare configuration missing\');process.exit(17)" --',
   } }))
@@ -143,6 +144,16 @@ describe('KST local launchers and deployment boundaries', () => {
     expect(result.status).toBe(1)
     expect(`${result.stdout}\n${result.stderr}`).toContain('TOOLBOX_PYTHON')
     expect(result.stdout).not.toContain('预览配置检查通过')
+  })
+
+  it.runIf(windows)('real launcher rejects a different Node 22 patch before preview or npm execution', () => {
+    const root = fixture()
+    writeFileSync(path.join(root, '.node-version'), '22.0.0\n')
+    const result = execute(root, ['--dry-run'], '官网预览.bat')
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('pinned Node.js 22.0.0')
+    expect(result.stdout).not.toContain('[TOOLBOX] Source:')
+    expect(existsSync(path.join(root, 'node_modules'))).toBe(false)
   })
 
   it.runIf(windows)('real launcher uses a validated explicit Python before a broken local venv', () => {

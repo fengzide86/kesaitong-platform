@@ -24,10 +24,25 @@ class ExecutionReportResult(BaseModel):
     accepted: bool
     duplicate: bool
     execution_id: int | None = None
+    reconciled: bool = False
 
 
 class ExecutionReportResponse(APIResponse[ExecutionReportResult]):
     pass
+
+
+class ExecutionReconcileRequest(BaseModel):
+    """Read-only platform verification that resolves a prior inconclusive run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1, max_length=200)
+    status: Literal["succeeded"]
+    verification: Literal["same-object-list-and-details"]
+    object_ref: str = Field(min_length=1, max_length=128)
+    adapter_version: str | None = Field(default=None, max_length=50)
+    page_fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
+    completed_steps: int = Field(default=0, ge=0, le=500)
 
 
 class ExecutionResponse(BaseModel):

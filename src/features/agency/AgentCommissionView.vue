@@ -2,7 +2,7 @@
   <section class="commission-page">
     <div class="page-heading">
       <div>
-        <span class="eyebrow">COMMISSION LEDGER</span>
+        <span class="eyebrow">返佣明细</span>
         <h1>返佣结算</h1>
         <p>按已确认收款金额和平台为你配置的比例计提。这里仅展示账目，不会自动转账。</p>
       </div>

@@ -1,0 +1,15 @@
+import type { OperationReceipt, ProbeObservation, RunPlanPreview, SignedTargetProfile } from '@/shared/ipc/target-contract'
+
+export const targetHash = 'a'.repeat(64)
+export function targetProfile(status: SignedTargetProfile['profile']['reviewStatus'] = 'approved'): SignedTargetProfile {
+  return { profile: { schemaVersion: 1, id: 'school-a', revision: 1, name: '学校实训', providerId: 'bjysoft', productKey: 'amazon', edition: 'v2', entryUrl: 'https://school.example/entry', allowedRoutes: [{ origin: 'https://school.example', pathPrefix: '/entry', role: 'entry' }, { origin: 'https://school.example', pathPrefix: '/ECrossAmazon/', role: 'business' }], reviewStatus: status, capabilities: ['template.create.v1'], adapterVersion: 'bjysoft-v2-template.1', evidence: { edition: 'v2', pageFingerprint: targetHash, pageFingerprints: { courseMap: '1'.repeat(64), templateList: targetHash, templateEditor: '2'.repeat(64) }, markers: ['amazon-v2', 'seller-shipping-template'], source: 'admin-verified' }, executionScopes: [{ scenario: 'training', stage: 'not_applicable', courseRef: 'b'.repeat(64), source: 'admin-verified', evidenceRef: 'local-fixture-training-course' }] }, signature: status === 'approved' ? 'test-signature' : null, signingKeyId: status === 'approved' ? 'test-key' : null }
+}
+export function targetObservation(): ProbeObservation {
+  return { kind: 'matched', platformFamily: 'bjy-amazon', version: 'v2', origin: 'https://school.example', path: '/ECrossAmazon/SellerShippingTemplateSetting', pageFingerprint: targetHash, courseRef: 'b'.repeat(64), shopRef: 'c'.repeat(64), role: 'seller', localAccountRef: 'd'.repeat(64), evidence: ['amazon-v2', 'seller-shipping-template', 'verified-local-identity'], missing: [] }
+}
+export function targetPreview(): RunPlanPreview {
+  return { canExecute: true, blockers: [], steps: ['核对原模板', '保存模板', '重新读取同模板'], plan: { id: 'plan-1', schemaVersion: 1, context: { profileId: 'school-a', profileRevision: 1, edition: 'v2', scenario: 'training', stage: 'not_applicable', courseRef: 'b'.repeat(64), shopRef: 'c'.repeat(64), localAccountRef: 'd'.repeat(64), role: 'seller' }, contextHash: targetHash, inputHash: targetHash, adapterVersion: 'bjysoft-v2-template.1', recipeId: 'template.create', recipeVersion: '1.0.0', rulePackVersion: 'user-template-1', capability: 'template.create.v1', input: { name: '测试模板', currency: 'USD', pricingMode: 'weight-item', rules: [{ countries: ['美国'], serviceCode: '10001', transitTime: '3-5天', perOrder: '2', unitRate: '1', unit: 'lb' }] }, createdAt: '2026-10-12T00:00:00.000Z', expiresAt: '2026-10-12T01:00:00.000Z' } }
+}
+export function targetReceipt(status: OperationReceipt['status'] = 'verified'): OperationReceipt {
+  return { id: 'operation-1', planId: 'plan-1', profileId: 'school-a', profileRevision: 1, contextHash: targetHash, inputHash: targetHash, adapterVersion: 'bjysoft-v2-template.1', recipeVersion: '1.0.0', stage: 'not_applicable', status, objectRef: status === 'verified' ? 'template-1' : null, errorCode: status === 'needs_review' ? 'RESULT_UNKNOWN' : null, checks: status === 'verified' ? ['同模板规则一致'] : [], updatedAt: '2026-10-12T00:10:00.000Z' }
+}

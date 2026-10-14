@@ -44,7 +44,10 @@
       <p>授权与使用问题可添加微信 Moweiiong，说明你参加的比赛或课程，以及想使用的工具。你也可以通过官网的“申请使用”入口复制微信号，再自行打开微信添加。</p>
       <p>已有授权也可在 Windows 软件查看当前客服信息，或联系实际交付方。服务时间与处理进度以客服当日回复为准。</p>
     </section>
-    <footer><RouterLink to="/">返回课赛通官网</RouterLink></footer>
+    <footer>
+      <RouterLink to="/">返回课赛通官网</RouterLink>
+      <RouterLink to="/tools">查看工具介绍</RouterLink>
+    </footer>
   </main>
 </template>
 

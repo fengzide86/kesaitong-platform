@@ -65,6 +65,17 @@ describe('marketing visual hierarchy keeps existing actions usable', () => {
     expect(wrapper.findComponent(MarketingDownloadAction).exists()).toBe(false)
   })
 
+  it.each([
+    ['/competition/', '比赛备赛'],
+    ['/course/', '课程实训'],
+    ['/tools/', '工具介绍'],
+  ])('keeps the current navigation item highlighted for direct slash routes: %s', async (path, label) => {
+    const router = await routerAt(path)
+    const wrapper = mount(MarketingShell, { global: { plugins: [router] } })
+    wrappers.push(wrapper)
+    expect(wrapper.find('.marketing-shell-links a.active').text()).toBe(label)
+  })
+
   it('preserves all eight whole-card task links and their visible action labels', async () => {
     const router = await routerAt()
     const wrapper = mount(LandingTaskMap, { global: { plugins: [router] } })
@@ -90,7 +101,7 @@ describe('marketing visual hierarchy keeps existing actions usable', () => {
     expect(wrapper.findAll('.score-support-manual li')).toHaveLength(3)
     expect(wrapper.findAll('.score-support-assisted li')).toHaveLength(3)
     expect(wrapper.text()).toContain('需要关注的得分细节')
-    expect(wrapper.get('a').attributes('href')).toBe('/tools')
+    expect(wrapper.get('a').attributes('href')).toBe('/tools#tool-list')
     expect(fetch).not.toHaveBeenCalled()
   })
 })

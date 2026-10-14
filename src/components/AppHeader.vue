@@ -31,7 +31,7 @@
         <div class="header-right">
           <span v-if="!isAdmin && planBadge" :class="['plan-badge', { business: isBusiness }]">{{ planBadge }}</span>
           <MessageCenter v-if="!isAdmin" />
-          <UpdateStatusEntry :details-disabled="isBusiness && route.name === 'BusinessWorkspace'" />
+          <UpdateStatusEntry />
           <span v-if="isAdmin" class="admin-badge">{{ backofficeLabel }}</span>
 
           <el-dropdown trigger="click" placement="bottom-end" @command="handleCommand">

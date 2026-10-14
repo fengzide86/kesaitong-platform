@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.dependencies import get_current_admin
 from core.response import success_response
+from core.safe_target_route import SafeTargetRoute
 from database import get_db
+from schemas.target_profiles import TargetProfileListResponse, TargetProfileResponse, TargetProfileReview
+from services import target_profile_service
 from services.tool_release_service import (
     canonical_artifact,
     create_release,
@@ -18,7 +21,25 @@ from services.tool_release_service import (
     save_releases,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=SafeTargetRoute)
+
+
+@router.get("/target-profiles", response_model=TargetProfileListResponse)
+async def list_registered_target_profiles(
+    db: AsyncSession = Depends(get_db),
+    admin: dict[str, Any] = Depends(get_current_admin),
+) -> dict[str, Any]:
+    return success_response(await target_profile_service.list_profiles(db, admin, admin=True))
+
+
+@router.post("/target-profiles/{profile_id}/review", response_model=TargetProfileResponse)
+async def review_registered_target_profile(
+    profile_id: str,
+    payload: TargetProfileReview,
+    db: AsyncSession = Depends(get_db),
+    admin: dict[str, Any] = Depends(get_current_admin),
+) -> dict[str, Any]:
+    return success_response(await target_profile_service.review_profile(db, profile_id, payload, admin), "入口审核已保存")
 
 RELEASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 

@@ -36,6 +36,14 @@ APPROVED_TEST_VALUES = {
     "scripts/verify_mariadb_upgrade.py": {"isolated-migration-rehearsal-not-for-production-only"},
     "scripts/tests/test_review_gates.py": {"audit-not-real-value"},
 }
+# Only these exact negative URL fixtures, in these exact files, were reviewed.
+# Split source literals prevent this policy declaration itself being scanned as
+# an endpoint; the runtime allowlist still contains complete exact URLs.
+APPROVED_NEGATIVE_TEST_URLS = {
+    "backend/tests/api/test_target_profiles.py": {"http://" "192.168.1.2/a"},
+    "src/tests/electron/targetController.test.ts": {"http://" "10.28.2.187:851/User/LoginPage24"},
+    "src/tests/electron/targetRuntimePolicy.test.ts": {"http://" "192.168.1.1/"},
+}
 
 
 def git(*args: str) -> str:
@@ -54,6 +62,8 @@ def suspicious_lines(content: str, file: str = "") -> list[int]:
                 if value and value in APPROVED_TEST_VALUES.get(file.replace("\\", "/"), set()):
                     continue
                 if match.group().startswith(("http://", "https://")):
+                    if match.group() in APPROVED_NEGATIVE_TEST_URLS.get(file.replace("\\", "/"), set()):
+                        continue
                     try:
                         endpoint = urlsplit(match.group())
                     except ValueError:

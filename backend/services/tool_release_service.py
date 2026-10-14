@@ -58,8 +58,8 @@ def verify_manifest_signature(manifest: dict[str, Any], signature_b64: str, publ
 
 
 def build_manifest(release: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "schemaVersion": 1,
+    manifest = {
+        "schemaVersion": 2 if int(release.get("runner_api_version", 1)) >= 2 else 1,
         "toolId": release["tool_id"],
         "version": release["version"],
         "scriptKey": release["script_key"],
@@ -67,6 +67,9 @@ def build_manifest(release: dict[str, Any]) -> dict[str, Any]:
         "artifactSha256": release.get("artifact_sha256", "embedded"),
         "artifactUrl": release.get("artifact_url"),
     }
+    if release.get("required_capability"):
+        manifest["requiredCapability"] = str(release["required_capability"])
+    return manifest
 
 
 def version_key(version: str) -> tuple[int, ...]:
@@ -81,8 +84,9 @@ def rollout_bucket(tool_id: str, version: str, subject: str) -> int:
     return int.from_bytes(digest[:4], "big") % 100
 
 
-def resolve_release(releases: list[dict[str, Any]], tool_id: str, subject: str) -> dict[str, Any] | None:
-    published = [r for r in releases if r.get("tool_id") == tool_id and r.get("status") == "published"]
+def resolve_release(releases: list[dict[str, Any]], tool_id: str, subject: str, client_runner_api_version: int = 1) -> dict[str, Any] | None:
+    published = [r for r in releases if r.get("tool_id") == tool_id and r.get("status") == "published"
+                 and int(r.get("runner_api_version", r.get("manifest", {}).get("runnerApiVersion", 1))) <= client_runner_api_version]
     canaries = sorted(
         (r for r in published if r.get("channel") == "canary"),
         key=lambda item: version_key(item.get("version", "0")),
@@ -118,6 +122,10 @@ def create_release(payload: dict[str, Any], private_key_b64: str | None = None) 
         "status": payload.get("status", "draft"),
         "created_at": datetime.now(UTC).isoformat(),
     }
+    if payload.get("required_capability"):
+        if release["runner_api_version"] != 2 or payload["required_capability"] != "template.create.v1":
+            raise ValueError("目标入口能力需要 Runner 协议 2 且属于已支持能力")
+        release["required_capability"] = payload["required_capability"]
     if adapter is not None:
         release["adapter"] = adapter
     release["manifest"] = build_manifest(release)
@@ -163,5 +171,5 @@ async def save_releases(db: AsyncSession, releases: list[dict[str, Any]]) -> Non
     await db.commit()
 
 
-async def resolve_release_for_launch(db: AsyncSession, tool_id: str, subject: str) -> dict[str, Any] | None:
-    return resolve_release(await load_releases(db), tool_id, subject)
+async def resolve_release_for_launch(db: AsyncSession, tool_id: str, subject: str, client_runner_api_version: int = 1) -> dict[str, Any] | None:
+    return resolve_release(await load_releases(db), tool_id, subject, client_runner_api_version)

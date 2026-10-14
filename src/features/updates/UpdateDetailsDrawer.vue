@@ -21,15 +21,20 @@
           <div><strong>正在检查新版本</strong><span>检查完成后这里会自动更新，不会遮挡其他页面。</span></div>
         </div>
         <div v-else-if="store.state.status === 'downloading'" class="progress-block">
-          <div><span>正在后台下载</span><strong>{{ store.displayPercent }}%</strong></div>
-          <div class="progress-track" role="progressbar" :aria-valuenow="store.displayPercent" aria-valuemin="0" aria-valuemax="100">
+          <div><span>{{ downloadPhaseLabel }}</span><strong>{{ store.displayPercent }}%</strong></div>
+          <div class="progress-track" role="progressbar" aria-label="更新下载进度" :aria-valuenow="store.displayPercent" aria-valuemin="0" aria-valuemax="100">
             <span :style="{ width: `${store.state.percent ?? 0}%` }" />
           </div>
           <p>{{ transferredLabel }}</p>
+          <p v-if="speedLabel">{{ speedLabel }}</p>
+          <p v-if="store.state.downloadStalled" class="download-hint" role="status">暂未收到新的下载数据。可以继续等待，或取消后重试；当前软件仍可使用。</p>
+          <p v-if="store.state.downloadPhase === 'finalizing'" class="download-hint" role="status">正在确认下载结果，完成后才会提示安装。</p>
         </div>
-
+        <div v-else-if="store.state.status === 'cancelling'" class="state-notice is-checking" role="status">
+          <LoaderCircle :size="18" class="is-spinning" /><div><strong>正在取消下载</strong><span>正在结束当前请求，请稍等；完成后可以重新下载。</span></div>
+        </div>
         <div v-else-if="store.state.status === 'restart_deferred'" class="state-notice is-warning">
-          <strong>更新已准备好</strong><span>当前工作不会被打断，完成后即可安全重启。</span>
+          <strong>更新已准备好</strong><span>{{ store.state.canRestart ? '现在可以重启安装，也可以按你的选择在退出软件时安装。' : '当前工作尚未结束，暂不能重启。完成后可以在这里安装。' }}</span>
         </div>
         <div v-else-if="store.state.status === 'error'" class="state-notice is-danger">
           <strong>{{ errorCopy.title }}</strong><span>{{ errorCopy.detail }} 错误编号：{{ store.state.errorCode || 'UPDATE_ERROR' }}</span>
@@ -58,12 +63,18 @@
           <template v-else-if="store.state.status === 'cancelled'">
             <button class="button primary" type="button" @click="store.startDownload">重新下载</button>
           </template>
+          <template v-else-if="store.state.status === 'cancelling'">
+            <button class="button secondary" type="button" @click="store.closeDetails">返回工作</button>
+            <button class="button primary" type="button" disabled>正在取消…</button>
+          </template>
           <template v-else-if="store.state.status === 'error' || store.state.status === 'idle'">
             <button v-if="store.state.status === 'error' && errorCopy.canUseWebsite" class="button secondary" type="button" @click="openDownloadWebsite">打开官网下载</button>
-            <button class="button primary" type="button" @click="store.checkManually">重新检查</button>
+            <button v-if="store.state.canRetryInstall" class="button primary" type="button" @click="store.install">重新尝试安装</button>
+            <button v-else-if="store.state.canRetryDownload" class="button primary" type="button" @click="store.startDownload">重新下载</button>
+            <button v-else class="button primary" type="button" @click="store.checkManually">重新检查</button>
           </template>
-          <template v-else-if="store.state.status === 'downloaded'">
-            <button class="button secondary" type="button" @click="store.deferInstall">退出时安装</button>
+          <template v-else-if="store.state.status === 'downloaded' || store.state.status === 'restart_deferred'">
+            <button v-if="store.state.status === 'downloaded'" class="button secondary" type="button" @click="store.deferInstall">退出时安装</button>
             <button class="button primary" type="button" :disabled="!store.state.canRestart" @click="store.install">立即重启</button>
           </template>
           <button v-else class="button primary" type="button" @click="store.closeDetails">知道了</button>
@@ -78,15 +89,13 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { Download, LoaderCircle, X } from '@lucide/vue'
-import { useAppStore } from '@/stores/app'
 import { useUpdateStore } from './store'
 
 const store = useUpdateStore()
-const appStore = useAppStore()
 const route = useRoute()
 const drawerRef = ref<HTMLElement | null>(null)
 let returnFocus: HTMLElement | null = null
-const isRestrictedRoute = computed(() => appStore.toolVisible || ['UserLogin', 'AdminLogin', 'BusinessWorkspace'].includes(String(route.name)))
+const isRestrictedRoute = computed(() => ['UserLogin', 'AdminLogin'].includes(String(route.name)))
 const visible = computed(() => store.drawerOpen && !isRestrictedRoute.value)
 watch(isRestrictedRoute, value => { if (value) store.closeDetails() })
 watch(visible, async value => {
@@ -112,10 +121,17 @@ const errorCopy = computed(() => {
     case 'FEED_INVALID':
       return { title: '更新清单暂时不可用', detail: '请稍后重新检查，也可以打开官网下载。', canUseWebsite: true }
     case 'INSTALL_BUSY':
-    case 'INSTALL_QUIESCE_FAILED':
       return { title: '当前任务尚未结束', detail: '完成或退出当前任务后再安装更新。', canUseWebsite: false }
+    case 'INSTALL_QUIESCE_FAILED':
+    case 'INSTALL_QUIESCE_TIMEOUT':
+      return { title: '暂时无法安全结束本机服务', detail: '可以重新尝试安装；如果仍然失败，请重新打开软件后再试。', canUseWebsite: false }
     case 'INSTALL_LAUNCH_FAILED':
-      return { title: '安装程序未能启动', detail: '请重新检查，或打开官网下载后手动安装。', canUseWebsite: true }
+    case 'INSTALL_LAUNCH_TIMEOUT':
+      return { title: '安装程序未能启动', detail: '请重新下载以恢复更新状态，或打开官网下载。若要继续使用原版本，请重新打开软件；本机服务可能已结束。', canUseWebsite: true }
+    case 'INSTALLER_MISSING':
+      return { title: '更新文件已失效', detail: '本机安装文件已不存在，请重新下载后再安装。', canUseWebsite: true }
+    case 'INSTALLER_UNREADABLE':
+      return { title: '无法读取更新文件', detail: '请检查磁盘或安全软件限制，再重新下载。', canUseWebsite: true }
     case 'DOWNLOAD_CANCELLED':
       return { title: '更新下载已取消', detail: '可以重新检查并再次下载。', canUseWebsite: false }
     case 'DOWNLOAD_FAILED':
@@ -125,11 +141,13 @@ const errorCopy = computed(() => {
   }
 })
 const title = computed(() => ({
-  idle: '检查应用更新', checking: '正在检查更新', available: '新版本已经准备发布', downloading: '正在获取新版本',
+  idle: '检查应用更新', checking: '正在检查更新', available: '发现新版本', downloading: '正在获取新版本', cancelling: '正在取消下载',
   downloaded: '更新已下载完成', restart_deferred: '完成当前工作后重启', installing: '正在安全重启',
   cancelled: '更新下载已取消', error: '更新遇到问题',
 })[store.state.status])
-const marketingSiteUrl = computed(() => String(import.meta.env.VITE_MARKETING_SITE_URL || 'https://fengzide86.github.io').trim())
+const marketingSiteUrl = computed(() => String(import.meta.env.VITE_MARKETING_SITE_URL || 'https://kesaitong.top').trim())
+const downloadPhaseLabel = computed(() => store.state.downloadPhase === 'preparing' ? '正在准备下载' : store.state.downloadPhase === 'finalizing' ? '正在确认下载结果' : '正在后台下载')
+const speedLabel = computed(() => store.state.downloadPhase === 'transferring' && store.state.bytesPerSecond != null && !store.state.downloadStalled ? `当前速度 ${formatBytes(store.state.bytesPerSecond)}/秒` : '')
 const transferredLabel = computed(() => {
   if (store.state.transferredBytes == null || store.state.totalBytes == null) return '正在获取下载信息'
   return `${formatBytes(store.state.transferredBytes)} / ${formatBytes(store.state.totalBytes)}`
@@ -168,6 +186,8 @@ async function openDownloadWebsite(): Promise<void> {
 @media(prefers-reduced-motion:reduce){.update-drawer-enter-active,.update-drawer-leave-active,.update-drawer-enter-active .update-drawer,.update-drawer-leave-active .update-drawer,.progress-track span{transition:none}}
 .update-drawer-layer{background:transparent;pointer-events:none}.update-drawer{pointer-events:auto}
 .download-size{margin:-10px 0 18px;color:var(--color-text-secondary);font-size:var(--type-meta);text-align:right}
+.progress-block .download-hint{text-align:left;line-height:1.6;color:var(--color-text-secondary)}
+.update-drawer footer{flex-wrap:wrap}
 .is-checking{grid-template-columns:auto 1fr;align-items:center;color:var(--color-primary);background:var(--color-primary-soft)}
 .is-checking>div{display:grid;gap:4px}
 .is-spinning{animation:update-drawer-spin 1s linear infinite}

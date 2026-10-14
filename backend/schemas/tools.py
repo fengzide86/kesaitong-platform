@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue, RootModel
 
+from schemas.target_profiles import SignedTargetProfile
+
 
 class ConfigJsonValue(RootModel[JsonValue]):
     """Explicit whitelist for administrator-managed free-form JSON settings."""
@@ -26,6 +28,9 @@ class ToolManifestResponse(BaseModel):
     runnerApiVersion: int
     artifactSha256: str | None
     artifactUrl: str | None
+    targetProfileId: str | None = None
+    targetProfileRevision: int | None = None
+    requiredCapability: str | None = None
 
 
 class LaunchDataResponse(BaseModel):
@@ -48,6 +53,7 @@ class LaunchDataResponse(BaseModel):
     execution_mode: str
     client_batch_id: str | None
     client_item_id: str | None
+    target_profile: SignedTargetProfile | None = None
 
 
 class LaunchGrantDataResponse(BaseModel):
@@ -74,6 +80,9 @@ class LaunchGrantVerifyDataResponse(BaseModel):
     execution_mode: str
     client_batch_id: str | None
     client_item_id: str | None
+    target_profile_id: str | None = None
+    target_profile_revision: int | None = None
+    required_capability: str | None = None
 
 
 class LaunchGrantVerifyRequest(BaseModel):

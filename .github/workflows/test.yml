@@ -384,10 +384,15 @@ jobs:
         run: node scripts/prepare-nsis-upgrade.mjs
         env:
           NSIS_BASELINE_VERSION: '1.8.8'
-      - name: Fetch pinned current-production 1.8.14 release for upgrade acceptance
+      - name: Fetch pinned current-production 1.8.15 release for upgrade acceptance
         run: node scripts/prepare-nsis-upgrade.mjs
         env:
-          NSIS_BASELINE_VERSION: '1.8.14'
+          NSIS_BASELINE_VERSION: '1.8.15'
+          NSIS_DOWNLOAD_BLOCKMAP: '1'
+      - name: Report candidate delta against verified production bytes (not a speed claim)
+        run: node scripts/report-update-delta.mjs
+        env:
+          TOOLBOX_UPDATE_BASELINE_VERSION: '1.8.15'
       - name: Save only byte-verified legacy installer fixtures
         if: steps.historical-installers.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
@@ -411,9 +416,9 @@ jobs:
       - name: Verify original 1.8.8 clean install and real upgrade, runtime and uninstall
         shell: pwsh
         run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.8' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.8.exe' -DiagnosticAttempts 1
-      - name: Verify current-production 1.8.14 upgrade, runtime and uninstall
+      - name: Verify current-production 1.8.15 upgrade, runtime and uninstall
         shell: pwsh
-        run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.14' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.14.exe' -DiagnosticAttempts 1
+        run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.15' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.15.exe' -DiagnosticAttempts 1
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -422,6 +427,7 @@ jobs:
             release/KST Setup *.exe
             release/KST Setup *.exe.blockmap
             release/latest.yml
+            release/update-delta-report.json
             test-results/nsis/**
             test-results/nsis-memory/**
           retention-days: 3

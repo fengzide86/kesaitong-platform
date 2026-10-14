@@ -11,7 +11,12 @@ const headingId = `case-results-${getCurrentInstance()?.uid ?? 0}`
 const results = ref<HTMLElement | null>(null)
 const awardEntered = ref(false)
 const viewedCertificate = ref<CertificateEvidence | null>(null)
+const loadedCertificates = ref(new Set<string>())
 let awardObserver: IntersectionObserver | undefined
+
+function markCertificateLoaded(id: string): void {
+  loadedCertificates.value = new Set(loadedCertificates.value).add(id)
+}
 
 function scoreChange(item: CaseOutcome): number | null {
   return typeof item.after.value === 'number' ? item.after.value - item.before.value : null
@@ -47,7 +52,7 @@ onBeforeUnmount(() => awardObserver?.disconnect())
       <article v-for="item in cases" :key="item.id" class="case-card" :class="[`case-${item.id}`, { 'award-detail': item.id === 'competition' && kind === 'competition', 'award-entered': item.id === 'competition' && awardEntered }]" :data-case-id="item.id">
         <template v-if="item.id === 'competition'">
           <div class="award-copy">
-            <div class="award-eyebrow"><Trophy :size="18" aria-hidden="true" /><span>2025 年 · 第六届全国数字贸易技能大赛</span></div>
+            <div class="award-eyebrow"><Trophy :size="18" aria-hidden="true" /><span>2025 年 · 往届案例 · 第六届全国数字贸易技能大赛</span></div>
             <h3 class="case-award"><span>跨境电商赛 · 全国总决赛</span><strong>一等奖</strong></h3>
             <div class="case-before award-baseline"><span>从及格起步</span><strong>{{ item.before.value }}<span>{{ item.before.unit }}</span></strong><span>使用者提供的起点成绩</span></div>
             <p class="award-story">课赛通聚焦商品发布、物流模板与发货等重复环节，把更多时间留给规则理解与运营判断。</p>
@@ -58,7 +63,10 @@ onBeforeUnmount(() => awardObserver?.disconnect())
             </div>
           </div>
           <button type="button" class="award-document" data-testid="award-open-certificate" :aria-label="`放大查看${competitionAwardEvidence.title}`" @click="viewedCertificate = competitionAwardEvidence">
-            <img :src="competitionAwardEvidence.thumbnail!.src" :width="competitionAwardEvidence.thumbnail!.width" :height="competitionAwardEvidence.thumbnail!.height" :alt="competitionAwardEvidence.alt" loading="lazy" decoding="async" />
+            <span class="award-thumbnail" :class="{ 'is-loaded': loadedCertificates.has(competitionAwardEvidence.id) }" aria-hidden="true">
+              <span class="award-thumbnail-placeholder">证书预览</span>
+              <img :src="competitionAwardEvidence.thumbnail!.src" :width="competitionAwardEvidence.thumbnail!.width" :height="competitionAwardEvidence.thumbnail!.height" :alt="competitionAwardEvidence.alt" loading="lazy" decoding="async" @load="markCertificateLoaded(competitionAwardEvidence.id)" />
+            </span>
             <span><Expand :size="17" aria-hidden="true" />查看获奖证书</span>
           </button>
         </template>
@@ -133,7 +141,11 @@ onBeforeUnmount(() => awardObserver?.disconnect())
 .award-story { margin: 16px 0 0; color: #e0e8f2; font-size: 14px; line-height: 1.85; }
 .award-source { display: block; margin-top: 18px; color: var(--award-muted); font-size: 13px; line-height: 1.7; }
 .award-document { display: flex; flex-direction: column; align-items: stretch; min-width: 0; min-height: 44px; padding: 0; border: 0; color: var(--award-gold); background: transparent; cursor: pointer; font: inherit; text-align: center; transition: transform 180ms ease; }
-.award-document img { display: block; width: 100%; height: auto; max-height: 200px; object-fit: contain; border-radius: 4px; }
+.award-thumbnail { position: relative; display: block; min-height: 120px; border-radius: 4px; background: linear-gradient(135deg, #ffffff14, #ffffff08); overflow: hidden; }
+.award-thumbnail-placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--award-muted); font-size: 12px; letter-spacing: .04em; transition: opacity 180ms ease; }
+.award-thumbnail img { position: relative; z-index: 1; display: block; width: 100%; height: auto; max-height: 200px; object-fit: contain; border-radius: 4px; opacity: 0; transition: opacity 180ms ease; }
+.award-thumbnail.is-loaded img { opacity: 1; }
+.award-thumbnail.is-loaded .award-thumbnail-placeholder { opacity: 0; }
 .award-document > span { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; margin-top: 8px; color: var(--award-gold); font-size: 13px; line-height: 1.6; }
 .award-document > span svg { flex: 0 0 auto; }
 .award-document:focus-visible, .qualification-link:focus-visible { outline: 3px solid var(--award-gold); outline-offset: 6px; }
@@ -149,6 +161,7 @@ onBeforeUnmount(() => awardObserver?.disconnect())
 .award-detail .award-baseline { margin-top: 26px; }
 .award-detail .award-story { max-width: 440px; font-size: 16px; }
 .award-detail .award-document { padding: 16px 16px 4px; border: 1px solid #ffffff24; border-radius: 10px; background: #ffffff08; }
+.award-detail .award-thumbnail { min-height: 260px; }
 .award-detail .award-document img { max-height: 360px; }
 .award-detail .award-document > span { font-size: 14px; }
 .case-competition.award-entered { animation: award-arrive 500ms cubic-bezier(.2, .7, .2, 1) both; }
@@ -158,9 +171,9 @@ onBeforeUnmount(() => awardObserver?.disconnect())
 .single-case .case-score-bars { max-width: 720px; }
 @keyframes award-arrive { from { opacity: .7; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (hover: hover) { .award-document:hover { transform: translateY(-2px); }.qualification-link:hover { color: var(--award-gold); } }
-@media (max-width: 1100px) { .case-competition:not(.award-detail) { grid-template-columns: minmax(0, 1fr); gap: 20px; }.case-competition:not(.award-detail) .award-document { flex-direction: row; align-items: center; gap: 16px; }.case-competition:not(.award-detail) .award-document img { width: 68px; max-height: 94px; }.case-competition:not(.award-detail) .award-document > span { margin: 0; }.award-detail { gap: 32px; padding: 34px; } }
+@media (max-width: 1100px) { .case-competition:not(.award-detail) { grid-template-columns: minmax(0, 1fr); gap: 20px; }.case-competition:not(.award-detail) .award-document { flex-direction: row; align-items: center; gap: 16px; }.case-competition:not(.award-detail) .award-thumbnail { min-width: 68px; }.case-competition:not(.award-detail) .award-document img { width: 68px; max-height: 94px; }.case-competition:not(.award-detail) .award-document > span { margin: 0; }.award-detail { gap: 32px; padding: 34px; } }
 @media (max-width: 900px) { .case-card { padding: 26px 24px; }.case-card-heading { flex-wrap: wrap; gap: 8px; }.case-value-row { gap: 10px; }.case-value-row strong { font-size: 58px; }.award-detail { grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr); gap: 24px; }.award-detail .case-award strong { font-size: 64px; } }
-@media (max-width: 700px) { .case-grid { grid-template-columns: 1fr; gap: 16px; }.case-card-heading { flex-wrap: nowrap; }.case-value-row { margin-top: 28px; }.case-competition:not(.award-detail) { grid-template-columns: minmax(0, 1fr) 100px; gap: 20px; }.case-competition:not(.award-detail) .award-document { flex-direction: column; gap: 0; }.case-competition:not(.award-detail) .award-document img { width: 100%; max-height: 170px; }.case-competition:not(.award-detail) .award-document > span { margin-top: 8px; }.award-detail { grid-template-columns: minmax(0, 1fr); }.award-detail .award-document { width: min(100%, 350px); justify-self: center; }.award-detail .award-document img { max-height: 320px; } }
+@media (max-width: 700px) { .case-grid { grid-template-columns: 1fr; gap: 16px; }.case-card-heading { flex-wrap: nowrap; }.case-value-row { margin-top: 28px; }.case-competition:not(.award-detail) { grid-template-columns: minmax(0, 1fr) 100px; gap: 20px; }.case-competition:not(.award-detail) .award-document { flex-direction: column; gap: 0; }.case-competition:not(.award-detail) .award-thumbnail { min-height: 120px; }.case-competition:not(.award-detail) .award-document img { width: 100%; max-height: 170px; }.case-competition:not(.award-detail) .award-document > span { margin-top: 8px; }.award-detail { grid-template-columns: minmax(0, 1fr); }.award-detail .award-document { width: min(100%, 350px); justify-self: center; }.award-detail .award-thumbnail { min-height: 230px; }.award-detail .award-document img { max-height: 320px; } }
 @media (max-width: 480px) { .case-grid { margin-top: 26px; }.case-card { padding: 26px 22px; }.case-value-row strong, .single-case .case-value-row strong { font-size: 58px; }.case-value-row strong span { font-size: 16px; }.case-source-label { font-size: 13px; }.case-value-row p { font-size: 14px; }.case-arrow { width: 22px; margin-bottom: 14px; }.case-difference { gap: 12px; }.case-difference strong { font-size: 42px; }.case-competition:not(.award-detail) { grid-template-columns: minmax(0, 1fr); gap: 20px; }.case-competition:not(.award-detail) .award-document { flex-direction: row; gap: 16px; }.case-competition:not(.award-detail) .award-document img { width: 64px; max-height: 88px; }.case-competition:not(.award-detail) .award-document > span { margin: 0; }.case-award strong { font-size: 52px; }.award-detail .case-award strong { font-size: 64px; }.award-detail .award-story { font-size: 15px; }.award-detail .award-eyebrow { font-size: 14px; }.qualification-link { flex-wrap: wrap; gap: 6px; font-size: 13px; } }
-@media (prefers-reduced-motion: reduce) { .case-competition.award-entered { animation: none; }.award-document { transition: none; }.award-document:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .case-competition.award-entered { animation: none; }.award-document, .award-thumbnail img, .award-thumbnail-placeholder { transition: none; }.award-document:hover { transform: none; } }
 </style>

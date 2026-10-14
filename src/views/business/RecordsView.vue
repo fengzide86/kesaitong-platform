@@ -1,6 +1,6 @@
 <template>
   <div class="records-page">
-    <PageHeader eyebrow="BUSINESS RECORDS" title="批量执行记录" description="查看真实批次结果与本机恢复状态。">
+    <PageHeader eyebrow="批量记录" title="批量执行记录" description="查看真实批次结果与本机恢复状态。">
       <template #actions><button type="button" @click="helpOpen = true">记录核对 / 使用帮助</button><button @click="load(false)"><RefreshCw :size="15" />刷新</button></template>
     </PageHeader>
     <RecoveryPanel />

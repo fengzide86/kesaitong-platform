@@ -9,7 +9,11 @@ export type StableUpdateErrorCode =
   | 'CHECK_FAILED'
   | 'INSTALL_BUSY'
   | 'INSTALL_QUIESCE_FAILED'
+  | 'INSTALL_QUIESCE_TIMEOUT'
   | 'INSTALL_LAUNCH_FAILED'
+  | 'INSTALL_LAUNCH_TIMEOUT'
+  | 'INSTALLER_MISSING'
+  | 'INSTALLER_UNREADABLE'
   | 'UPDATE_ERROR'
 
 function errorText(error: unknown): string {
@@ -29,10 +33,14 @@ export function normalizeUpdateErrorCode(
 ): StableUpdateErrorCode {
   const value = errorText(error)
   if (value.includes('install_busy')) return 'INSTALL_BUSY'
+  if (value.includes('install_quiesce_timeout')) return 'INSTALL_QUIESCE_TIMEOUT'
+  if (value.includes('install_launch_timeout')) return 'INSTALL_LAUNCH_TIMEOUT'
+  if (value.includes('installer_missing')) return 'INSTALLER_MISSING'
+  if (value.includes('installer_unreadable')) return 'INSTALLER_UNREADABLE'
   if (value.includes('update_check_timeout') || value.includes('check timeout') || value.includes('检查超时')) return 'CHECK_TIMEOUT'
   if (value.includes('cancel') || value.includes('aborted')) return 'DOWNLOAD_CANCELLED'
   if (value.includes('enospc') || value.includes('disk full') || value.includes('no space')) return 'DISK_FULL'
-  if (value.includes('sha512') || value.includes('checksum') || value.includes('hash mismatch')) return 'HASH_MISMATCH'
+  if (value.includes('sha512') || value.includes('checksum') || value.includes('hash mismatch') || value.includes('hash_mismatch')) return 'HASH_MISMATCH'
   if (
     value.includes('internet_disconnected') || value.includes('network_changed')
     || value.includes('enotfound') || value.includes('econnrefused')

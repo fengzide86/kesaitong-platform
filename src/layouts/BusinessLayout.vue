@@ -73,10 +73,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.business-layout{--shell-header-height:88px;min-height:100vh;background:var(--color-canvas);overflow:hidden}.business-layout :deep(.studio-header){width:calc(100% - var(--sidebar-width));margin-left:var(--sidebar-width);box-sizing:border-box}
+.business-layout{--shell-header-height:88px;position:relative;min-height:100vh;background:var(--color-canvas);overflow:hidden}.business-layout::before{content:'';position:fixed;top:calc(var(--shell-header-height) + 18px);left:var(--sidebar-width);width:min(260px,28vw);height:1px;z-index:0;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(45,95,202,.16),rgba(169,133,82,.10),transparent);transform-origin:left center;animation:shell-brand-breathe 8s ease-in-out infinite}.business-layout>*{position:relative;z-index:1}@keyframes shell-brand-breathe{0%,100%{opacity:.3;transform:scaleX(.8)}50%{opacity:.68;transform:scaleX(1)}}.business-layout :deep(.studio-header){width:calc(100% - var(--sidebar-width));margin-left:var(--sidebar-width);box-sizing:border-box}
 .business-content{width:calc(100% - var(--sidebar-width));min-width:0;min-height:calc(100vh - var(--shell-header-height));margin-left:var(--sidebar-width);padding:24px clamp(24px,3vw,42px) 48px;box-sizing:border-box;overflow-x:hidden}.business-content:not(.is-workspace)>:deep(*){width:min(1180px,100%);margin-inline:auto}.business-content.is-workspace{height:calc(100vh - var(--shell-header-height));padding:16px 18px 18px;overflow:hidden}
 .business-content:focus{outline:none}
 .sidebar-overlay{position:fixed;inset:0;z-index:calc(var(--z-sidebar) - 1);background:var(--color-overlay);backdrop-filter:blur(4px)}
 @media(max-width:1024px){.business-layout{--shell-header-height:72px}.business-layout :deep(.studio-header),.business-content{width:100%;margin-left:0}.business-content{padding:18px 16px 36px}.business-content.is-workspace{padding:10px;height:calc(100vh - var(--shell-header-height))}}
 @media(max-width:767px){.business-layout{--shell-header-height:64px}}
+@media(prefers-reduced-motion:reduce){.business-layout::before{animation:none;opacity:.42;transform:none}}
 </style>

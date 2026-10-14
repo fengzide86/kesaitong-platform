@@ -39,6 +39,7 @@ const areas: readonly AdminNavigationArea[] = [
     item('settings', '套餐与设置', '/admin/settings', 'settings.manage'),
     item('business-access', '工作台开放', '/admin/business-access', 'business_access.write'),
     item('announcements', '公告管理', '/admin/announcements'),
+    item('target-reviews', '平台入口审核', '/admin/target-reviews', 'updates.manage'),
     item('updates', '应用更新', '/admin/updates', 'updates.manage'),
     item('freight-rates', '物流费率', '/admin/freight-rates', 'settings.manage'),
     item('staff-accounts', '后台账号', '/admin/staff-accounts', 'staff.manage'),

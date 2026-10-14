@@ -2,7 +2,7 @@
   <main class="password-page">
     <section class="password-card">
       <BrandLockup class="password-brand" audience="admin" layout="horizontal" />
-      <span class="eyebrow">BACKOFFICE SECURITY</span>
+      <span class="eyebrow">后台安全</span>
       <h1>{{ forced ? '首次登录请修改密码' : '修改后台密码' }}</h1>
       <p>{{ forced ? '当前临时密码仅用于首次登录。设置新密码后才能进入工作台。' : '修改后其他设备上的旧登录凭证会立即失效。' }}</p>
       <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>

@@ -26,4 +26,21 @@ describe('updateSnapshotSchema', () => {
       canRestart: false,
     })).toThrow()
   })
+
+  it('accepts only observable download phases and cancellation state', () => {
+    const snapshot = updateSnapshotSchema.parse({
+      status: 'cancelling', currentVersion: '1.8.15', canRestart: false,
+      downloadPhase: 'transferring', bytesPerSecond: 1234,
+      lastProgressAt: '2026-10-12T06:00:00.000Z', downloadStalled: true,
+      canRetryDownload: false, canRetryInstall: false,
+    })
+    expect(snapshot.status).toBe('cancelling')
+    expect(snapshot.bytesPerSecond).toBe(1234)
+    for (const invalid of [
+      { bytesPerSecond: -1 }, { bytesPerSecond: Number.POSITIVE_INFINITY },
+      { downloadPhase: 'verified' }, { lastProgressAt: 'a while ago' },
+    ]) {
+      expect(updateSnapshotSchema.safeParse({ ...snapshot, ...invalid }).success).toBe(false)
+    }
+  })
 })

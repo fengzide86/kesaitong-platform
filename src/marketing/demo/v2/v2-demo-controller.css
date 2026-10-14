@@ -52,6 +52,7 @@
 .kst-demo-last-result--success { color: #386f50; background: #f3f8f4; border-color: #d9e8dd; }
 .kst-demo-last-result > svg { flex: 0 0 17px; margin-top: 2px; }
 .kst-demo-last-result small { display: block; color: inherit; margin-top: 2px; font-size: 12px; }
+.kst-demo-failure-reason { margin: 0 0 12px; padding: 10px 11px; border: 1px solid #e8c8be; border-radius: 6px; background: #fff7f4; color: #8b3f2e; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .kst-demo-result-trace { margin: 0 0 18px; color: #4a5e78; font-size: 13px; }
 .kst-demo-result-trace > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; cursor: pointer; padding: 7px 0; }
 .kst-demo-result-trace > summary::before { content: '▸'; color: #6b7c93; }

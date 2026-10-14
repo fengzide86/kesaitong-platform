@@ -3,10 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import DashboardView from '@/views/admin/DashboardView.vue'
 
-const api = vi.hoisted(() => ({ center: vi.fn(), batch: vi.fn(), toast: vi.fn() }))
+const api = vi.hoisted(() => ({ center: vi.fn(), batch: vi.fn(), toast: vi.fn(), role: 'super_admin' as 'super_admin' | 'operator' | 'support' }))
 vi.mock('@/utils/api', () => ({ getAdminActionCenter: api.center, getAdminBusinessBatch: api.batch }))
 vi.mock('@/utils', () => ({ showToast: api.toast }))
-vi.mock('@/utils/auth', () => ({ authService: { getRole: () => 'super_admin' } }))
+vi.mock('@/utils/auth', () => ({ authService: { getRole: () => api.role } }))
 
 const fixture = () => ({
   summary: { expiring_authorizations: 1, device_anomalies: 1, pending_tickets: 1 },
@@ -30,7 +30,7 @@ async function render() {
 }
 
 describe('action center object-level tasks', () => {
-  beforeEach(() => { vi.clearAllMocks(); api.center.mockResolvedValue(fixture()) })
+  beforeEach(() => { vi.clearAllMocks(); api.role = 'super_admin'; api.center.mockResolvedValue(fixture()) })
   it('opens the exact authorization, device owner and ticket rather than unfiltered lists', async () => {
     const { wrapper, router } = await render()
     await wrapper.get('#expiring_authorizations .record-task').trigger('click')
@@ -79,6 +79,12 @@ describe('action center object-level tasks', () => {
     const { wrapper } = await render()
     expect(wrapper.get('.priority-grid').text()).toContain('受支持的工具')
     expect(wrapper.find('.runtime-explanation').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it.each(['operator', 'support'] as const)('does not show the target-review dead link to %s', async role => {
+    api.role = role
+    const { wrapper } = await render()
+    expect(wrapper.find('#target_review').exists()).toBe(false)
     wrapper.unmount()
   })
 })

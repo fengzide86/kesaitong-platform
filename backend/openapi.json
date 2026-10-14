@@ -8026,6 +8026,80 @@
         "title": "ExecutionPageResponse",
         "type": "object"
       },
+      "ExecutionReconcileRequest": {
+        "additionalProperties": false,
+        "description": "Read-only platform verification that resolves a prior inconclusive run.",
+        "properties": {
+          "adapter_version": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Version"
+          },
+          "completed_steps": {
+            "default": 0,
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Completed Steps",
+            "type": "integer"
+          },
+          "object_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Object Ref",
+            "type": "string"
+          },
+          "page_fingerprint": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Fingerprint"
+          },
+          "run_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "succeeded",
+            "enum": [
+              "succeeded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "verification": {
+            "const": "same-object-list-and-details",
+            "enum": [
+              "same-object-list-and-details"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "verification",
+          "object_ref"
+        ],
+        "title": "ExecutionReconcileRequest",
+        "type": "object"
+      },
       "ExecutionReportResponse": {
         "properties": {
           "data": {
@@ -8123,6 +8197,11 @@
               }
             ],
             "title": "Execution Id"
+          },
+          "reconciled": {
+            "default": false,
+            "title": "Reconciled",
+            "type": "boolean"
           }
         },
         "required": [
@@ -11501,6 +11580,16 @@
             ],
             "title": "Signing Key Id"
           },
+          "target_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedTargetProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "target_url": {
             "title": "Target Url",
             "type": "string"
@@ -11671,9 +11760,42 @@
             "title": "Platform Key",
             "type": "string"
           },
+          "required_capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Capability"
+          },
           "script_key": {
             "title": "Script Key",
             "type": "string"
+          },
+          "target_profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Profile Id"
+          },
+          "target_profile_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Profile Revision"
           },
           "tool_id": {
             "title": "Tool Id",
@@ -14176,6 +14298,42 @@
         "title": "SettingUpdateResponse",
         "type": "object"
       },
+      "SignedTargetProfile": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/TargetProfile"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "signingKeyId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signingkeyid"
+          }
+        },
+        "required": [
+          "profile",
+          "signature",
+          "signingKeyId"
+        ],
+        "title": "SignedTargetProfile",
+        "type": "object"
+      },
       "StaffAccountCreate": {
         "properties": {
           "agency_id": {
@@ -15033,6 +15191,508 @@
         "title": "StaffSessionResponse",
         "type": "object"
       },
+      "TargetEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "edition": {
+            "default": "unknown",
+            "enum": [
+              "v2",
+              "v3",
+              "unknown"
+            ],
+            "title": "Edition",
+            "type": "string"
+          },
+          "markers": {
+            "items": {
+              "enum": [
+                "amazon-v2",
+                "amazon-v3",
+                "seller-shipping-template",
+                "course-index"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Markers",
+            "type": "array"
+          },
+          "pageFingerprint": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pagefingerprint"
+          },
+          "pageFingerprints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetPageFingerprints"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "default": "client-observed",
+            "enum": [
+              "client-observed",
+              "admin-verified"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "title": "TargetEvidence",
+        "type": "object"
+      },
+      "TargetExecutionScope": {
+        "additionalProperties": false,
+        "properties": {
+          "courseRef": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Courseref",
+            "type": "string"
+          },
+          "evidenceRef": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Evidenceref",
+            "type": "string"
+          },
+          "scenario": {
+            "const": "training",
+            "default": "training",
+            "enum": [
+              "training"
+            ],
+            "title": "Scenario",
+            "type": "string"
+          },
+          "source": {
+            "const": "admin-verified",
+            "default": "admin-verified",
+            "enum": [
+              "admin-verified"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "stage": {
+            "const": "not_applicable",
+            "default": "not_applicable",
+            "enum": [
+              "not_applicable"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "courseRef",
+          "evidenceRef"
+        ],
+        "title": "TargetExecutionScope",
+        "type": "object"
+      },
+      "TargetPageFingerprints": {
+        "additionalProperties": false,
+        "properties": {
+          "courseMap": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coursemap"
+          },
+          "templateEditor": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templateeditor"
+          },
+          "templateList": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templatelist"
+          }
+        },
+        "title": "TargetPageFingerprints",
+        "type": "object"
+      },
+      "TargetProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "adapterVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapterversion"
+          },
+          "allowedRoutes": {
+            "items": {
+              "$ref": "#/components/schemas/TargetRoute"
+            },
+            "maxItems": 24,
+            "title": "Allowedroutes",
+            "type": "array"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "edition": {
+            "enum": [
+              "v2",
+              "v3",
+              "unknown"
+            ],
+            "title": "Edition",
+            "type": "string"
+          },
+          "entryUrl": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Entryurl",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/TargetEvidence"
+          },
+          "executionScopes": {
+            "items": {
+              "$ref": "#/components/schemas/TargetExecutionScope"
+            },
+            "maxItems": 32,
+            "title": "Executionscopes",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "productKey": {
+            "const": "amazon",
+            "enum": [
+              "amazon"
+            ],
+            "title": "Productkey",
+            "type": "string"
+          },
+          "providerId": {
+            "const": "bjysoft",
+            "enum": [
+              "bjysoft"
+            ],
+            "title": "Providerid",
+            "type": "string"
+          },
+          "reviewStatus": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "disabled"
+            ],
+            "title": "Reviewstatus",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "default": 1,
+            "enum": [
+              1
+            ],
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "name",
+          "providerId",
+          "productKey",
+          "edition",
+          "entryUrl",
+          "allowedRoutes",
+          "reviewStatus",
+          "capabilities",
+          "adapterVersion",
+          "evidence"
+        ],
+        "title": "TargetProfile",
+        "type": "object"
+      },
+      "TargetProfileListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SignedTargetProfile"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "const": true,
+            "enum": [
+              true
+            ],
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data"
+        ],
+        "title": "TargetProfileListResponse",
+        "type": "object"
+      },
+      "TargetProfileResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SignedTargetProfile"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "success": {
+            "const": true,
+            "enum": [
+              true
+            ],
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data"
+        ],
+        "title": "TargetProfileResponse",
+        "type": "object"
+      },
+      "TargetProfileReview": {
+        "additionalProperties": false,
+        "properties": {
+          "adapterVersion": {
+            "anyOf": [
+              {
+                "const": "bjysoft-v2-template.1",
+                "enum": [
+                  "bjysoft-v2-template.1"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapterversion"
+          },
+          "allowedRoutes": {
+            "items": {
+              "$ref": "#/components/schemas/TargetRoute"
+            },
+            "maxItems": 24,
+            "title": "Allowedroutes",
+            "type": "array"
+          },
+          "capabilities": {
+            "items": {
+              "const": "template.create.v1",
+              "enum": [
+                "template.create.v1"
+              ],
+              "type": "string"
+            },
+            "maxItems": 1,
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "edition": {
+            "enum": [
+              "v2",
+              "v3",
+              "unknown"
+            ],
+            "title": "Edition",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/TargetEvidence"
+          },
+          "executionScopes": {
+            "items": {
+              "$ref": "#/components/schemas/TargetExecutionScope"
+            },
+            "maxItems": 32,
+            "title": "Executionscopes",
+            "type": "array"
+          },
+          "reviewStatus": {
+            "enum": [
+              "approved",
+              "rejected",
+              "disabled"
+            ],
+            "title": "Reviewstatus",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "reviewStatus",
+          "edition",
+          "evidence"
+        ],
+        "title": "TargetProfileReview",
+        "type": "object"
+      },
+      "TargetProfileSubmission": {
+        "additionalProperties": false,
+        "properties": {
+          "edition": {
+            "default": "unknown",
+            "enum": [
+              "v2",
+              "v3",
+              "unknown"
+            ],
+            "title": "Edition",
+            "type": "string"
+          },
+          "entryUrl": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Entryurl",
+            "type": "string"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/TargetEvidence"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "productKey": {
+            "const": "amazon",
+            "default": "amazon",
+            "enum": [
+              "amazon"
+            ],
+            "title": "Productkey",
+            "type": "string"
+          },
+          "providerId": {
+            "const": "bjysoft",
+            "default": "bjysoft",
+            "enum": [
+              "bjysoft"
+            ],
+            "title": "Providerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "entryUrl"
+        ],
+        "title": "TargetProfileSubmission",
+        "type": "object"
+      },
+      "TargetRoute": {
+        "additionalProperties": false,
+        "properties": {
+          "origin": {
+            "maxLength": 300,
+            "minLength": 8,
+            "title": "Origin",
+            "type": "string"
+          },
+          "pathPrefix": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Pathprefix",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "entry",
+              "login",
+              "business"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin",
+          "pathPrefix",
+          "role"
+        ],
+        "title": "TargetRoute",
+        "type": "object"
+      },
       "ToolConfigUpdateResponse": {
         "properties": {
           "data": {
@@ -15085,6 +15745,17 @@
             ],
             "title": "Artifacturl"
           },
+          "requiredCapability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requiredcapability"
+          },
           "runnerApiVersion": {
             "title": "Runnerapiversion",
             "type": "integer"
@@ -15096,6 +15767,28 @@
           "scriptKey": {
             "title": "Scriptkey",
             "type": "string"
+          },
+          "targetProfileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetprofileid"
+          },
+          "targetProfileRevision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targetprofilerevision"
           },
           "toolId": {
             "title": "Toolid",
@@ -16834,7 +17527,7 @@
   },
   "info": {
     "title": "课赛通 KST · 跨境电商赛训效率平台",
-    "version": "1.8.15"
+    "version": "1.8.16"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -21998,6 +22691,52 @@
           }
         ],
         "summary": "List Executions",
+        "tags": [
+          "真实执行记录"
+        ]
+      }
+    },
+    "/api/executions/reconcile": {
+      "post": {
+        "operationId": "reconcile_execution_api_executions_reconcile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionReconcileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reconcile Execution",
         "tags": [
           "真实执行记录"
         ]
@@ -27229,6 +27968,89 @@
         ]
       }
     },
+    "/api/tool-releases/target-profiles": {
+      "get": {
+        "operationId": "list_registered_target_profiles_api_tool_releases_target_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetProfileListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Registered Target Profiles",
+        "tags": [
+          "工具版本发布"
+        ]
+      }
+    },
+    "/api/tool-releases/target-profiles/{profile_id}/review": {
+      "post": {
+        "operationId": "review_registered_target_profile_api_tool_releases_target_profiles__profile_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetProfileReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review Registered Target Profile",
+        "tags": [
+          "工具版本发布"
+        ]
+      }
+    },
     "/api/tool-releases/{tool_id}/rollback": {
       "post": {
         "operationId": "rollback_tool_release_api_tool_releases__tool_id__rollback_post",
@@ -27877,6 +28699,76 @@
         ]
       }
     },
+    "/api/tools/target-profiles": {
+      "get": {
+        "operationId": "list_target_profiles_api_tools_target_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetProfileListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Target Profiles",
+        "tags": [
+          "工具配置"
+        ]
+      },
+      "post": {
+        "operationId": "submit_target_profile_api_tools_target_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TargetProfileSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TargetProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit Target Profile",
+        "tags": [
+          "工具配置"
+        ]
+      }
+    },
     "/api/tools/{tool_id}/launch-grant": {
       "post": {
         "description": "创建工具一次性启动授权；旧 launch-token 路径继续兼容。",
@@ -27960,6 +28852,53 @@
                 }
               ],
               "title": "Idempotency Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_profile_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Profile Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_profile_revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Profile Revision"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_runner_api_version",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 1,
+              "title": "Client Runner Api Version",
+              "type": "integer"
             }
           }
         ],
@@ -28097,6 +29036,53 @@
                 }
               ],
               "title": "Idempotency Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_profile_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Profile Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_profile_revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Profile Revision"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_runner_api_version",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 2,
+              "minimum": 1,
+              "title": "Client Runner Api Version",
+              "type": "integer"
             }
           }
         ],

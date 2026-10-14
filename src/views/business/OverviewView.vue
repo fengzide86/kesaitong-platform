@@ -1,7 +1,7 @@
 <template>
   <div class="business-overview">
     <PageHeader
-      eyebrow="PROFESSIONAL OPERATIONS"
+      eyebrow="批量工作台"
       title="专业批量工作台"
       :description="hasTools ? '查看真实工具目录和开放条件，准备自己的数据，跟进批次与待处理问题。' : '当前授权尚无开放的真实批量工具；可先查看准备项、授权与使用帮助。'"
     >

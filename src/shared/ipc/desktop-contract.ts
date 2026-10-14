@@ -7,6 +7,7 @@ import { runnerEventSchema } from './automation-contract.js'
 import { localArtifactReadRequestSchema } from './artifact-contract.js'
 import { recoveryQuerySchema, recoveryReviewSchema, recoveryPrepareSchema } from './recovery-contract.js'
 import { fileInputSelectionRequestSchema, fileInputValidationRequestSchema } from './file-input-contract.js'
+import { targetOpenRequestSchema, targetPreflightRequestSchema, targetExecuteRequestSchema, targetReconcileRequestSchema } from './target-contract.js'
 
 export const DESKTOP_IPC_PROTOCOL_VERSION = 1 as const
 export const DESKTOP_IPC_PAYLOAD_ERROR_CODE = 'IPC_PAYLOAD_INVALID' as const
@@ -144,6 +145,14 @@ export const notificationFocusSchema = z.object({
 })
 
 export const desktopIpcInvocationSchemas = {
+  'targets:open': z.tuple([targetOpenRequestSchema]),
+  'targets:refresh': z.tuple([]),
+  'targets:detect': z.tuple([]),
+  'targets:preflight': z.tuple([targetPreflightRequestSchema]),
+  'targets:execute': z.tuple([targetExecuteRequestSchema]),
+  'targets:reconcile': z.tuple([targetReconcileRequestSchema]),
+  'targets:list-receipts': z.tuple([]),
+  'targets:close': z.tuple([]),
   'recovery:list': z.tuple([recoveryQuerySchema]),
   'recovery:review': z.tuple([recoveryReviewSchema]),
   'recovery:prepare': z.tuple([recoveryPrepareSchema]),

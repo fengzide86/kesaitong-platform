@@ -53,15 +53,15 @@ async function launch(role) {
   if (role === 'business' || role === 'consumer') {
     await page.getByLabel('授权码', { exact: true }).fill(credentials[role])
     await expect(page.getByLabel('授权码', { exact: true })).toHaveValue(credentials[role])
-    await page.getByRole('button', { name: '验证并登录', exact: true }).click()
+    await page.getByRole('button', { name: '登录并开始使用', exact: true }).click()
     await expect(page).toHaveURL(role === 'business' ? /business\/overview/ : /user\/tools/)
   } else {
     await page.goto('app://toolbox/#/admin/login')
     const key = role === 'admin' ? 'staff' : role === 'agent' ? 'agent_a' : role
-    await page.getByLabel('管理账号', { exact: true }).fill(credentials[key + '_username'])
-    await page.getByLabel('管理员密码', { exact: true }).fill(credentials[key + '_password'])
+    await page.getByLabel('后台账号', { exact: true }).fill(credentials[key + '_username'])
+    await page.getByLabel('密码', { exact: true }).fill(credentials[key + '_password'])
     lastStaffLoginAt = Date.now()
-    await page.getByRole('button', { name: '登录管理后台', exact: true }).click()
+    await page.getByRole('button', { name: '登录并进入工作台', exact: true }).click()
     await expect(page).toHaveURL(role === 'agent' ? /agent\/overview/ : /admin\/(?!login)/)
   }
   const login = await (await authenticated).json()

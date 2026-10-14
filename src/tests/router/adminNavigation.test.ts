@@ -13,9 +13,9 @@ describe('Admin navigation permission and legacy route compatibility', () => {
       }
     }
   })
-  it('keeps all sixteen original admin routes discoverable without creating landing routes', () => {
+  it('keeps all admin routes discoverable without creating landing routes', () => {
     const paths = getAdminNavigation('super_admin').flatMap(area => area.items.map(entry => entry.path))
-    expect(new Set(paths).size).toBe(16)
+    expect(new Set(paths).size).toBe(17)
     const originals = router.getRoutes().filter(route => route.path.startsWith('/admin/') && !['AdminLogin', 'AdminChangePassword'].includes(String(route.name)))
     expect([...new Set(paths)].sort()).toEqual(originals.map(route => route.path).sort())
   })

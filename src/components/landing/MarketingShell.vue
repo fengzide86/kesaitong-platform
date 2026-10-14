@@ -7,9 +7,9 @@
           <BrandLockup audience="login" decorative />
         </RouterLink>
         <nav ref="menuNavigation" id="marketing-main-navigation" class="marketing-shell-links" :class="{ 'is-open': menuOpen }" aria-label="官网导航">
-          <RouterLink to="/competition" :class="{ active: route.path === '/competition' }" @click="closeMenu">比赛备赛</RouterLink>
-          <RouterLink to="/course" :class="{ active: route.path === '/course' }" @click="closeMenu">课程实训</RouterLink>
-          <RouterLink to="/tools" :class="{ active: route.path === '/tools' }" @click="closeMenu">工具介绍</RouterLink>
+          <RouterLink to="/competition" :class="{ active: currentPath === '/competition' }" @click="closeMenu">比赛备赛</RouterLink>
+          <RouterLink to="/course" :class="{ active: currentPath === '/course' }" @click="closeMenu">课程实训</RouterLink>
+          <RouterLink to="/tools" :class="{ active: currentPath === '/tools' }" @click="closeMenu">工具介绍</RouterLink>
           <button class="marketing-shell-desktop-start" type="button" aria-haspopup="dialog" @click="consultation?.openConsultation('', $event)">申请使用</button>
           <RouterLink class="marketing-shell-mobile-start" to="/tools#start" @click="closeMenu">怎么开始使用</RouterLink>
         </nav>
@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { Menu, Play, X } from '@lucide/vue'
 import BrandLockup from '@/components/brand/BrandLockup.vue'
@@ -46,6 +46,9 @@ import MarketingConsultationDialog from '@/components/landing/MarketingConsultat
 
 withDefaults(defineProps<{ showDownload?: boolean }>(), { showDownload: false })
 const route = useRoute()
+// GitHub Pages serves direct route files with a trailing slash. Normalize it
+// so the active state remains visible for both /tools and /tools/.
+const currentPath = computed(() => route.path.replace(/\/+$/, '') || '/')
 const menuOpen = ref(false)
 const menuToggle = ref<HTMLButtonElement | null>(null)
 const menuHeader = ref<HTMLElement | null>(null)

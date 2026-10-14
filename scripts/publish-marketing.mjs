@@ -6,8 +6,9 @@ import { setTimeout } from 'node:timers'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, URL } from 'node:url'
-import { assertGitHubPagesProject, assertMarketingMetadata, assertPagesProject, installerFromManifest, marketingToolEnvironment, readMarketingEnvironment, validateMarketingConfig } from './marketing-config.mjs'
+import { assertGitHubPagesProject, assertMarketingMetadata, assertPagesProject, marketingToolEnvironment, readMarketingEnvironment, validateMarketingConfig } from './marketing-config.mjs'
 import { prepareGitHubPagesTree } from './github-pages-artifact.mjs'
+import { getPublishedMarketingDownload } from './marketing-download.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const requiredChecks = ['Frontend and Electron contracts', 'Backend domains and API', 'MariaDB migrations and concurrency', 'Responsive C B Admin smoke', 'Internal critical-flow acceptance', 'Real backend C B Admin journeys', 'Windows NSIS install and runtime smoke']
@@ -80,9 +81,7 @@ async function main() {
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
   const commitSha = verifySource()
   const controlUrl = metadata.toolbox.controlApiUrl
-  const downloadUrl = installerFromManifest(await (await request(`${controlUrl}/updates/latest.yml`)).text(), controlUrl, metadata.version)
-  if (config.downloadUrl && config.downloadUrl !== downloadUrl) throw new Error('配置的下载地址不等于当前已发布安装包；不会发布过期或验收候选下载链接')
-  await request(downloadUrl, { method: 'HEAD' })
+  const { downloadUrl } = await getPublishedMarketingDownload({ controlUrl, expectedVersion: metadata.version, configuredUrl: config.downloadUrl })
   if (args.includes('--check')) {
     console.log(`官网发布预检通过：${metadata.version} / ${commitSha.slice(0, 12)} / ${config.publicUrl}。未发布。`)
     return
@@ -93,6 +92,8 @@ async function main() {
   const expected = { version: metadata.version, commitSha, publicUrl: config.publicUrl, downloadUrl }
   assertMarketingMetadata(JSON.parse(fs.readFileSync(path.join(root, 'dist-marketing/marketing-version.json'), 'utf8')), expected)
   if (git('status', '--porcelain') || git('rev-parse', 'HEAD') !== commitSha) throw new Error('构建期间源码发生变化，取消上传')
+  const verifyCurrentDownload = () => getPublishedMarketingDownload({ controlUrl, expectedVersion: metadata.version, configuredUrl: downloadUrl })
+  await verifyCurrentDownload()
   // Explicit main target; acceptance below checks the production URL, never a
   // deployment preview URL, so a changed production branch cannot pass silently.
   if (config.provider === 'github-pages') {
@@ -108,10 +109,12 @@ async function main() {
     if (changed) {
       const userName = git('config', 'user.name'), userEmail = git('config', 'user.email')
       command('git', ['-c', `user.name=${userName}`, '-c', `user.email=${userEmail}`, 'commit', '-m', `Publish KST ${metadata.version} (${commitSha.slice(0, 12)})`], { cwd: checkout })
+      await verifyCurrentDownload()
       command('git', ['push', 'origin', 'HEAD:main'], { cwd: checkout, environment })
     }
     console.log(`GitHub Pages 宣传制品已提交；保留发布目录 ${checkout}，继续验收公开站点。`)
   } else {
+    await verifyCurrentDownload()
     node('node_modules/wrangler/bin/wrangler.js', ['pages', 'deploy', 'dist-marketing', '--project-name', config.projectName, '--branch', 'main', '--commit-hash', commitSha, '--commit-dirty=false'], buildEnvironment)
   }
   const deadline = Date.now() + (config.provider === 'github-pages' ? 300_000 : 90_000)
@@ -120,6 +123,7 @@ async function main() {
     try {
       const remote = await (await request(`${config.publicUrl}/marketing-version.json?t=${Date.now()}`)).json()
       assertMarketingMetadata(remote, expected)
+      const currentDownload = await verifyCurrentDownload()
       const html = await (await request(`${config.publicUrl}/`)).text()
       if (!html.includes('课赛通') || !html.includes('type="module"')) throw new Error('官网首页未返回预期产物')
       if (config.provider === 'github-pages') {
@@ -131,7 +135,7 @@ async function main() {
       await request(new URL(asset, config.publicUrl), { method: 'HEAD' })
       const directory = path.join(toolEnvironment.XDG_CONFIG_HOME, '..', 'releases')
       fs.mkdirSync(directory, { recursive: true })
-      fs.writeFileSync(path.join(directory, `marketing-${metadata.version}-${commitSha.slice(0, 12)}-${Date.now()}.json`), `${JSON.stringify({ ...expected, project: config.projectName, verifiedAt: new Date().toISOString() }, null, 2)}\n`)
+      fs.writeFileSync(path.join(directory, `marketing-${metadata.version}-${commitSha.slice(0, 12)}-${Date.now()}.json`), `${JSON.stringify({ ...expected, resolvedInstallerUrl: currentDownload.installerUrl, installerBytes: currentDownload.size, project: config.projectName, verifiedAt: new Date().toISOString() }, null, 2)}\n`)
       console.log(`官网已部署并验证：${config.publicUrl}（${metadata.version} / ${commitSha.slice(0, 12)}）`)
       return
     } catch (error) { lastError = error }

@@ -62,28 +62,26 @@ describe('LoginView', () => {
       expect(mark.attributes('aria-hidden')).toBe('true')
     })
 
-    it('展示八类任务入口和当前开放边界，不将入口数量宣传为已验收工具或并发能力', () => {
+    it('品牌区突出用户痛点，不虚构平台连接或执行结果', () => {
       const wrapper = mountWithPinia(LoginView)
-      const units = wrapper.findAll('.stat-unit').map(item => item.text())
-      const values = wrapper.findAll('.stat-number').map(item => item.text())
-      expect(units).toEqual(['端', '端', '类'])
-      expect(values).toEqual(['C', 'B', '8'])
-      expect(wrapper.text()).toContain('任务入口 · 以当前开放状态为准')
-      expect(wrapper.text()).not.toMatch(/批量演示上限|非真实账号并发|8.*已验收工具/)
-      expect(wrapper.text()).not.toContain('秒级响应')
+      expect(wrapper.get('.brand-title').text()).toContain('按要求做完了')
+      expect(wrapper.get('.brand-title').text()).toContain('为什么分数还是上不去')
+      expect(wrapper.get('.brand-desc').text()).toContain('评分细节')
+      expect(wrapper.findAll('.pain-points li')).toHaveLength(3)
+      expect(wrapper.text()).not.toMatch(/已准备|已连接|执行成功|秒级响应/)
       wrapper.unmount()
     })
 
-    it('功能标签只展示当前产品能力，不宣传未落地的自动化脚本', () => {
+    it('品牌区背景图形不依赖实时任务状态', () => {
       const wrapper = mountWithPinia(LoginView)
-      const featureTags = wrapper.findAll('.feature-tag').map(tag => tag.text())
-      expect(featureTags).toEqual(['物流模板', '运费比较', '个人工具箱', '批量工作台', '人工接手', '执行记录'])
-      expect(wrapper.text()).not.toMatch(/广告脚本|自动上品|自动发货|FBA \/ AGL/)
+      expect(wrapper.find('.auth-entry-backdrop').exists()).toBe(true)
+      expect(wrapper.find('.auth-entry-backdrop svg').exists()).toBe(true)
+      wrapper.unmount()
     })
 
     it('应该显示授权码提示', () => {
       const wrapper = mountWithPinia(LoginView)
-      expect(wrapper.text()).toContain('请输入授权码激活您的工具箱')
+      expect(wrapper.text()).toContain('输入授权码，开始使用已开通的工具')
     })
 
     it('应该渲染授权码输入框', () => {
@@ -97,20 +95,29 @@ describe('LoginView', () => {
       const wrapper = mountWithPinia(LoginView)
       const deviceInfo = wrapper.find('.device-info')
       expect(deviceInfo.exists()).toBe(true)
-      expect(deviceInfo.text()).toContain('已检测到设备')
+      expect(deviceInfo.text()).toContain('当前电脑')
+    })
+
+    it('应该显示三条核心痛点', () => {
+      const wrapper = mountWithPinia(LoginView)
+      const painPoints = wrapper.findAll('.pain-points li')
+      expect(painPoints).toHaveLength(3)
+      expect(wrapper.get('.pain-points').text()).toContain('隐性得分点容易漏')
+      expect(wrapper.get('.pain-points').text()).toContain('配置效果需要反复试')
     })
 
     it('应该渲染登录按钮', () => {
       const wrapper = mountWithPinia(LoginView)
       const btn = wrapper.find('.btn-login')
       expect(btn.exists()).toBe(true)
-      expect(btn.text()).toContain('验证并登录')
+      expect(btn.text()).toContain('登录并开始使用')
     })
 
     it('应该渲染底部链接', () => {
       const wrapper = mountWithPinia(LoginView)
       const links = wrapper.findAll('.footer-link')
-      expect(links.length).toBe(4) // 使用帮助、联系客服、服务条款、管理员登录
+      expect(links.length).toBe(4) // 使用帮助、联系客服、服务条款、管理端登录
+      expect(links.at(-1)?.text()).toContain('管理端入口')
     })
   })
 
@@ -189,7 +196,7 @@ describe('LoginView', () => {
       expect(sessionStorage.getItem('toolbox_role')).toBe('user')
       expect(sessionStorage.getItem('toolbox_token')).toBe('jwt-token')
       expect(wrapper.find('.success-message').exists()).toBe(false)
-      expect(wrapper.find('.btn-login').text()).toContain('验证通过')
+      expect(wrapper.find('.btn-login').text()).toContain('登录成功，正在进入')
       await vi.advanceTimersByTimeAsync(160)
       await flushPromises()
       expect(routeTrackListener).toHaveBeenCalledOnce()
@@ -259,11 +266,9 @@ describe('LoginView', () => {
       const wrapper = mountWithPinia(LoginView)
       await wrapper.findAll('.footer-link')[0].trigger('click')
       const helpText = wrapper.get('.help-steps').text()
-      expect(helpText).toContain('当前套餐包含的工具和工作台')
-      expect(helpText).toContain('当前开放状态')
-      expect(helpText).toContain('真实工具只操作比赛模拟平台')
-      expect(helpText).toContain('演示工具使用本地沙盒')
-      expect(helpText).not.toContain('当前套餐包含的演示工具')
+      expect(helpText).toContain('只显示已开通、且当前可使用的工具')
+      expect(helpText).toContain('平台登录验证')
+      expect(helpText).not.toContain('演示工具')
       wrapper.unmount()
     })
 
@@ -271,7 +276,7 @@ describe('LoginView', () => {
       const wrapper = mountWithPinia(LoginView)
       await wrapper.findAll('.footer-link')[0].trigger('click')
       const helpText = wrapper.get('.help-steps').text()
-      expect(helpText).toContain('系统会自动绑定您当前使用的设备')
+      expect(helpText).toContain('当前电脑会自动与授权绑定')
       expect(helpText).not.toContain('Windows')
     })
 
@@ -345,10 +350,10 @@ describe('LoginView', () => {
   })
 
   describe('无障碍测试', () => {
-    it('空闲登录按钮只向辅助技术展示验证并登录', () => {
+    it('空闲登录按钮只向辅助技术展示登录并开始使用', () => {
       const wrapper = mountWithPinia(LoginView)
       expect(wrapper.get('.btn-content').attributes('aria-hidden')).toBe('false')
-      expect(wrapper.get('.btn-content').text()).toBe('验证并登录')
+      expect(wrapper.get('.btn-content').text()).toBe('登录并开始使用')
       expect(wrapper.get('.btn-loading').attributes('aria-hidden')).toBe('true')
       wrapper.unmount()
     })
@@ -366,7 +371,7 @@ describe('LoginView', () => {
       wrapper.unmount()
     })
 
-    it('验证通过后的登录按钮不向辅助技术保留加载文案', async () => {
+    it('登录成功后的按钮不向辅助技术保留加载文案', async () => {
       mockVerifyAuthCode.mockResolvedValue({ success: true, data: { token: 'test' } })
       const wrapper = mountWithPinia(LoginView)
       await wrapper.get('#authCode').setValue('TEST-CODE-1234')
@@ -374,7 +379,7 @@ describe('LoginView', () => {
       await flushPromises()
 
       expect(wrapper.get('.btn-content').attributes('aria-hidden')).toBe('false')
-      expect(wrapper.get('.btn-content').text()).toBe('验证通过，正在进入')
+      expect(wrapper.get('.btn-content').text()).toBe('登录成功，正在进入')
       expect(wrapper.get('.btn-loading').attributes('aria-hidden')).toBe('true')
       wrapper.unmount()
     })

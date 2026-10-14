@@ -157,8 +157,31 @@ onUnmounted(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
   overflow: hidden;
   background: var(--color-canvas);
+}
+
+/* 登录页的流线在进入工作台后退出，只保留一条低存在感的品牌呼吸线。 */
+.app-layout::before {
+  content: '';
+  position: fixed;
+  top: calc(var(--shell-header-height) + 18px);
+  left: var(--sidebar-width);
+  width: min(260px, 28vw);
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(45, 95, 202, .18), rgba(169, 133, 82, .12), transparent);
+  transform-origin: left center;
+  animation: shell-brand-breathe 8s ease-in-out infinite;
+}
+
+.app-layout > * { position: relative; z-index: 1; }
+
+@keyframes shell-brand-breathe {
+  0%, 100% { opacity: .32; transform: scaleX(.78); }
+  50% { opacity: .72; transform: scaleX(1); }
 }
 
 .app-layout :deep(.studio-header) {
@@ -253,6 +276,10 @@ onUnmounted(() => {
     width: 100%;
     padding: 18px 16px 36px;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-layout::before { animation: none; opacity: .45; transform: none; }
 }
 
 @media (max-width: 768px) {

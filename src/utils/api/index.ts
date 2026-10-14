@@ -22,6 +22,7 @@ export type ApiQueryValue = string | number | boolean | null | undefined
 export type ApiQueryParams = Record<string, ApiQueryValue>
 export type ApiErrorKind = 'network' | 'timeout' | 'http' | 'business' | 'validation' | 'parse' | 'cancelled'
 export type ApiRetryPolicy = 'none' | 'safe-read' | 'background'
+export interface ApiUploadProgress { transferredBytes: number; totalBytes?: number }
 type ApiBody = unknown
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
@@ -32,6 +33,7 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body' | 'headers'>
   timeoutMs?: number
   retry?: ApiRetryPolicy
   trackConnection?: boolean
+  onUploadProgress?: (progress: ApiUploadProgress) => void
 }
 
 export interface ApiGetOptions extends Pick<ApiRequestOptions, 'signal' | 'timeoutMs' | 'retry' | 'trackConnection'> {
@@ -134,6 +136,7 @@ function createRequestInit(options: ApiRequestOptions, token: string | null): Re
     timeoutMs: _timeoutMs,
     retry: _retry,
     trackConnection: _trackConnection,
+    onUploadProgress: _onUploadProgress,
     signal: _signal,
     ...fetchOptions
   } = options
@@ -157,6 +160,47 @@ function createRequestInit(options: ApiRequestOptions, token: string | null): Re
     }
   }
   return { ...fetchOptions, headers, body }
+}
+
+/** Use the same authenticated request pipeline, with XHR only for upload byte events. */
+function uploadWithProgress(url: string, config: RequestInit, signal: AbortSignal, onProgress: (progress: ApiUploadProgress) => void): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = (): void => xhr.abort()
+    let finished = false
+    const finish = (): void => {
+      finished = true
+      signal.removeEventListener('abort', abort)
+      xhr.upload.onprogress = null
+      xhr.onload = xhr.onerror = xhr.onabort = null
+    }
+    if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
+    xhr.open(config.method || 'POST', url)
+    xhr.withCredentials = config.credentials === 'include'
+    new Headers(config.headers).forEach((value, key) => xhr.setRequestHeader(key, value))
+    xhr.upload.onprogress = event => {
+      if (finished || signal.aborted) return
+      try { onProgress({ transferredBytes: event.loaded, totalBytes: event.lengthComputable ? event.total : undefined }) }
+      catch { /* A UI observer must not abort or change the result of an authenticated upload. */ }
+    }
+    xhr.onload = () => {
+      finish()
+      try {
+        if (xhr.status < 200 || xhr.status > 599) throw new TypeError('Upload response has no valid HTTP status')
+        const headers = new Headers()
+        xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).filter(Boolean).forEach(line => {
+          const separator = line.indexOf(':')
+          if (separator > 0) headers.append(line.slice(0, separator), line.slice(separator + 1).trim())
+        })
+        resolve(new Response(xhr.status === 204 ? null : xhr.responseText, { status: xhr.status, statusText: xhr.statusText, headers }))
+      } catch (error) { reject(error) }
+    }
+    xhr.onerror = () => { finish(); reject(new TypeError('Upload network error')) }
+    xhr.onabort = () => { finish(); reject(new DOMException('Aborted', 'AbortError')) }
+    signal.addEventListener('abort', abort, { once: true })
+    try { xhr.send(config.body as XMLHttpRequestBodyInit | null | undefined) }
+    catch (error) { finish(); reject(error) }
+  })
 }
 
 function isAbortError(error: unknown): boolean {
@@ -234,7 +278,9 @@ export async function request<T = JsonValue>(url: string, options: ApiRequestOpt
           timedOut = true
           controller.abort()
         }, timeoutMs)
-        const response = await fetch(`${getApiBase()}${url}`, { ...config, signal: controller.signal })
+        const response = options.onUploadProgress && config.body instanceof FormData
+          ? await uploadWithProgress(`${getApiBase()}${url}`, config, controller.signal, options.onUploadProgress)
+          : await fetch(`${getApiBase()}${url}`, { ...config, signal: controller.signal })
         if (trackConnection) recordConnectionSuccess()
         const requestId = response.headers?.get?.('X-Request-ID') || null
 

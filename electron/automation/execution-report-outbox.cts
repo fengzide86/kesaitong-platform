@@ -153,8 +153,13 @@ export class ExecutionReportOutbox {
         headers: { 'Content-Type': 'application/json', 'X-Toolbox-Version': this.options.version },
         body: JSON.stringify(entry.receipt),
       })
-      const body = await response.json() as { success?: boolean; data?: { execution_id?: number } }
-      if (!response.ok || body.success !== true || !Number.isInteger(body.data?.execution_id)) {
+      const body = await response.json() as { success?: boolean; data?: { execution_id?: number; duplicate?: boolean } }
+      // A lost response can leave the server in `reported` while the client
+      // retries the exact same receipt.  The server deliberately accepts this
+      // idempotent replay; an execution id is useful but is not required to
+      // prove that this particular local receipt has already been committed.
+      const acceptedDuplicate = response.ok && body.success === true && body.data?.duplicate === true
+      if (!response.ok || body.success !== true || (!Number.isInteger(body.data?.execution_id) && !acceptedDuplicate)) {
         if ([400, 401, 403, 404, 409, 422].includes(response.status)) {
           entry.blocked = true
           this.save([...this.load()])
@@ -163,7 +168,8 @@ export class ExecutionReportOutbox {
         return { warning: '任务结果已保存在本机，联网后自动补传记录；无需重新执行' }
       }
       this.save(this.load().filter(item => item.id !== entry.id))
-      return { executionId: body.data!.execution_id }
+      const executionId = body.data?.execution_id
+      return { ...(Number.isInteger(executionId) ? { executionId } : {}) }
     } catch {
       return { warning: '任务结果已保存在本机，联网后自动补传记录；无需重新执行' }
     } finally {

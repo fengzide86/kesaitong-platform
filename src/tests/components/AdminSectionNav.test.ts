@@ -5,7 +5,7 @@ import AdminSectionNav from '@/components/AdminSectionNav.vue'
 
 let router: Router
 const wrappers: VueWrapper[] = []
-const paths = ['dashboard', 'authcodes', 'business-access', 'orders', 'profit', 'expenses', 'users', 'feedback', 'knowledge', 'ai-chat', 'announcements', 'updates', 'freight-rates', 'settings', 'staff-accounts', 'agency']
+const paths = ['dashboard', 'authcodes', 'business-access', 'orders', 'profit', 'expenses', 'users', 'feedback', 'knowledge', 'ai-chat', 'announcements', 'target-reviews', 'updates', 'freight-rates', 'settings', 'staff-accounts', 'agency']
 async function render(path: string, role = 'super_admin') {
   sessionStorage.setItem('toolbox_role', role)
   await router.push(path)
@@ -58,6 +58,6 @@ describe('AdminSectionNav', () => {
   it('uses native links in a focusable narrow-window scroll region', async () => {
     const wrapper = await render('/admin/settings')
     expect(wrapper.get('nav').attributes('tabindex')).toBe('0')
-    expect(wrapper.findAll('a')).toHaveLength(6)
+    expect(wrapper.findAll('a')).toHaveLength(7)
   })
 })

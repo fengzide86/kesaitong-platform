@@ -1,0 +1,13 @@
+{
+  "version": "1.8.15",
+  "url": "https://8.130.113.104/updates/KST%20Setup%201.8.15.exe",
+  "fileName": "KST Setup 1.8.15.exe",
+  "size": 110599411,
+  "sha512": "b7039c08e045e53904a1c0c286d0a9e6be16b475e652aafac1ce5d137f522ef901e45278d27db536f9c84297c885cb59a2c26e83362f0b617d1b3707cc9073be",
+  "blockmap": {
+    "fileName": "KST Setup 1.8.15.exe.blockmap",
+    "url": "https://8.130.113.104/updates/KST%20Setup%201.8.15.exe.blockmap",
+    "size": 118203,
+    "sha512": "617bc4d0cf01092866f70dc60439a671acb211344f5d12c519a536448032edfc2fd5c6cf10dfcae70246447e8d43becf631338785dd494ee32a94b1e880721f7"
+  }
+}

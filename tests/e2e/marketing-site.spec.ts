@@ -202,7 +202,7 @@ test('an already-loaded homepage can open tools through every entry without late
   }
 
   await page.getByTestId('marketing-score-support').getByRole('link', { name: '看看哪些任务支持一键处理', exact: true }).click()
-  await expect(page).toHaveURL(/\/tools$/)
+  await expect(page).toHaveURL(/\/tools#tool-list$/)
   await expect(page.getByTestId('marketing-tools-overview')).toBeVisible()
   await expectSameDocument()
   await returnToLoadedHomepage()

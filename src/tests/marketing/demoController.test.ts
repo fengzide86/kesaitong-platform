@@ -82,4 +82,17 @@ describe('stable demo task controls', () => {
     await view.setProps({ paused: true })
     expect(view.get('.kst-demo-dock-pause').text()).toBe('继续')
   })
+
+  it('shows the concrete failure reason for this task without leaking it into another task', async () => {
+    const view = render()
+    await view.setProps({ activeTask: 'product', status: '未完成', steps: ['填写商品', '保存商品'], cursor: 1,
+      failureMessage: '商品要点尚未填写，请检查表单。' })
+    expect(view.get('[data-testid="demo-failure-reason"]').text()).toContain('商品要点尚未填写')
+    expect(view.get('[data-testid="demo-failure-reason"]').attributes('role')).toBe('alert')
+    expect(view.find('[data-testid="demo-outcome"]').exists()).toBe(false)
+    await view.setProps({ task: 'template' })
+    expect(view.find('[data-testid="demo-failure-reason"]').exists()).toBe(false)
+    await view.setProps({ task: 'product', running: true, status: '正在操作' })
+    expect(view.find('[data-testid="demo-failure-reason"]').exists()).toBe(false)
+  })
 })

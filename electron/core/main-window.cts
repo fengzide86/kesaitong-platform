@@ -10,6 +10,7 @@ import {
 } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { installEditContextMenu } from './edit-context-menu.cjs'
 
 import type { DesktopActivityState } from '../automation/desktop-automation-controller.cjs'
 import {
@@ -124,6 +125,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     webPreferences.allowRunningInsecureContent = false
   })
   window.webContents.on('did-attach-webview', (_event, guest) => options.webviewAttached?.(guest))
+  installEditContextMenu(window)
 
   window.once('ready-to-show', () => window.show())
   window.webContents.on('did-finish-load', () => {

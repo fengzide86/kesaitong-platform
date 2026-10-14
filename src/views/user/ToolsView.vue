@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="课赛通工具箱"
       title="先选要完成的任务"
-      description="从注册公司、选品到商品、物流、营销与发货，按任务找到工具；平台操作由桌面端执行。"
+      description="从注册公司、选品到商品、物流、营销与发货，按任务找到工具；授权、平台现场和桌面端能力会在开始前逐项核对。"
     >
       <template #actions>
         <router-link class="plan-chip" to="/user/plans">
@@ -14,6 +14,16 @@
     </PageHeader>
     <AsyncStateNotice v-if="staleError" state="stale" :message="staleError" @retry="loadData" />
 
+    <TargetWorkspace :tool-id="targetToolId" :open-request="targetWorkspaceRequest" :has-open-tools="targetWorkspaceAvailable" />
+
+    <section class="directory-intro" data-testid="directory-intro" aria-labelledby="directory-title">
+      <div>
+        <span class="directory-kicker">工具目录</span>
+        <h2 id="directory-title">按任务找工具</h2>
+        <p>先按任务筛选，再查看当前授权、平台和运行环境是否满足。</p>
+      </div>
+      <span class="directory-count">{{ filteredTools.length }} 项匹配</span>
+    </section>
     <section class="directory-filters" aria-label="工具查找">
       <label class="search-box"><Search :size="17" /><input v-model.trim="searchQuery" type="search" aria-label="搜索任务或工具" placeholder="搜索任务、工具或能力" /></label>
       <label class="available-filter"><input v-model="onlyUsable" type="checkbox" />当前可用</label>
@@ -22,11 +32,12 @@
     </section>
     <div class="task-groups" aria-label="按任务选择工具">
       <section v-for="group in PRODUCT_TASK_GROUPS" :key="group.id" class="task-group">
-        <h3>{{ group.title }}</h3>
+        <div class="task-group-heading"><div><h3>{{ group.title }}</h3><p>{{ group.description }}</p></div><span class="task-group-count">{{ PRODUCT_TASKS.filter(item => item.group === group.id).length }} 个任务</span></div>
         <div class="task-grid">
           <button v-for="task in PRODUCT_TASKS.filter(item => item.group === group.id)" :key="task.id" type="button" :data-task-id="task.id" :aria-pressed="selectedTask === task.id" @click="selectedTask = task.id">
             <strong>{{ task.title }}</strong><span>{{ task.preparation }}</span>
-            <small>{{ loading ? '正在核对工具' : loadError ? '工具目录待重试' : toolCountForTask(task.id) ? `${toolCountForTask(task.id)} 项工具 · 按状态与授权使用` : '尚无开放工具 · 可先准备资料' }}</small>
+            <small>{{ loading ? '正在核对工具' : loadError ? '工具目录待重试' : toolCountForTask(task.id) ? `${toolCountForTask(task.id)} 项目录能力 · 开放状态见下方` : '尚无开放工具 · 可先准备资料' }}</small>
+            <span class="task-action" aria-hidden="true">查看工具 <ArrowRight :size="14" /></span>
           </button>
         </div>
       </section>
@@ -77,8 +88,8 @@
           </span>
           <span class="tool-operational-meta">
             <span><small>目标平台</small><b>{{ toolPlatformLabel(tool) }}</b></span>
-            <span><small>输入字段</small><b>{{ toolInputCount(tool) }} 项</b></span>
-            <span><small>操作类型</small><b>{{ getToolPresentation(tool).operationLabel }}</b></span>
+            <span><small>需要准备</small><b>{{ toolInputLabel(tool) }}</b></span>
+            <span><small>执行方式</small><b>{{ getToolPresentation(tool).operationLabel }}</b></span>
           </span>
         </span>
 
@@ -86,13 +97,13 @@
           <span
             v-if="hasToolDetails(tool)"
             class="learn-more"
-          >了解能力</span>
+          >查看能力与准备</span>
           <span class="action-label">
           <template v-if="launchingToolId === tool.id">
             <LoaderCircle :size="16" class="spin" /> 正在打开…
           </template>
           <template v-else>
-            {{ toolActionText(tool) }} <ArrowRight :size="16" />
+            {{ cardActionText(tool) }} <ArrowRight :size="16" />
           </template>
           </span>
         </span>
@@ -168,6 +179,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import TargetWorkspace from '@/features/targets/TargetWorkspace.vue'
+import { requiresTargetProfile, supportsTargetWorkspace } from '@/features/targets/presentation'
 import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 import {
   ArrowRight,
@@ -218,6 +231,8 @@ const detailsVisible = ref(false)
 const detailsTool = ref<ToolCatalogItem | null>(null)
 const runDialogVisible = ref(false)
 const pendingTool = ref<ToolCatalogItem | null>(null)
+const targetToolId = ref<string | number>()
+const targetWorkspaceRequest = ref(0)
 const runInput = ref<Record<string, string | number | undefined>>({})
 const selectedFileNames = ref<Record<string, string>>({})
 const fileInputErrors = ref<Record<string, string>>({})
@@ -303,6 +318,9 @@ const currentUsability = computed(() => ({
   runtimeAvailable: runtime.singleLive,
   mode: 'single' as const,
 }))
+const targetWorkspaceAvailable = computed<boolean | undefined>(() => loading.value
+  ? undefined
+  : tools.value.some(tool => supportsTargetWorkspace(tool) && isToolCurrentlyUsable(tool, currentUsability.value)))
 
 const iconMap = {
   register: UserPlus,
@@ -347,6 +365,11 @@ function toolInputCount(tool: ToolCatalogItem): number {
   return Array.isArray(tool.single_input_schema) ? tool.single_input_schema.length : 0
 }
 
+function toolInputLabel(tool: ToolCatalogItem): string {
+  const count = toolInputCount(tool)
+  return count ? `${count} 项` : '无需填写'
+}
+
 function hasToolDetails(tool: ToolCatalogItem) {
   return toolCapabilities(tool).length
     || normalizedList(tool?.preparation_notes).length
@@ -371,6 +394,15 @@ function toolActionText(tool: ToolCatalogItem): string {
   if (presentation.action === 'unavailable' || presentation.action === 'calculate') return presentation.actionLabel
   if (liveUnavailable(tool)) return '下载桌面端'
   return presentation.actionLabel
+}
+
+function cardActionText(tool: ToolCatalogItem): string {
+  // Cards with guidance always open the read-only detail surface first. Keep
+  // the CTA honest instead of implying that a click immediately starts work.
+  if (!hasToolDetails(tool)) return toolActionText(tool)
+  if (toolState(tool) === 'platform-locked') return '查看授权说明'
+  if (toolState(tool) === 'locked') return '查看套餐说明'
+  return '查看准备项'
 }
 
 function openDetails(rawTool: unknown) {
@@ -422,6 +454,15 @@ function handleToolClick(rawTool: unknown) {
     void downloadKstDesktop()
     return
   }
+  if (requiresTargetProfile(tool)) {
+    if (!supportsTargetWorkspace(tool)) {
+      showToast('此工具需要尚未接入的目标能力或运行协议，不能使用通用脚本执行。', 'info')
+      return
+    }
+    targetToolId.value = tool.id
+    targetWorkspaceRequest.value++
+    return
+  }
   if (scriptPreflightRequired(tool)) {
     void runTool(tool)
     return
@@ -449,7 +490,10 @@ async function loadData() {
     const next = toolCatalogSchema
       .parse(await getTools({ platform_key: platform }))
       .filter(tool => isCustomerTool(tool) && tool.supports_live_single)
-    if (current()) tools.value = next
+    if (current()) {
+      tools.value = next
+      if (targetToolId.value !== undefined && !next.some(tool => tool.id === targetToolId.value && supportsTargetWorkspace(tool) && isToolCurrentlyUsable(tool, currentUsability.value))) targetToolId.value = undefined
+    }
   } catch (error) {
     if (!current()) return
     const message = errorMessage(error, '请检查网络连接后重试。')
@@ -516,6 +560,7 @@ watch(() => platformStore.currentPlatform, () => {
   detailsTool.value = null
   runDialogVisible.value = false
   pendingTool.value = null
+  targetToolId.value = undefined
   runInput.value = {}
   selectedFileNames.value = {}
   fileInputErrors.value = {}
@@ -529,7 +574,7 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 <style scoped>
 .ready-next-step{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 18px;margin-bottom:18px;border:1px solid var(--color-primary-muted);border-radius:12px;background:var(--color-primary-soft)}.ready-next-step>div{min-width:0}.ready-next-step strong{color:var(--color-text);font-size:var(--type-control);overflow-wrap:anywhere}.ready-next-step p{margin:5px 0 0;color:var(--color-text-secondary);font-size:var(--type-meta);line-height:1.65}.ready-next-step button{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;min-height:40px;padding:9px 14px;border:0;border-radius:9px;background:var(--color-primary);color:#fff;font:inherit;font-size:var(--type-control);font-weight:700;cursor:pointer}.empty-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:8px}.empty-actions a{display:inline-flex;align-items:center;min-height:38px;padding:0 14px;border:1px solid var(--color-border);border-radius:9px;color:var(--color-primary);background:var(--color-surface);font-size:13px;font-weight:700;text-decoration:none}@media(max-width:620px){.ready-next-step{align-items:stretch;flex-direction:column}.ready-next-step button{justify-content:center}}
 .file-input{display:grid;gap:8px;width:100%;padding:12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface-soft)}.file-name{overflow-wrap:anywhere;color:var(--color-text)}.file-actions{display:flex;gap:8px;flex-wrap:wrap}.file-actions button{border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface);color:var(--color-primary);padding:7px 12px;cursor:pointer}.file-actions button:disabled{opacity:.5;cursor:not-allowed}.file-input small{line-height:1.6;color:var(--color-text-secondary)}.file-input .file-error{margin:0;color:var(--color-danger);line-height:1.5}
-.directory-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 22px}.search-box{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.search-box input{width:100%;min-width:0;border:0;background:transparent;color:var(--color-text);font:inherit;outline:none}.search-box:focus-within{outline:2px solid var(--color-focus-ring)}.available-filter{display:flex;align-items:center;gap:6px;font-size:13px}.directory-filters>button{padding:9px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-text);cursor:pointer}.directory-filters>button[aria-pressed=true]{border-color:var(--color-primary);color:var(--color-primary)}.task-groups{display:grid;gap:16px;margin-bottom:20px}.task-group h3{margin:0 0 10px;font-size:14px;color:var(--color-text-secondary)}.task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.task-grid button{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}.task-grid button[aria-pressed=true]{border-color:var(--color-primary);background:var(--color-primary-soft)}.task-grid span{font-size:12px;line-height:1.6;color:var(--color-text-secondary)}.task-grid small{font-size:11px;color:var(--color-text-tertiary)}.directory-summary{font-size:13px;color:var(--color-text-secondary)}@media(max-width:760px){.task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.task-grid{grid-template-columns:1fr}}
+.directory-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 22px}.search-box{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.search-box input{width:100%;min-width:0;border:0;background:transparent;color:var(--color-text);font:inherit;outline:none}.search-box:focus-within{outline:2px solid var(--color-focus-ring)}.available-filter{display:flex;align-items:center;gap:6px;font-size:13px}.directory-filters>button{padding:9px 12px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);color:var(--color-text);cursor:pointer}.directory-filters>button[aria-pressed=true]{border-color:var(--color-primary);color:var(--color-primary)}.task-groups{display:grid;gap:18px;margin-bottom:20px}.task-group-heading{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:10px}.task-group-heading>div{min-width:0}.task-group h3{margin:0;font-size:14px;color:var(--color-text)}.task-group-heading p{margin:4px 0 0;color:var(--color-text-secondary);font-size:12px;line-height:1.55}.task-group-count{flex:none;color:var(--color-text-tertiary);font-size:11px}.task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.task-grid button{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}.task-grid button[aria-pressed=true]{border-color:var(--color-primary);background:var(--color-primary-soft)}.task-grid span{font-size:12px;line-height:1.6;color:var(--color-text-secondary)}.task-grid small{font-size:11px;color:var(--color-text-tertiary)}.task-grid .task-action{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:2px;color:var(--color-primary);font-size:12px;font-weight:700}.directory-summary{font-size:13px;color:var(--color-text-secondary)}@media(max-width:760px){.task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.task-grid{grid-template-columns:1fr}}
 .toolbox-page {
   width: min(1120px, 100%);
   margin: 0 auto;
@@ -896,5 +941,44 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 @media (prefers-reduced-motion: reduce) {
   .launch-rail { display: none; }
   .is-launching { animation: none; }
+}
+
+/* 目录层级：让“找任务”和“看状态”先于卡片细节，保留现有搜索、品牌与分类。 */
+.directory-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 26px 0 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--color-surface);
+}
+.directory-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.directory-intro h2 { margin: 0; color: var(--color-text); font-size: 18px; letter-spacing: -.02em; }
+.directory-intro p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
+.directory-count { flex: none; color: var(--color-text-tertiary); font-size: 12px; font-weight: 700; }
+
+@media (max-width: 620px) {
+  .directory-intro { align-items: flex-start; flex-direction: column; gap: 8px; margin-top: 20px; padding: 16px; }
+  .directory-count { font-size: 11px; }
+  .tool-operational-meta { grid-template-columns: 1fr 1fr !important; }
+  .tool-operational-meta > span:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 420px) {
+  .directory-filters { align-items: stretch; }
+  .search-box { min-width: 100%; }
+  .directory-filters > button { flex: 1; }
+  .tool-operational-meta { grid-template-columns: 1fr !important; }
+  .tool-operational-meta > span:last-child { grid-column: auto; }
 }
 </style>

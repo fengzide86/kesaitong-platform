@@ -14,6 +14,7 @@ const props = defineProps<{
   running: boolean
   paused: boolean
   status: string
+  failureMessage?: string
   currentStep: string
   action: string
   steps: string[]
@@ -158,6 +159,14 @@ function expandControl() {
           role="status"
           data-testid="run-status"
         >{{ displayStatus }}</span>
+        <p
+          v-if="selectedRun && status === '未完成' && failureMessage"
+          class="kst-demo-failure-reason"
+          data-testid="demo-failure-reason"
+          role="alert"
+        >
+          {{ failureMessage }}
+        </p>
         <section
           v-if="finished && outcome"
           class="kst-demo-outcome"

@@ -14,6 +14,7 @@ const fixtureFiles = Object.freeze({
   '1.8.7': './nsis-upgrade-fixture-1.8.7.json',
   '1.8.8': './nsis-upgrade-fixture-1.8.8.json',
   '1.8.14': './nsis-upgrade-fixture-1.8.14.json',
+  '1.8.15': './nsis-upgrade-fixture-1.8.15.json',
 })
 
 // Only reviewed, immutable releases may seed an upgrade. Never resolve a
@@ -28,6 +29,9 @@ export async function readPinnedUpgradeFixture(version = '1.8.5') {
     || !/^[a-f0-9]{128}$/.test(fixture.sha512)) {
     throw new Error(`Invalid pinned NSIS baseline metadata: ${version}`)
   }
+  if (fixture.blockmap && (fixture.blockmap.fileName !== `${expectedName}.blockmap`
+    || fixture.blockmap.url !== `${fixture.url}.blockmap` || !Number.isSafeInteger(fixture.blockmap.size) || fixture.blockmap.size <= 0
+    || !/^[a-f0-9]{128}$/.test(fixture.blockmap.sha512))) throw new Error('Invalid pinned NSIS blockmap metadata')
   return fixture
 }
 
@@ -59,6 +63,23 @@ export async function prepareUpgradeFixture() {
   }
   if (process.env.GITHUB_ENV) {
     await appendFile(process.env.GITHUB_ENV, `NSIS_PREVIOUS_INSTALLER=${output}\nNSIS_PREVIOUS_VERSION=${fixture.version}\n`)
+  }
+  if (process.env.NSIS_DOWNLOAD_BLOCKMAP === '1') {
+    if (!fixture.blockmap) throw new Error('This pinned release has no reviewed blockmap identity')
+    const blockmapOutput = path.join(destination, fixture.blockmap.fileName)
+    if (!await matchesUpgradeFixture(blockmapOutput, fixture.blockmap)) {
+      if (await stat(blockmapOutput).catch(() => null)) throw new Error('Cached baseline blockmap differs; preserve it for inspection')
+      const temporary = `${blockmapOutput}.${process.pid}.download`
+      try {
+        const signal = AbortSignal.timeout(60_000)
+        const response = await fetch(fixture.blockmap.url, { signal, redirect: 'error' })
+        if (!response.ok || !response.body) throw new Error(`Pinned blockmap download failed: HTTP ${response.status}`)
+        await pipeline(Readable.fromWeb(response.body), createWriteStream(temporary, { flags: 'wx' }), { signal })
+        if (!await matchesUpgradeFixture(temporary, fixture.blockmap)) throw new Error('Pinned blockmap SHA512/size mismatch')
+        await rename(temporary, blockmapOutput)
+      } finally { await rm(temporary, { force: true }) }
+    }
+    console.log('nsis_baseline_blockmap_sha512=verified')
   }
   console.log(`nsis_previous_version=${fixture.version}`)
   console.log(`nsis_previous_installer=${output}`)

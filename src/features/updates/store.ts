@@ -61,7 +61,7 @@ export const useUpdateStore = defineStore('application-updates', () => {
   })
   const shouldShowNotice = computed(() => state.value.status === 'available' && !promptSuppressed.value)
   const showHeaderEntry = computed(() => supported.value && [
-    'available', 'downloading', 'downloaded', 'restart_deferred', 'cancelled', 'error',
+    'available', 'downloading', 'cancelling', 'downloaded', 'restart_deferred', 'cancelled', 'error',
   ].includes(state.value.status))
   const shouldPromptRestart = computed(() => (
     state.value.status === 'downloaded'
@@ -136,7 +136,7 @@ export const useUpdateStore = defineStore('application-updates', () => {
       showToast('开发预览无需检查更新', 'info')
       return
     }
-    localStorage.removeItem(PROMPT_KEY)
+    try { localStorage.removeItem(PROMPT_KEY) } catch { /* Main-process preference remains authoritative. */ }
     installingDeferredForSession.value = false
     openDetails()
     applySnapshot(await window.electronAPI.updates.check())
@@ -155,7 +155,7 @@ export const useUpdateStore = defineStore('application-updates', () => {
 
   async function deferDownload(): Promise<void> {
     const version = state.value.availableVersion
-    if (version) localStorage.setItem(PROMPT_KEY, JSON.stringify({ version, until: Date.now() + DAY_MS }))
+    try { if (version) localStorage.setItem(PROMPT_KEY, JSON.stringify({ version, until: Date.now() + DAY_MS })) } catch { /* The main process also persists this preference. */ }
     const bridge = window.electronAPI?.updates
     if (bridge) applySnapshot(await bridge.defer({ phase: 'download' }))
     closeDetails()
@@ -167,6 +167,11 @@ export const useUpdateStore = defineStore('application-updates', () => {
     if (bridge) applySnapshot(await bridge.defer({ phase: 'install' }))
   }
 
+  function dismissRestartPrompt(): void {
+    // Dismissing a dialog is not permission to install on exit.
+    installingDeferredForSession.value = true
+  }
+
   async function install(): Promise<void> {
     const bridge = window.electronAPI?.updates
     if (bridge) applySnapshot(await bridge.install())
@@ -175,6 +180,6 @@ export const useUpdateStore = defineStore('application-updates', () => {
   return {
     state, supported, initialized, drawerOpen, displayPercent, promptSuppressed, shouldShowNotice,
     showHeaderEntry, shouldPromptRestart, initialize, dispose, openDetails, closeDetails, checkManually,
-    startDownload, cancelDownload, deferDownload, deferInstall, install,
+    startDownload, cancelDownload, deferDownload, deferInstall, dismissRestartPrompt, install,
   }
 })

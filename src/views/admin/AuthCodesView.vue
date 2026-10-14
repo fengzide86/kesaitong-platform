@@ -1,16 +1,18 @@
 <template>
   <div class="auth-codes-page">
     <PageHeader
-      eyebrow="LICENSE OPERATIONS"
+      eyebrow="授权管理"
       title="授权码管理"
       description="为普通工具箱和专业工作台生成独立授权"
     >
       <template #actions>
-        <router-link v-if="canWrite" class="business-center-link" to="/admin/business-access">专业工作台</router-link>
+        <router-link v-if="canWrite" class="business-center-link" to="/admin/business-access">工作台开放</router-link>
       </template>
     </PageHeader>
 
     <AsyncStateNotice :state="loadState" :message="loadError" loading-text="正在加载授权码…" @retry="loadData" />
+
+    <p v-if="!canWrite" class="role-boundary-note" role="note">当前为客服只读视图：授权码仅显示脱敏尾号，可核对状态与关联用户，不能生成、修改或删除授权。</p>
 
     <el-card v-if="canWrite" :class="['table-card', 'generator-card', { 'is-business': generatorProductType === 'business' }]">
       <template #header>
@@ -39,7 +41,7 @@
       </template>
       <div v-if="generatorProductType === 'business'" class="business-value-strip">
         <div>
-          <span class="business-kicker">BUSINESS ACCESS</span>
+          <span class="business-kicker">专业工作台授权</span>
           <strong>专业工作台授权</strong>
           <p>用于教师、运营及批量操作人员。当前处于内部验证阶段。</p>
         </div>
@@ -103,7 +105,7 @@
         </div>
       </template>
       <DataToolbar label="授权码筛选">
-        <el-input v-model="searchText" placeholder="搜索全部授权码/设备..." :maxlength="200" style="width: 220px;" clearable @keyup.enter="applyKeyword" />
+        <el-input v-model="searchText" :placeholder="canWrite ? '搜索全部授权码/设备...' : '搜索授权码尾号/设备...'" :maxlength="200" style="width: 220px;" clearable @keyup.enter="applyKeyword" />
         <el-select v-model="filterProductType" placeholder="全部产品" clearable style="width: 150px;">
           <el-option label="普通 C 端" value="consumer" />
           <el-option label="专业 B 端" value="business" />
@@ -119,7 +121,7 @@
       <el-table :data="filteredCodes" style="width: 100%" v-loading="isLoading">
         <el-table-column label="授权码" min-width="180">
           <template #default="{ row }">
-            <a href="#" @click.prevent="openDetail(row)" class="code-link">{{ row.code }}</a>
+            <a href="#" @click.prevent="openDetail(row)" class="code-link">{{ displayCode(row.code) }}</a>
           </template>
         </el-table-column>
         <el-table-column label="产品类型" width="120">
@@ -208,7 +210,7 @@
         <span :class="['success-mark', { business: generatorProductType === 'business' }]">
           <Check :size="25" />
         </span>
-        <span class="success-eyebrow">{{ generatorProductType === 'business' ? 'BUSINESS LICENSE' : 'CUSTOMER LICENSE' }}</span>
+        <span class="success-eyebrow">{{ generatorProductType === 'business' ? '专业授权' : '普通授权' }}</span>
         <h3>{{ generatorProductType === 'business' ? '专业工作台授权' : '普通工具箱授权' }}</h3>
         <p>{{ selectedPlan?.name || '当前套餐' }} · {{ generatedCodes.length }} 个授权码</p>
         <div class="generated-code-list">
@@ -280,7 +282,7 @@
         </div>
         <div class="detail-row">
           <span class="detail-label">授权码</span>
-          <span class="detail-value" style="font-family: monospace;">{{ detailData.code }}</span>
+          <span class="detail-value" style="font-family: monospace;">{{ displayCode(detailData.code) }}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">套餐</span>
@@ -471,6 +473,13 @@ function getStatusText(status?: string | null) {
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('zh-CN')
+}
+
+function displayCode(value?: string | null) {
+  if (!value) return '-'
+  if (canWrite.value) return value
+  const normalized = String(value)
+  return `••••${normalized.slice(-4)}`
 }
 
 function getDeviceCount(rawCode: unknown) {
@@ -1014,6 +1023,17 @@ onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; relatedSequence 
   color: var(--color-text);
   text-decoration: none;
   font-weight: 500;
+}
+
+.role-boundary-note {
+  margin: 0 0 14px;
+  padding: 10px 13px;
+  border: 1px solid rgba(45, 95, 202, .18);
+  border-radius: 9px;
+  color: var(--color-text-secondary);
+  background: var(--color-primary-soft);
+  font-size: var(--type-meta);
+  line-height: 1.6;
 }
 
 .code-link:hover {

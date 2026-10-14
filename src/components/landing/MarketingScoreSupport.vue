@@ -63,7 +63,7 @@ const assistedSteps = ['需要关注的得分细节', '对应工具一键配置'
 
     <div class="score-support-footer">
       <p>把摸索过的得分细节，<br class="score-support-mobile-break">放进对应任务的一键配置里。</p>
-      <RouterLink to="/tools">看看哪些任务支持一键处理 <ArrowRight :size="18" aria-hidden="true" /></RouterLink>
+      <RouterLink to="/tools#tool-list">看看哪些任务支持一键处理 <ArrowRight :size="18" aria-hidden="true" /></RouterLink>
     </div>
   </section>
 </template>
