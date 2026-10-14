@@ -36,7 +36,7 @@ const shell = findShell()
 const canonicalShellPath = value => {
   const candidate = shellPath(value)
   if (process.platform !== 'win32') return candidate
-  const result = spawnSync(shell, ['-c', `readlink -e -- ${quote(candidate)}`], {
+  const result = spawnSync(shell, ['-c', `export PATH="/usr/bin:$PATH"\nreadlink -e -- ${quote(candidate)}`], {
     encoding: 'utf8', windowsHide: true,
   })
   return result.status === 0 ? result.stdout.trim() : candidate
