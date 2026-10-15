@@ -51,6 +51,7 @@
     "test:mariadb": "node scripts/run-python.mjs -- -m pytest backend/tests/integration/test_mariadb_framework.py backend/tests/integration/test_mariadb_order_concurrency.py backend/tests/integration/test_mariadb_hardening.py --rootdir=backend -q -rs",
     "test:mariadb:required": "node scripts/with-toolbox-data-root.mjs --set REQUIRE_MARIADB_TEST=1 -- npm run test:mariadb",
     "release:mariadb-gate": "node scripts/verify-release-mariadb-gate.mjs",
+    "verify:release:attested": "node scripts/verify-release-attested.mjs",
     "test:e2e": "node scripts/with-toolbox-data-root.mjs -- playwright test",
     "test:e2e:business": "node scripts/with-toolbox-data-root.mjs -- playwright test --config=playwright.business.config.ts",
     "test:e2e:internal": "node scripts/with-toolbox-data-root.mjs -- playwright test --config=playwright.internal.config.ts",

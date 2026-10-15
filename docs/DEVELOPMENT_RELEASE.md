@@ -144,7 +144,7 @@ node scripts/toolbox-cli.mjs pack
   - `Real backend C B Admin journeys`
   - `Windows NSIS install and runtime smoke`
 
-确认生产发布后，脚本执行完整质量门禁、构建及内容审计，再依次部署后端与桌面更新。发布阶段为 `prepared → backend_deployed → desktop_published → verified`，schemaVersion=2 状态与后端、桌面产物校验值保存到 `TOOLBOX_DATA_ROOT/release-workflows/<release-id>/`，Windows 默认位于 D 盘。后端部署包通过 `git archive` 从该提交的跟踪文件生成，包含业务网页版下线策略及 Service Worker 清退脚本；不生成、上传或激活业务 Web 归档。最终核对健康信息、桌面清单及旧网页的跳转、410 和清退脚本后才创建并推送版本标签。`build:web` 仅用于本地预览和隔离界面测试，测试产物不进入生产发布。
+确认生产发布后，发布器会复用同一 HEAD 已通过且已核验的八项 CI 结果，只执行发布策略、精确 MariaDB CI 证明、实际桌面构建、包审计及线上部署检查；`检查.bat full` 仍保留完整本地质量门禁。发布阶段为 `prepared → backend_deployed → desktop_published → verified`，schemaVersion=2 状态与后端、桌面产物校验值保存到 `TOOLBOX_DATA_ROOT/release-workflows/<release-id>/`，Windows 默认位于 D 盘。后端部署包通过 `git archive` 从该提交的跟踪文件生成，包含业务网页版下线策略及 Service Worker 清退脚本；不生成、上传或激活业务 Web 归档。最终核对健康信息、桌面清单及旧网页的跳转、410 和清退脚本后才创建并推送版本标签。`build:web` 仅用于本地预览和隔离界面测试，测试产物不进入生产发布。
 
 无人值守发布示例：
 

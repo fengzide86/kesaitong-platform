@@ -1012,7 +1012,7 @@ async function prepareRelease(state, ciAttestedSha) {
   if (ciAttestedSha !== state.commitSha) fail('MariaDB CI attestation 与发布提交不一致')
   const artifactDir = path.join(releaseStateDirectory(state.releaseId), 'artifacts')
   fs.mkdirSync(artifactDir, { recursive: true })
-  run('npm', ['run', 'verify:release'], { env: releaseVerificationEnvironment(ciAttestedSha) })
+  run('npm', ['run', 'verify:release:attested'], { env: releaseVerificationEnvironment(ciAttestedSha) })
   run('npm', ['run', 'electron:release'])
   run('npm', ['run', 'package:audit'])
   const desktop = copyDesktopArtifacts(state.version, artifactDir)
