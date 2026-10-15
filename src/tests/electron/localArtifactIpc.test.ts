@@ -4,7 +4,6 @@ import { createRequire } from 'node:module'
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, relative, isAbsolute } from 'node:path'
-import { runInNewContext } from 'node:vm'
 import type { DesktopAutomationController as ControllerType } from '../../../electron/automation/desktop-automation-controller.cjs'
 import type { CredentialManager as CredentialsType } from '../../../electron/core/credential-manager.cjs'
 import type { IpcMain, IpcMainInvokeEvent, BrowserWindow, WebContents } from 'electron'
@@ -16,15 +15,20 @@ const roots: string[] = []
 const controllers: ControllerType[] = []
 
 function loadCjs<T>(fileName: string, mocks: Record<string, unknown>): T {
-  const filePath = resolve('dist-electron', fileName)
-  const localRequire = createRequire(filePath)
-  const module = { exports: {} }
-  runInNewContext(readFileSync(filePath, 'utf8'), {
-    require: (name: string) => Object.hasOwn(mocks, name) ? mocks[name] : localRequire(name),
-    module, exports: module.exports, __dirname: resolve(filePath, '..'), process,
-    console: { ...console, error: vi.fn() }, Buffer, setTimeout, clearTimeout, AbortSignal,
-  })
-  return module.exports as T
+  const modules = new Map<string, { exports: unknown }>()
+  const load = (filePath: string): unknown => {
+    if (modules.has(filePath)) return modules.get(filePath)!.exports
+    const localRequire = createRequire(filePath)
+    const module = { exports: {} }; modules.set(filePath, module)
+    const resolver = (name: string): unknown => Object.hasOwn(mocks, name) ? mocks[name]
+      : name.startsWith('.') && name.endsWith('.cjs') ? load(localRequire.resolve(name)) : localRequire(name)
+    // Keep real policy/session dependencies on the fixture Electron API and
+    // in the same realm as the production schemas.
+    new Function('require', 'module', 'exports', '__dirname', 'console', readFileSync(filePath, 'utf8'))(
+      resolver, module, module.exports, resolve(filePath, '..'), { ...console, error: vi.fn() })
+    return module.exports
+  }
+  return load(resolve('dist-electron', fileName)) as T
 }
 
 function setup(options: { encryptionAvailable?: boolean; clearFails?: boolean; deferStart?: boolean } = {}) {
@@ -53,16 +57,29 @@ function setup(options: { encryptionAvailable?: boolean; clearFails?: boolean; d
       artifact: { type: 'screenshot', path: join(directory, 'run_1.png') } })
     return options.deferStart ? startGate : { runId: 'run_1' }
   })
+  const sessions = new Map<string, { clearStorageData: () => Promise<void> }>()
   const electron = {
     app: { getPath: () => root, getVersion: () => 'test', isPackaged: true },
     safeStorage: { isEncryptionAvailable: () => options.encryptionAvailable !== false, encryptString: (value: string) => Buffer.from(value) },
-    shell: {}, net: { fetch: vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith('/api/tools') ? [{ id: 'tool_1', single_input_schema: [] }, { id: 'tool_2', single_input_schema: [] }] : { success: true, data: { role: 'user', user_id: 1, device_id: 'fixture-device' } } })) }, webContents: {},
+    session: { fromPartition: (partition: string) => {
+      if (!sessions.has(partition)) sessions.set(partition, { clearStorageData: vi.fn(async () => {}) })
+      return sessions.get(partition)!
+    } },
+    shell: {}, net: { fetch: vi.fn(async (url: string) => {
+      if (url.endsWith('/api/auth/me')) return { ok: true, json: async () => ({ success: true, data: { role: 'user', user_id: 1, device_id: 'fixture-device' } }) }
+      if (url.endsWith('/api/scenarios/me')) return { ok: true, json: async () => ({ success: true, data: {
+        schemaVersion: 1, principal: { kind: 'customer', id: '1' }, revision: 'fixture-unassigned', status: 'unassigned', mode: 'training',
+        entryUrl: null, allowedOrigins: [], maxScenes: 1, checkedAt: new Date().toISOString(), expiresAt: null, refreshAfterSeconds: 30,
+      } }) }
+      if (url.endsWith('/api/tools')) return { ok: true, json: async () => [{ id: 'tool_1', single_input_schema: [] }, { id: 'tool_2', single_input_schema: [] }] }
+      throw new Error(`Unexpected fixture request: ${url}`)
+    }) }, webContents: {},
   }
   const { DesktopAutomationController } = loadCjs<{ DesktopAutomationController: typeof ControllerType }>('electron/automation/desktop-automation-controller.cjs', {
     electron,
     './embedded-browser-host.cjs': { EmbeddedBrowserHost: class { isReady() { return false } release() {} } },
-    './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} async cleanup() {} async revokeSession() {} } },
-    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} dispose() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
+    './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} isActive() { return false } async cleanup() {} async revokeSession() {} async cancelActiveForWindowClose() {} } },
+    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} dispose() {} async drain() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
     './runner-client.cjs': { RunnerClient: class {
       constructor(private callbacks: { onEvent: (event: Record<string, unknown>) => void; onHostRequest: (action: string, payload: Record<string, unknown>) => Promise<unknown> }) {}
       start() { return start(this.callbacks) }
@@ -89,7 +106,9 @@ function setup(options: { encryptionAvailable?: boolean; clearFails?: boolean; d
   const invoke = (channel: string, ...args: unknown[]) => {
     const handler = handlers.get(channel)
     if (!handler) throw new Error('Missing test IPC handler')
-    if (channel === 'automation:start' && args[0] && typeof args[0] === 'object') args[0] = { executionMode: 'live', ...args[0] }
+    if (['automation:start', 'automation:preflight'].includes(channel) && args[0] && typeof args[0] === 'object') args[0] = {
+      executionMode: 'live', targetUrl: 'https://fixture.test/tool', ...args[0],
+    }
     return handler(event, ...args)
   }
   return { controller, owner, event, handlers, invoke, sessionChanged, start, resolveStart }

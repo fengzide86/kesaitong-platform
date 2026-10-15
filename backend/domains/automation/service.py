@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.response import success_response
 from domains.catalog import normalize_tool_configs
+from domains.commercial import complete_trial_reconciliation, complete_trial_report
 from models import LaunchToken, Setting
 from models.feedback import ExecutionVerification, LogStatus, RunLog
 
@@ -21,7 +22,7 @@ from .schemas import ExecutionReconcileRequest, RunnerExecutionReport
 
 def owner_id(current_user: dict[str, Any]) -> int:
     user_id = current_user.get("user_id")
-    if not isinstance(user_id, int) or user_id <= 0:
+    if current_user.get("role") != "user" or current_user.get("staff_id") is not None or not isinstance(user_id, int) or user_id <= 0:
         raise HTTPException(status_code=403, detail="真实执行记录仅对授权用户开放")
     return user_id
 
@@ -98,6 +99,7 @@ async def report_execution(db: AsyncSession, request: RunnerExecutionReport) -> 
         verification_state=ExecutionVerification.VERIFIED,
     )
     db.add(log)
+    await complete_trial_report(db, launch, request.run_id, request.status == "succeeded")
     launch.status = "reported"
     await db.commit()
     await db.refresh(log)
@@ -151,6 +153,7 @@ async def reconcile_execution(
     matched.status = LogStatus.SUCCESS
     matched.error_code = None
     matched.detail = _report_detail(request)
+    await complete_trial_reconciliation(db, matched.auth_code_id, request.run_id, request.object_ref)
     await db.commit()
     await db.refresh(matched)
     return success_response({"accepted": True, "duplicate": False, "reconciled": True, "execution_id": matched.id})

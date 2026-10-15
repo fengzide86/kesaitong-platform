@@ -29,6 +29,7 @@ interface OutboxOptions {
   codec: { isEncryptionAvailable(): boolean; encryptString(value: string): Buffer; decryptString(value: Buffer): string }
   request?: typeof fetch
   now?: () => number
+  reportPath?: '/api/executions/report' | '/api/scenarios/staff/reports'
 }
 
 /** A durable, encrypted receipt queue. Retrying it never starts a Runner. */
@@ -42,7 +43,7 @@ export class ExecutionReportOutbox {
 
   constructor(options: OutboxOptions) {
     this.options = options
-    const scope = createHash('sha256').update(options.apiBase).digest('hex').slice(0, 24)
+    const scope = createHash('sha256').update(options.apiBase + (options.reportPath && options.reportPath !== '/api/executions/report' ? options.reportPath : '')).digest('hex').slice(0, 24)
     this.target = path.join(options.directory, `execution-receipts-${scope}.bin`)
   }
 
@@ -148,7 +149,7 @@ export class ExecutionReportOutbox {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 5000)
     try {
-      const response = await (this.options.request || fetch)(`${this.options.apiBase}/api/executions/report`, {
+      const response = await (this.options.request || fetch)(`${this.options.apiBase}${this.options.reportPath || '/api/executions/report'}`, {
         method: 'POST', signal: controller.signal,
         headers: { 'Content-Type': 'application/json', 'X-Toolbox-Version': this.options.version },
         body: JSON.stringify(entry.receipt),

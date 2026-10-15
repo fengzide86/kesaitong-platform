@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { session, type WebContents, type WebPreferences } from 'electron'
 
 type Grant = { owner: string; platform: string; partition: string }
@@ -23,8 +23,8 @@ export class WorkspaceBrowserSessions {
     if (!['amazon', 'aliexpress'].includes(platform)) throw new Error('平台类型无效')
     if (!this.matches(owner, platform)) {
       this.revoke()
-      const identity = createHash('sha256').update(JSON.stringify([owner, platform])).digest('hex')
-      this.grant = { owner, platform, partition: `persist:kst-workspace-v1-${identity}` }
+      const identity = createHash('sha256').update(JSON.stringify([owner, platform, randomUUID()])).digest('hex')
+      this.grant = { owner, platform, partition: `kst-workspace-v2-${identity}` }
     }
     return { partition: this.grant!.partition }
   }
@@ -62,6 +62,7 @@ export class WorkspaceBrowserSessions {
   }
 
   revoke(): void {
+    const retired = this.grant
     this.generation += 1
     this.grant = null
     // Keep pending generations as tombstones so a delayed did-attach cannot
@@ -70,5 +71,8 @@ export class WorkspaceBrowserSessions {
       if (!guest.isDestroyed()) guest.close({ waitForBeforeUnload: false })
     }
     this.guests.clear()
+    // A new non-persistent nonce is mandatory even if disk/cache cleanup fails.
+    // The old authenticated session is never silently adopted by a new login.
+    if (retired) void session.fromPartition(retired.partition).clearStorageData().catch(() => undefined)
   }
 }

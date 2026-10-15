@@ -19,6 +19,40 @@ def test_probe_accepts_only_its_disposable_ci_target():
     assert probe.validated_test_url(TEST_URL, CI).database == "toolbox_upgrade_test"
 
 
+def test_probe_revision_tracks_runtime_and_all_twenty_framework_tables():
+    from database import SCHEMA_REVISION
+    from models import Base
+
+    assert probe.NEW_REVISION == SCHEMA_REVISION == "20261015_framework_commerce"
+    names = probe.framework_tables()
+    assert len(names) == len(set(names)) == 20
+    assert set(names) <= set(Base.metadata.tables)
+
+
+def test_framework_probe_checks_migrated_tables_without_repairing_missing_schema(tmp_path):
+    import sqlalchemy as sa
+
+    from tests.test_framework_migration import migration
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+    try:
+        with engine.begin() as connection:
+            # Exercise the frozen migration, not metadata.create_all, so schema
+            # drift cannot be hidden by the same model used by the assertions.
+            migration(connection).upgrade()
+            probe.assert_framework_contract(connection)
+            connection.execute(sa.text("INSERT INTO team_members (name, active, version, ledger_version) VALUES ('Synthetic', 1, 1, 1)"))
+            with pytest.raises(AssertionError, match="team_members"):
+                probe.assert_framework_contract(connection)
+            probe.assert_framework_contract(connection, empty=False)
+            connection.execute(sa.text("DROP TABLE staff_runtime_permissions"))
+            with pytest.raises(AssertionError):
+                probe.assert_framework_contract(connection, empty=False)
+            assert "staff_runtime_permissions" not in sa.inspect(connection).get_table_names()
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize("environment", [{}, {"CI": "true"}, {"GITHUB_ACTIONS": "true"}])
 def test_probe_rejects_non_ci_before_connecting(environment):
     with pytest.raises(RuntimeError, match="disposable GitHub"):

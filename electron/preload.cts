@@ -41,6 +41,7 @@ import type { RunnerEvent } from '../src/shared/ipc/automation-contract.js'
 import type { UpdateDeferPhase, UpdateSnapshot } from '../src/shared/ipc/update-contract.js'
 import { recoveryRecordSchema, type RecoveryBridge, type RecoveryQuery, type RecoveryReview, type RecoveryPrepare } from '../src/shared/ipc/recovery-contract.js'
 import { probeObservationSchema, runPlanPreviewSchema, operationReceiptSchema, type TargetsBridge } from '../src/shared/ipc/target-contract.js'
+import { scenarioPolicySchema, sceneSummarySchema, type LocalScenesBridge } from '../src/shared/ipc/scenario-contract.js'
 import {
   localArtifactReadResultSchema,
   type LocalArtifactReadRequest,
@@ -124,7 +125,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadUserCode: (): Promise<string | null> => invokeDesktop('credential-load-user-code'),
     clearUserCode: (): Promise<boolean> => invokeDesktop('credential-clear-user-code'),
   },
-  ...(automationEnabled ? { targets: {
+  ...(automationEnabled ? { scenes: {
+    policy: async () => scenarioPolicySchema.parse(await invokeDesktop('scenes:policy')),
+    list: async () => sceneSummarySchema.array().parse(await invokeDesktop('scenes:list')),
+    open: async (input: Parameters<LocalScenesBridge['open']>[0]) => sceneSummarySchema.array().parse(await invokeDesktop('scenes:open', input)),
+    select: (id: string) => invokeDesktop<void>('scenes:select', id),
+    close: (id: string) => invokeDesktop<void>('scenes:close', id),
+    bounds: (value: Parameters<LocalScenesBridge['bounds']>[0]) => invokeDesktop<void>('scenes:bounds', value),
+    hide: () => invokeDesktop<void>('scenes:hide'),
+  } satisfies LocalScenesBridge, targets: {
     open: (request: Parameters<TargetsBridge['open']>[0]) => invokeDesktop<void>('targets:open', request),
     refresh: () => invokeDesktop<void>('targets:refresh'),
     detect: async () => probeObservationSchema.parse(await invokeDesktop('targets:detect')),

@@ -64,7 +64,15 @@ export const storedLicenseSchema = z.object({
 export function licensePlanCode(license: z.infer<typeof storedLicenseSchema>): string {
   // An explicit null is a server decision, never infer rights from display text.
   const code = license.plan_code !== undefined ? license.plan_code : license.entitlements?.plan_code
+  if (license.entitlements?.commercial_grant_id && typeof code === 'string' && /^[a-z][a-z0-9-]+$/.test(code)) return code
   return typeof code === 'string' && /^Y\d+$/.test(code) ? code : ''
+}
+
+export function licenseAllowedCapabilities(license: z.infer<typeof storedLicenseSchema>): unknown {
+  const entitlements = license.entitlements
+  if (!entitlements || (!entitlements.commercial_grant_id && entitlements.allowed_capabilities === undefined)) return undefined
+  // A malformed/missing commercial snapshot must not fall back to broad legacy plans.
+  return entitlements.allowed_capabilities ?? []
 }
 
 export function readStoredLicense() {

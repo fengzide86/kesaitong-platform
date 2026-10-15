@@ -2,7 +2,7 @@
  * API 工具函数单元测试
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api, request, ApiError, verifyAuthCode, adminLogin, getPlans, getPlansAdmin, updatePlan, enablePlan, disablePlan, archivePlan, getAuthCodes, updateAuthCode, deleteAuthCode, unbindDevice, getOrders, markOrderPaid, cancelOrder, refundOrder, getUsers, getLogs, getFeedbacks, getDashboard, getSettings, getTools, getProfit, getProfitPolicy, updateProfitPolicy } from '@/utils/api'
+import { api, request, ApiError, verifyAuthCode, adminLogin, getPlans, getPlansAdmin, updatePlan, enablePlan, disablePlan, archivePlan, getAuthCodes, updateAuthCode, deleteAuthCode, unbindDevice, getOrders, markOrderPaid, cancelOrder, refundOrder, getUsers, getLogs, getFeedbacks, getDashboard, getSettings, getTools, getProfitPage, getProfitPolicy, updateProfitPolicy } from '@/utils/api'
 import { getOrdersPage } from '@/utils/api/orders'
 
 // Mock fetch
@@ -381,8 +381,11 @@ describe('API Utils', () => {
       )
     })
 
-    it('getProfit 应该调用正确的接口', async () => {
-      await getProfit()
+    it('getProfitPage 应该调用正确的分页接口', async () => {
+      vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true, data: [], total: 0, page: 1, page_size: 20,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      await getProfitPage()
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/profit'),
@@ -418,10 +421,10 @@ describe('API Utils', () => {
       )
 
       const ratios = { tech: 0.3, market: 0.25, product: 0.15, service: 0.15, coordination: 0.1, record: 0.05 }
-      await updateProfitPolicy(ratios)
+      await updateProfitPolicy(ratios, 7)
       expect(global.fetch).toHaveBeenLastCalledWith(
         expect.stringContaining('/api/profit/policy'),
-        expect.objectContaining({ method: 'PUT', body: JSON.stringify({ ratios }) }),
+        expect.objectContaining({ method: 'PUT', body: JSON.stringify({ ratios, expected_version: 7 }) }),
       )
     })
   })

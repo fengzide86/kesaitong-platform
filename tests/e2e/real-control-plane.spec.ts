@@ -150,6 +150,63 @@ test.afterAll(() => {
   writeFileSync(join(runtime, 'database-evidence.json'), JSON.stringify(snapshot, null, 2))
 })
 
+test('新框架商品与成员分配使用真实隔离后端，默认不激活、不自动分配', async ({ page }) => {
+  await page.goto('/#/admin/login')
+  await page.getByLabel('后台账号', { exact: true }).fill(credentials.staff_username)
+  await page.getByLabel('密码', { exact: true }).fill(credentials.staff_password)
+  await page.getByRole('button', { name: '登录并进入工作台' }).click()
+  await expect(page).toHaveURL(/#\/admin\/dashboard/)
+  await page.goto('/#/admin/commercial')
+  await expect(page.getByRole('heading', { name: '商品版本与项目权益' })).toBeVisible()
+  await expect(page.getByText('尚无新商品。可先导入草稿，旧套餐不受影响。')).toBeVisible()
+  await page.getByRole('button', { name: '导入标准商品草稿' }).click()
+  await expect(page.getByText('标准商品已保存为草稿，尚未启用')).toBeVisible()
+  const basic = page.locator('tr').filter({ hasText: 'competition-basic' })
+  await expect(basic).toContainText('草稿')
+  await basic.getByRole('button', { name: '确认启用' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
+  await expect(basic).toContainText('已启用')
+  const offers = await api(page, '/api/commercial/offers') as { data: Array<{ id: number; sku: string }> }
+  const offerId = offers.data.find(item => item.sku === 'competition-basic')!.id
+  await page.getByRole('combobox', { name: /^已启用商品/ }).selectOption(String(offerId))
+  await page.getByLabel('项目编号', { exact: true }).fill('isolated-framework-project')
+  await page.getByLabel('适用网站 origin', { exact: true }).fill('https://www.idtrade.cn')
+  await page.getByLabel('结束时间（本机时区）', { exact: true }).fill('2027-01-01T17:00')
+  await page.getByRole('button', { name: '建立待收款订单' }).click()
+  await expect(page.getByRole('button', { name: '确认收款', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '确认收款', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.getByRole('button', { name: '确认收款', exact: true })).toHaveCount(0)
+  const orders = await api(page, '/api/commercial/orders') as { data: Array<{ id: number; status: string }> }
+  expect(orders.data).toHaveLength(1)
+  expect(orders.data[0]!.status).toBe('paid')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.screenshot({ path: join(runtime, 'framework-commercial.png'), fullPage: true })
+  await page.goto('/#/admin/team-ledger')
+  await expect(page.getByRole('heading', { name: '成员结算台账' })).toBeVisible()
+  await page.getByRole('combobox', { name: /^新商品已收款订单/ }).selectOption(String(orders.data[0]!.id))
+  await expect(page.getByLabel('本次分配金额（手工填写）', { exact: true })).toHaveValue('')
+  const entriesBefore = await api(page, '/api/team-ledger/entries') as { data: unknown[] }
+  expect(entriesBefore.data).toEqual([])
+  await page.getByLabel('本次分配金额（手工填写）', { exact: true }).fill('20.00')
+  await page.getByLabel('结算期', { exact: true }).first().fill('2026-10')
+  await page.getByLabel('金额说明', { exact: true }).fill('隔离环境人工确认分配')
+  await page.getByRole('button', { name: '保存分配金额' }).click()
+  await expect(page.getByText('分配金额已保存，尚未记入成员收入')).toBeVisible()
+  const entriesAfter = await api(page, '/api/team-ledger/entries') as { data: unknown[] }
+  expect(entriesAfter.data).toEqual([])
+  await page.screenshot({ path: join(runtime, 'framework-ledger.png'), fullPage: true })
+  await page.goto('/#/admin/scenarios')
+  await expect(page.getByRole('heading', { name: '场景与本机运行权限' })).toBeVisible()
+  await page.getByRole('combobox', { name: /^场景/ }).first().selectOption('competition')
+  await expect(page.getByLabel('入口网址', { exact: true })).toHaveValue('https://www.idtrade.cn/User/Contest')
+  await page.screenshot({ path: join(runtime, 'framework-scenarios.png'), fullPage: true })
+  await page.goto('/#/admin/local-runtime')
+  await expect(page.getByRole('heading', { name: '本机账号工作台' }).last()).toBeVisible()
+  await expect(page.getByText('请在课赛通桌面客户端打开本机工作台，浏览器预览不能创建账号现场。')).toBeVisible()
+  await page.screenshot({ path: join(runtime, 'framework-local-runtime-web-boundary.png'), fullPage: true })
+})
+
 test('C 端真实授权激活、历史演示 API 留档与普通入口隐藏，不越权进入 B 端', async ({ page }) => {
   await authorize(page, 'consumer')
   expect(database().authorizations.filter(row => row.status === 'active')).toHaveLength(1)
@@ -492,5 +549,115 @@ test('代理真实交付闭环：建档、提交订单、负责人收款发放�
   } finally {
     await owner.close()
     await outsider.close()
+  }
+})
+
+test('新版套餐真实目录内容对齐并沿用平台视觉，仅展示已启用商品并完成桌面截图', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  // Opt-in display fixture only. No approved target profile, launch grant or
+  // Runner is created; synthetic selectable metadata is not site acceptance.
+  test.skip(process.env.KST_REAL_E2E_UI_CATALOG !== '1', '需要隔离 UI 目录夹具，不改变真实工具开放状态')
+  await page.goto('/#/admin/login')
+  await page.getByLabel('后台账号', { exact: true }).fill(credentials.staff_username)
+  await page.getByLabel('密码', { exact: true }).fill(credentials.staff_password)
+  await page.getByRole('button', { name: '登录并进入工作台' }).click()
+  await expect(page).toHaveURL(/#\/admin\/dashboard/)
+  const token = await page.evaluate(() => sessionStorage.getItem('toolbox_token'))
+  const tools = await api(page, '/api/tools') as Record<string, unknown>[]
+  const configured = await page.request.put('/api/tools', {
+    headers: { Authorization: `Bearer ${token}` }, data: [...tools, {
+      id: 'isolated_template_price_fixture', name: '物流模板（隔离目录验收）', module: '物流模块', category: 'operation',
+      platform_key: 'amazon', capability_key: 'logistics_standard', availability: 'live_beta', script_status: 'script_ready',
+      release_status: 'beta', status: 'online', supports_live_single: true, supports_live_batch: false, supports_batch: false,
+      requires_target_profile: true, target_capability: 'template.create.v1', runner_api_version: 2,
+      target_url: `${process.env.KST_REAL_E2E_BASE_URL}/isolated-no-approved-target`,
+      description: '仅用于隔离报价目录验收；没有已审核入口，不执行真实平台操作。',
+    }],
+  })
+  expect(configured.ok()).toBe(true)
+  await page.goto('/#/admin/commercial')
+  await page.getByRole('button', { name: '导入标准商品草稿' }).click()
+  await expect(page.getByText('标准商品已保存为草稿，尚未启用')).toBeVisible()
+  const offers = await api(page, '/api/commercial/offers') as { data: Array<{ id: number; sku: string; status: string }> }
+  for (const offer of offers.data.filter(offer => offer.status === 'draft' && offer.sku !== 'single-tool-39')) {
+    const row = page.locator('tr').filter({ has: page.getByText(offer.sku, { exact: true }) })
+    await row.getByRole('button', { name: '确认启用', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
+    await expect(row).toContainText('已启用')
+  }
+  await page.getByRole('combobox', { name: '已审核工具', exact: true }).selectOption('template.create')
+  await page.getByRole('button', { name: '保存为草稿', exact: true }).click()
+  await expect(page.getByText('单工具已存为草稿')).toBeVisible()
+  const single = page.locator('tr').filter({ has: page.getByText('single-template-create', { exact: true }) })
+  await single.getByRole('button', { name: '确认启用', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确认', exact: true }).click()
+  await expect(single).toContainText('已启用')
+  const inactiveTemplate = page.locator('tr').filter({ has: page.getByText('single-tool-39', { exact: true }) })
+  await expect(inactiveTemplate).toContainText('草稿')
+
+  const customerContext = await browser.newContext({ baseURL: process.env.KST_REAL_E2E_BASE_URL, viewport: { width: 1440, height: 900 } })
+  const customer = await customerContext.newPage()
+  const errors: string[] = []
+  customer.on('pageerror', error => errors.push(error.message))
+  customer.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  customer.on('request', request => {
+    const url = new URL(request.url())
+    if (['http:', 'https:'].includes(url.protocol) && url.hostname !== '127.0.0.1') errors.push(`Unexpected external request: ${url.origin}`)
+  })
+  try {
+    await authorize(customer, 'consumer')
+    await customer.goto('/#/user/plans')
+    await expect(customer.getByRole('heading', { name: '套餐与授权', exact: true })).toBeVisible()
+    const catalog = await api(customer, '/api/commercial/catalog') as { data: { items: Array<{ sku: string }> } }
+    expect(catalog.data.items).toHaveLength(11)
+    expect(catalog.data.items.some(item => item.sku === 'single-tool-39')).toBe(false)
+    await expect(customer.locator('.pricing-free')).toContainText('三项全部赠送')
+    await expect(customer.locator('.pricing-free .pricing-price strong')).toHaveText('0')
+    await expect(customer.locator('.pricing-cards article')).toHaveCount(3)
+    await expect(customer.locator('.is-recommended')).toHaveCount(1)
+    await expect(customer.locator('.is-recommended')).toHaveAttribute('data-plan', 'competition-full')
+    await expect(customer.locator('.is-recommended .pricing-price strong')).toHaveText('199')
+    await expect(customer.locator('.pricing-single-tool .pricing-single-price strong')).toHaveText('39')
+    await expect(customer.locator('.pricing-single-tool .pricing-button-primary')).toHaveCount(0)
+    await expect(customer.locator('.pricing-service-list li')).toHaveCount(5)
+    await expect(customer.locator('.pricing-included-note')).toContainText('无需重复购买')
+    await expect(customer.locator('.license-summary')).toBeVisible()
+    // Content is shared with marketing; visual treatment must use the platform's
+    // surface, radius and type tokens rather than a separate landing-page hero.
+    const platformAppearance = await customer.evaluate(() => {
+      const root = getComputedStyle(document.documentElement)
+      const trial = getComputedStyle(document.querySelector('.pricing-free')!)
+      const license = getComputedStyle(document.querySelector('.license-summary')!)
+      const prices = [...document.querySelectorAll('.pricing-price strong')].map(element => getComputedStyle(element).fontSize)
+      return {
+        surfaceMatches: trial.backgroundColor === license.backgroundColor,
+        radiusMatches: trial.borderRadius === root.getPropertyValue('--radius-lg').trim(),
+        pricesMatch: prices.every(size => size === root.getPropertyValue('--type-stat-large').trim()),
+      }
+    })
+    expect(platformAppearance).toEqual({ surfaceMatches: true, radiusMatches: true, pricesMatch: true })
+    for (const width of [1440, 1024]) {
+      await customer.setViewportSize({ width, height: 1000 })
+      // Resizing across the sidebar breakpoint starts its natural exit motion.
+      // Wait for its final geometry so a passing width check cannot hide overlap.
+      if (width <= 1024) {
+        await expect.poll(() => customer.locator('.studio-user-sidebar').evaluate(element => element.getBoundingClientRect().right)).toBeLessThanOrEqual(0)
+      }
+      await expect.poll(() => customer.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await expect.poll(() => customer.locator('.commercial-pricing').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+      await customer.screenshot({ path: join(runtime, `commercial-pricing-${width}.png`), fullPage: true })
+    }
+    await customer.getByRole('tab', { name: '课程实训', exact: true }).click()
+    await expect(customer.locator('#platform-pricing-panel-training .pricing-price strong')).toHaveText('69')
+    await expect(customer.locator('#platform-pricing-panel-competition')).toBeHidden()
+    await customer.screenshot({ path: join(runtime, 'commercial-pricing-training-1024.png'), fullPage: true })
+    await customer.locator('[data-plan="service-appointment"]').getByRole('button', { name: '咨询预约答疑', exact: true }).click()
+    await expect(customer.getByRole('dialog')).toContainText('已有套餐包含额度')
+    await expect(customer.getByRole('dialog').getByRole('button', { name: '提交购买咨询', exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+    expect(database().live_run_count).toBe(0)
+    expect(database().live_batch_count).toBe(0)
+  } finally {
+    await customerContext.close()
   }
 })

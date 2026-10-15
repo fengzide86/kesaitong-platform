@@ -188,6 +188,7 @@ async def create_launch_token(
     target_profile_id: str | None = Query(None, min_length=1, max_length=64),
     target_profile_revision: int | None = Query(None, ge=1),
     client_runner_api_version: int = Query(1, ge=1, le=2),
+    course_ref: str | None = Query(None, pattern=r"^[a-f0-9]{64}$"),
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -206,6 +207,7 @@ async def create_launch_token(
         target_profile_id=target_profile_id,
         target_profile_revision=target_profile_revision,
         client_runner_api_version=client_runner_api_version,
+        course_ref=course_ref,
     )
 
 

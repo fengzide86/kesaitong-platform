@@ -15,6 +15,7 @@ from core.exceptions import ConflictException, NotFoundException, ValidationExce
 from domains.access.license_state import effective_license_status
 from domains.commerce.agency_commission import AgencyCommissionService
 from models import Agency, AgencyCustomer, AuthCode, Order, OrderStatus, Plan, PlanStatus
+from models.commercial import CommercialOrderSnapshot
 from services.profit_service import ProfitService
 
 CENT = Decimal("0.01")
@@ -124,6 +125,9 @@ class OrderService:
             raise ConflictException("只有待收款订单可以修改")
         if not data:
             raise ValidationException("没有可更新字段")
+        commercial = await self.db.scalar(select(CommercialOrderSnapshot.id).where(CommercialOrderSnapshot.order_id == order.id))
+        if commercial and any(field in data for field in ("plan_id", "amount", "platform_key")):
+            raise ConflictException("版本化商品订单的金额、权益和平台快照不可改写；请取消后重新创建")
         before = self.serialize(order)
         if "plan_id" in data:
             plan = await self._active_plan(data["plan_id"])
@@ -164,10 +168,12 @@ class OrderService:
         order.paid_at = datetime.utcnow()
         order.updated_by_staff_id = actor["staff_id"]
         try:
-            profit = await ProfitService(self.db).create_for_paid_order(order, actor)
+            commercial = await self.db.scalar(select(CommercialOrderSnapshot.id).where(CommercialOrderSnapshot.order_id == order.id))
+            profit = None if commercial else await ProfitService(self.db).create_for_paid_order(order, actor)
             await AgencyCommissionService(self.db, actor).record_accrual(order, actor.get("staff_id"))
             # The flush used to create the ledger row can expire server-managed
             # order timestamps. Refresh explicitly before synchronous serialization.
+            await self.db.flush()
             await self.db.refresh(order)
             await self._audit(
                 actor,
@@ -175,12 +181,16 @@ class OrderService:
                 "order_mark_paid",
                 order,
                 before=before,
-                after={**self.serialize(order), "profit_record_id": profit.id},
+                after={**self.serialize(order), "profit_record_id": profit.id if profit else None,
+                       "settlement_mode": "manual" if commercial else "legacy"},
             )
             await self.db.commit()
         except IntegrityError as error:
             await self.db.rollback()
             raise ConflictException("订单已被其他操作标记为已收款") from error
+        except Exception:
+            await self.db.rollback()
+            raise
         await self.db.refresh(order)
         await self._invalidate_dashboard()
         return order
@@ -220,7 +230,13 @@ class OrderService:
         order.refund_reason = reason
         order.refunded_at = datetime.utcnow()
         order.updated_by_staff_id = actor["staff_id"]
-        reversed_record = await ProfitService(self.db).reverse_for_refund(order, reason)
+        commercial = await self.db.scalar(select(CommercialOrderSnapshot.id).where(CommercialOrderSnapshot.order_id == order.id))
+        reversed_record = None
+        if commercial:
+            from domains.team_ledger.service import TeamLedgerService
+            await TeamLedgerService(self.db).record_refund(order, reason, actor)
+        else:
+            reversed_record = await ProfitService(self.db).reverse_for_refund(order, reason)
         await AgencyCommissionService(self.db, actor).record_refund(order)
         # Production disables autoflush. A missing optional commission ledger
         # does not flush, so refreshing now would discard the pending refund.
@@ -236,8 +252,8 @@ class OrderService:
             before=before,
             after={
                 **self.serialize(order),
-                "profit_record_id": reversed_record.id,
-                "profit_status": reversed_record.status,
+                "profit_record_id": reversed_record.id if reversed_record else None,
+                "profit_status": reversed_record.status if reversed_record else "manual_review",
             },
             reason=reason,
         )

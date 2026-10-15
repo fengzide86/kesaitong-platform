@@ -57,10 +57,6 @@ export const toolCatalogItemSchema = z.object({
 export const toolCatalogSchema = z.array(toolCatalogItemSchema)
 export type ToolCatalogItem = z.infer<typeof toolCatalogItemSchema>
 
-export const toolUpdateResponseSchema = z.object({
-  data: toolCatalogSchema.optional(),
-}).passthrough()
-
 export const toolLaunchGrantSchema = z.object({
   token: z.string(),
   target_url: z.string(),
@@ -85,11 +81,6 @@ export const toolLaunchResponseSchema = z.object({
   expires_at: z.string().optional(),
   expires_in: z.coerce.number().optional(),
 }).passthrough()
-
-export function errorCode(error: unknown): number | null {
-  if (typeof error !== 'object' || error === null || !('code' in error)) return null
-  return typeof error.code === 'number' ? error.code : null
-}
 
 export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback

@@ -205,7 +205,7 @@ import { getTools } from '@/utils/api'
 import { showToast } from '@/utils'
 import { useAppStore } from '@/stores/app'
 import { usePlatformStore } from '@/stores/platform'
-import { licensePlanCode, readStoredLicense } from '@/features/user/model'
+import { licenseAllowedCapabilities, licensePlanCode, readStoredLicense } from '@/features/user/model'
 import {
   errorMessage,
   toolCatalogItemSchema,
@@ -313,6 +313,7 @@ const currentPlanCode = computed(() => {
 })
 const currentUsability = computed(() => ({
   planCode: currentPlanCode.value,
+  allowedCapabilities: licenseAllowedCapabilities(userInfo.value),
   platformScope: userInfo.value.platform_scope,
   platformKey: platformStore.currentPlatform,
   runtimeAvailable: runtime.singleLive,
@@ -434,7 +435,7 @@ async function downloadKstDesktop(): Promise<void> {
 function toolState(tool: ToolCatalogItem) {
   if (!isToolPublished(tool)) return 'maintenance'
   if (!isToolInPlatformScope(tool, currentUsability.value)) return 'platform-locked'
-  if (!isToolIncluded(tool, currentPlanCode.value)) return 'locked'
+  if (!isToolIncluded(tool, currentPlanCode.value, currentUsability.value.allowedCapabilities)) return 'locked'
   return 'available'
 }
 

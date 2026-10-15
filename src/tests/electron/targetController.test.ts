@@ -22,7 +22,7 @@ afterEach(() => {
 })
 function deferred<T>() { let resolveValue!: (value: T) => void; const promise = new Promise<T>(resolve => { resolveValue = resolve }); return { promise, resolve: resolveValue } }
 
-function setup() {
+function setup(staff = false) {
   const source = resolve('dist-electron/electron/automation/targets/target-controller.cjs')
   const require = createRequire(source)
   const { stableJson, checkedUrl, routeAllowed } = require('./profile-policy.cjs')
@@ -52,27 +52,29 @@ function setup() {
   class MockWindow extends EventEmitter {
     destroyed = false
     url = 'about:blank'
-    webContents = Object.assign(new EventEmitter(), { getURL: () => this.url, setWindowOpenHandler: vi.fn(), isDestroyed: () => this.destroyed })
+    webContents = Object.assign(new EventEmitter(), { id: windows.length + 10, getURL: () => this.url, setWindowOpenHandler: vi.fn(), isDestroyed: () => this.destroyed })
     constructor(readonly configuration: { webPreferences: { partition: string } }) { super(); windows.push(this) }
     loadURL = vi.fn(async (url: string) => { this.url = url })
     show = vi.fn(); focus = vi.fn(); isDestroyed = () => this.destroyed
     destroy() { if (!this.destroyed) { this.destroyed = true; this.emit('closed') } }
   }
-  const fetchMock = vi.fn(async (url: string) => {
+  let staffGrantRequest: Record<string, string> = {}
+  const fetchMock = vi.fn(async (url: string, request?: { body?: string }) => {
     let data: unknown
     if (url.includes('/api/tools/target-profiles')) {
       if (profileGate) await profileGate
       data = [signedProfile()]
-    } else if (url.includes('/launch-grant?')) {
+    } else if (url.includes('/launch-grant?') || url.endsWith('/api/scenarios/staff/tool-grants')) {
+      if (staff && request?.body) staffGrantRequest = JSON.parse(request.body)
       const manifest = { schemaVersion: 2, toolId: 'template-tool', scriptKey: 'bjysoft.v2.template', version: '1.0.0', runnerApiVersion: 2, targetProfileId: profile.id, targetProfileRevision: profile.revision, requiredCapability: 'template.create.v1' }
       data = { launch_data: { token: 'synthetic-grant', tool_id: 'template-tool', platform_key: 'amazon', script_key: manifest.scriptKey, tool_version: manifest.version, runner_api_version: 2, signature_required: true,
         tool_signature: sign(null, Buffer.from(stableJson(manifest)), keys.privateKey).toString('base64'), signing_key_id: 'fixture-key', tool_manifest: manifest, target_profile: signedProfile() } }
-    } else if (url.endsWith('/api/tools/launch-grant/verify')) data = { valid: true, tool_id: 'template-tool', platform_key: 'amazon', target_profile_id: profile.id, target_profile_revision: profile.revision, required_capability: 'template.create.v1' }
-    else if (url.endsWith('/api/executions/reconcile')) data = { accepted: true, duplicate: false, reconciled: true, execution_id: 1 }
+    } else if (url.endsWith('/api/tools/launch-grant/verify') || url.endsWith('/api/scenarios/staff/tool-grants/verify')) data = { valid: true, tool_id: 'template-tool', platform_key: 'amazon', target_profile_id: profile.id, target_profile_revision: profile.revision, required_capability: 'template.create.v1', ...(staff ? { principal_kind: 'staff', device_id: 'staff-device', account_slot: 'slot-A', context_hash: staffGrantRequest.context_hash, input_hash: staffGrantRequest.input_hash } : {}) }
+    else if (url.endsWith('/api/executions/reconcile') || url.endsWith('/api/scenarios/staff/reconcile')) data = { accepted: true, duplicate: false, reconciled: true, execution_id: 1 }
     else throw new Error(`Unexpected control path ${new URL(url).pathname}`)
     return { ok: true, status: 200, text: async () => JSON.stringify({ success: true, data }) }
   })
-  const session = Object.assign(new EventEmitter(), { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() })
+  const session = Object.assign(new EventEmitter(), { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn(), clearStorageData: vi.fn(async () => {}) })
   let bindingEnabled = false
   const resolveBinding = vi.fn(() => bindingEnabled ? { id: 'internal-contract-test-only' } : undefined)
   const submitBusiness = vi.fn()
@@ -90,19 +92,33 @@ function setup() {
   const cancelRunner = vi.fn()
   const portDispose = vi.fn()
   const portsOpened: string[][] = []
+  let navigationEnabled = false
   const cjs = { exports: {} }
   runInNewContext(readFileSync(source, 'utf8'), {
     require: (name: string) => {
       if (name === 'electron') return { app: { getVersion: () => '1.8.16' }, BrowserWindow: MockWindow, net: { fetch: fetchMock }, session: { fromPartition: () => session } }
       if (name === './ui-bindings.cjs') return { resolveUiBinding: resolveBinding }
       if (name === './target-runner-client.cjs') return { TargetRunnerClient: class { run = runMock; cancel = cancelRunner; dispose = vi.fn(); get isDraining() { return draining }; whenDrained = () => drainGate } }
-      if (name === './webcontents-port.cjs') return { createOwnedWebContentsPort: (guest: { getURL(): string }, options: { assertOwnedSession(): void; allowedOrigins: string[] }) => {
+      if (name === './webcontents-port.cjs') return { createOwnedWebContentsPort: (guest: { getURL(): string; id: number }, options: { assertOwnedSession(): void; allowedOrigins: string[] }) => {
         portsOpened.push([...options.allowedOrigins])
         return { kind: 'fixture', inspect: async () => {
           options.assertOwnedSession()
           if (!options.allowedOrigins.includes(new URL(guest.getURL()).origin)) throw Object.assign(new Error('origin changed'), { code: 'TARGET_ORIGIN_BLOCKED' })
           return structuredClone(snapshot)
-        }, readCourseFields: async () => ({ courseId: snapshot.context.courseId, shopId: snapshot.context.shopId }), dispose: portDispose }
+        }, readCourseFields: async () => ({ courseId: snapshot.context.courseId, shopId: snapshot.context.shopId }), dispose: portDispose,
+        waitForControl: async () => {}, resolveNavigationSource: async () => ({ webContentsId: guest.id, referrerUrl: guest.getURL() }),
+        click: async (selector: { exactText: string }) => {
+          if (!navigationEnabled) throw new Error('navigation fixture not enabled')
+          if (selector.exactText === '亚马逊卖家后台') {
+            const win = windows.find(item => item.webContents.id === guest.id)!
+            const handler = win.webContents.setWindowOpenHandler.mock.calls.at(-1)![0]
+            handler({ url: 'https://fixture.invalid/ECrossAmazon/SellerIndex', referrer: { url: guest.getURL() } })
+          }
+        },
+        waitForPage: async (location: { path: string }) => {
+          snapshot = { ...snapshot, path: location.path, templateDom: location.path.endsWith('SellerShippingTemplateSetting'), courseDom: false }
+          return structuredClone(snapshot)
+        } }
       } }
       if (name === './v2-template.cjs') return { reconcileV2Template: reconcileMock }
       return require(name)
@@ -112,8 +128,13 @@ function setup() {
   const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>()
   const register = ((channel, handler) => handlers.set(channel, handler as unknown as (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown)) as TrustedHandleRegistrar
   const reports = { reserve: vi.fn(async () => 'report-reservation'), submit: vi.fn<(...args: unknown[]) => Promise<{ warning?: string }>>(async () => ({})) }
+  const staffReports = { reserve: vi.fn(async () => 'staff-reservation'), submit: vi.fn(async () => ({})) }
+  const borrowed = staff ? new MockWindow({ webPreferences: { partition: 'staff-slot-isolated' } }) : undefined
+  if (borrowed) { borrowed.url = profile.entryUrl; borrowed.destroy = vi.fn() }
   const lease = new ExecutionLease()
-  const controller = new TargetExecutionController({ register, lease, reports: reports as never, resolveSession: async () => ({ owner: currentOwner, token: `${currentOwner}-token` }), directory: root, apiBase: 'https://control.invalid', publicKeyB64, signingKeyId: 'fixture-key' })
+  const controller = new TargetExecutionController({ register, lease, reports: reports as never, staffReports: staffReports as never,
+    borrowedWindow: () => borrowed as never, createBorrowedWindow: () => new MockWindow({ webPreferences: { partition: 'staff-slot-isolated' } }) as never,
+    resolveSession: async () => ({ owner: currentOwner, token: `${currentOwner}-token`, ...(staff ? { kind: 'staff' as const, deviceId: 'staff-device', accountSlot: 'slot-A' } : {}) }), directory: root, apiBase: 'https://control.invalid', publicKeyB64, signingKeyId: 'fixture-key' })
   controllers.push(controller); controller.register()
   const event = { sender: { id: 7 } } as IpcMainInvokeEvent
   const invoke = async <T = unknown>(name: string, request?: unknown): Promise<T> => await handlers.get(`targets:${name}`)!(event, request) as T
@@ -137,16 +158,65 @@ function setup() {
     const navigate = vi.spyOn(internals, 'navigateTemplateList').mockImplementation(async () => { snapshot = structuredClone(templateSnapshot) })
     return { collect, navigate }
   }
-  return { controller, invoke, open, prepare, reports, fetchMock, windows, lease, submitBusiness, runMock, reconcileMock, cancelRunner, journalClass: TargetOperationJournal, proof, checkedUrl, routeAllowed, request, portsOpened, session, root,
+  return { controller, invoke, open, prepare, reports, staffReports, borrowed, event, fetchMock, windows, lease, submitBusiness, runMock, reconcileMock, cancelRunner, journalClass: TargetOperationJournal, proof, checkedUrl, routeAllowed, request, portsOpened, session, root,
     installReadonlyRecoveryNavigation,
     setOwner: (owner: string) => { currentOwner = owner }, enableBinding: () => { bindingEnabled = true }, setProfileGate: (gate: Promise<void> | null) => { profileGate = gate },
     setProfile: (value: TargetProfile) => { profileValue = value }, profile, invalidSignature: () => { invalidSignature = true },
     setDrain: (gate: Promise<void>, isDraining = true) => { drainGate = gate; draining = isDraining },
     setSnapshot: (value: BrowserSnapshot) => { snapshot = value },
+    enableNavigation: () => { navigationEnabled = true },
   }
 }
 
 describe('controlled target lifecycle and authorisation', () => {
+  it('rejects recovery navigation when the resolved session no longer owns its record', async () => {
+    const test = setup()
+    test.setOwner('owner-B')
+    await expect(test.controller.openAssignedUrl(test.event.sender, test.profile.entryUrl, 'owner-A')).rejects.toMatchObject({ code: 'TARGET_SESSION_REVOKED' })
+    expect(test.windows).toHaveLength(0)
+    expect(test.lease.busy).toBe(false)
+  })
+  it('uses an independent server-consumed staff grant and reports without a customer code', async () => {
+    const test = setup(true); test.enableBinding(); await test.open()
+    const preview = await test.prepare()
+    const result = await test.invoke<OperationReceipt>('execute', { planId: preview.plan.id })
+    expect(result.status).toBe('verified')
+    expect(test.windows).toHaveLength(1)
+    expect(test.reports.reserve).not.toHaveBeenCalled()
+    expect(test.staffReports.reserve).toHaveBeenCalledOnce()
+    expect(test.staffReports.submit).toHaveBeenCalledOnce()
+    const paths = test.fetchMock.mock.calls.map(([url]) => new URL(url).pathname)
+    expect(paths).toContain('/api/scenarios/staff/tool-grants/verify')
+    expect(paths).not.toContain('/api/tools/launch-grant/verify')
+  })
+  it('borrowed staff popup participates in owned seller handoff and reaches template preflight', async () => {
+    const test = setup(true); test.enableBinding(); test.enableNavigation()
+    test.setProfile({ ...test.profile, allowedRoutes: [...test.profile.allowedRoutes, { origin: 'https://fixture.invalid', pathPrefix: '/ECrossAmazonHome', role: 'business' }] })
+    await test.open()
+    test.borrowed!.url = 'https://fixture.invalid/ECrossAmazonHome/CourseIndexTraining_1'
+    test.setSnapshot({ ...templateSnapshot, path: '/ECrossAmazonHome/CourseIndexTraining_1', courseDom: true, templateDom: false })
+    const internals = test.controller as unknown as {
+      exclusive(sender: unknown, work: (owner: { owner: string }) => Promise<void>): Promise<void>
+      navigateTemplateList(owner: string, course: BrowserSnapshot['context']): Promise<void>
+    }
+    await internals.exclusive(test.event.sender, owner => internals.navigateTemplateList(owner.owner, templateSnapshot.context))
+    expect(test.windows).toHaveLength(2)
+    expect(test.windows[1]!.configuration.webPreferences.partition).toBe('staff-slot-isolated')
+    test.setSnapshot(structuredClone(templateSnapshot))
+    expect((await test.prepare()).canExecute).toBe(true)
+    expect(test.reports.reserve).not.toHaveBeenCalled()
+  })
+  it('staff unknown results reconcile through the staff owner/device/slot binding', async () => {
+    const test = setup(true); test.enableBinding(); await test.open()
+    const preview = await test.prepare()
+    test.runMock.mockImplementationOnce(async (_plan, _probe, deps) => { await deps.journal.beforeMutation(); await deps.journal.beforeSubmit(); throw new Error('unknown') })
+    const receipt = await test.invoke<OperationReceipt>('execute', { planId: preview.plan.id })
+    test.reconcileMock.mockResolvedValueOnce({ status: 'verified', receipt: test.proof })
+    expect((await test.invoke<OperationReceipt>('reconcile', { operationId: receipt.id })).status).toBe('verified')
+    const call = test.fetchMock.mock.calls.find(([url]) => url.endsWith('/api/scenarios/staff/reconcile'))!
+    expect(JSON.parse(call[1]!.body!)).toMatchObject({ device_id: 'staff-device', account_slot: 'slot-A', context_hash: preview.plan.contextHash, input_hash: preview.plan.inputHash })
+    expect(test.fetchMock.mock.calls.some(([url]) => url.endsWith('/api/executions/reconcile'))).toBe(false)
+  })
   it('blocks an invalid signed profile before creating a browser', async () => {
     const test = setup(); test.invalidSignature()
     await expect(test.open()).rejects.toMatchObject({ code: 'TARGET_SIGNATURE_INVALID' })
@@ -438,12 +508,13 @@ describe('controlled target lifecycle and authorisation', () => {
     expect(receipt.status).toBe('verified')
     expect(receipt.checks).toContain('runner-completion-interrupted-after-verification')
   })
-  it('refreshes to the reviewed entry in the same account partition and invalidates the old plan', async () => {
+  it('refreshes to the reviewed entry with a fresh partition and invalidates the old plan', async () => {
     const test = setup(); test.enableBinding(); await test.open(); const preview = await test.prepare()
     const oldPartition = test.windows[0]!.configuration.webPreferences.partition
     await test.invoke('refresh')
     expect(test.windows[0]!.destroyed).toBe(true)
-    expect(test.windows[1]!.configuration.webPreferences.partition).toBe(oldPartition)
+    expect(test.windows[1]!.configuration.webPreferences.partition).not.toBe(oldPartition)
+    expect(test.session.clearStorageData).toHaveBeenCalledOnce()
     expect(test.windows[1]!.url).toBe(test.profile.entryUrl)
     await expect(test.invoke('execute', { planId: preview.plan.id })).rejects.toMatchObject({ code: 'TARGET_PLAN_INVALID' })
     expect(test.reports.reserve).not.toHaveBeenCalled()
@@ -491,13 +562,13 @@ describe('controlled target lifecycle and authorisation', () => {
     await expect(test.invoke('detect')).rejects.toMatchObject({ code: 'TARGET_ROUTE_BLOCKED' })
     expect(test.portsOpened).toHaveLength(1)
   })
-  it('keeps the login partition when an unknown entry becomes approved but replaces the window policy', async () => {
+  it('clears old login when an unknown entry becomes approved and replaces the window policy', async () => {
     const test = setup()
     await test.invoke('open', { entryUrl: test.profile.entryUrl })
     const partition = test.windows[0]!.configuration.webPreferences.partition
     await test.open()
     expect(test.windows[0]!.destroyed).toBe(true)
-    expect(test.windows[1]!.configuration.webPreferences.partition).toBe(partition)
+    expect(test.windows[1]!.configuration.webPreferences.partition).not.toBe(partition)
     expect(test.session.listenerCount('will-download')).toBe(1)
   })
   it('reopens the updated approved policy instead of indefinitely reusing a stale revision', async () => {

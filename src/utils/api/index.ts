@@ -429,7 +429,7 @@ export { getLogs, exportLogs, getLogTools, createLog } from './logs'
 export { createDemoRun, updateDemoRun, finishDemoRun, cancelDemoRun, getDemoRun, getDemoRuns, getDemoRunsPage, createDemoBatch, updateDemoBatch, updateDemoBatchItem, finishDemoBatch, getDemoBatches, getDemoBatchesPage, getDemoBatch } from './demo'
 export { getExecutions, getExecutionsPage, getExecution } from './executions'
 export { getStaffAccounts, createStaffAccount, updateStaffAccount, resetStaffPassword, changeStaffPassword, logoutStaff } from './staff'
-export { getDashboard, getDashboardCharts, getProfit, getProfitPage, getProfitSummary, getProfitPolicy, updateProfitPolicy } from './dashboard'
+export { getDashboard, getDashboardCharts, getProfitPage, getProfitSummary, getProfitPolicy, updateProfitPolicy } from './dashboard'
 export { getBusinessBootstrap, getBusinessTools, getBusinessBatches, getBusinessBatch, createBusinessBatch, updateBusinessBatch, updateBusinessBatchItem, finishBusinessBatch, getAdminActionCenter, getAdminBusinessBatch } from './business'
 export { getSettings, getPublicSettings, updateSetting } from './settings'
 export {

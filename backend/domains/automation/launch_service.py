@@ -16,11 +16,57 @@ from core.logging import get_logger
 from core.response import ErrorCodes, error_response, success_response
 from domains.access import effective_license_status, lock_auth_code, resolve_plan_code, resolve_product_access
 from domains.catalog import normalize_tool_config, resolve_tool_runtime
+from domains.commercial import (
+    CAPABILITY_ALIASES,
+    TRIAL_CAPABILITIES,
+    CommercialService,
+    assert_commercial_tool_access,
+    trial_operation_id,
+)
+from domains.scenarios import assert_customer_access, assert_project_scope
 from models import AuthSeat, AutomationBatch, Device, LaunchToken, Plan, Setting, User
+from models.commercial import CommercialGrant, TrialReservation
+from schemas.scenario import exact_origin
 from services import target_profile_service
 from services.tool_release_service import build_manifest, resolve_release_for_launch, sign_manifest
 
 logger = get_logger(__name__)
+
+
+async def _assert_runtime_scope(db: AsyncSession, user_id: int, auth_code_id: int, tool: dict,
+                                target_url: str, signed_target: dict | None, course_ref: str | None) -> CommercialGrant | None:
+    policy = await assert_customer_access(db, user_id, target_url)
+    # Existing executors have independently verified training scopes only.
+    # Admin assigning competition never makes those legacy adapters competition-capable.
+    if policy["mode"] == "competition":
+        raise HTTPException(403, "当前比赛动作尚未验收，不能使用旧实训执行器")
+    capability = str(tool.get("capability_key") or tool.get("target_capability") or "")
+    commercial = await assert_commercial_tool_access(db, auth_code_id, capability, site_origin=exact_origin(target_url))
+    if commercial is None:
+        return None
+    snapshot = json.loads(commercial.snapshot)
+    mode = snapshot["scene_type"]
+    if mode != policy["mode"] or not signed_target:
+        raise HTTPException(403, "约定项目与管理员场景或已审核入口不匹配")
+    scopes = signed_target["profile"].get("executionScopes", [])
+    if not course_ref or not any(scope.get("courseRef") == course_ref and scope.get("scenario") == mode and scope.get("source") == "admin-verified" for scope in scopes):
+        raise HTTPException(403, "当前课程不在入口已审核的场景范围内")
+    await assert_project_scope(db, commercial.project_id, commercial.site_origin, mode, course_ref)
+    return commercial
+
+
+async def _release_unconsumed_trial(db: AsyncSession, launch: LaunchToken) -> None:
+    """Only durable server proof of *no consume* can return a reserved quota."""
+    if launch.used_at is not None or launch.status not in {"pending", "revoked", "expired"}:
+        return
+    if launch.status == "pending" and launch.expires_at > datetime.now():
+        return
+    operation_id = trial_operation_id(launch.token)
+    reservation = await db.scalar(select(TrialReservation).where(TrialReservation.operation_id == operation_id))
+    if reservation and reservation.status == "reserved":
+        await CommercialService(db).finish_trial(operation_id, "not_submitted", f"launch-unconsumed:{launch.id}")
+    if launch.status == "pending":
+        launch.status = "expired"
 
 
 async def _commit_or_rollback(db: AsyncSession) -> None:
@@ -70,6 +116,7 @@ async def create_launch_grant(
     target_profile_id: str | None = None,
     target_profile_revision: int | None = None,
     client_runner_api_version: int = 1,
+    course_ref: str | None = None,
 ) -> dict[str, Any]:
     """Validate access and create or reuse one short-lived launch grant."""
     if settings.TOOL_EXECUTION_MODE != "live":
@@ -85,7 +132,7 @@ async def create_launch_grant(
     user_id = current_user.get("user_id")
     auth_code_id = current_user.get("auth_code_id")
     device_id = current_user.get("device_id")
-    if not auth_code_id:
+    if not auth_code_id or not isinstance(user_id, int) or isinstance(user_id, bool) or user_id <= 0:
         return await _error(db, "未找到授权信息", ErrorCodes.UNAUTHORIZED)
 
     auth_code = await lock_auth_code(db, auth_code_id)
@@ -276,6 +323,16 @@ async def create_launch_grant(
         raise target_profile_service.fail("TARGET_PROFILE_NOT_SUPPORTED", "该旧工具没有目标入口能力，不能绑定新入口后执行")
     if runner_api_version > client_runner_api_version:
         raise target_profile_service.fail("RUNNER_VERSION_MISMATCH", "客户端 Runner 协议不支持当前工具")
+    commercial = await _assert_runtime_scope(db, user_id, auth_code_id, target_tool, target_url, signed_target, course_ref)
+    if commercial and json.loads(commercial.snapshot)["definition"]["business_line"] == "trial":
+        # All rows are locked under the auth-code lock, matching consume's lock
+        # order. Used/unknown operations are never released by a clock timeout.
+        previous = (await db.execute(select(LaunchToken).where(
+            LaunchToken.auth_code_id == auth_code_id, LaunchToken.used_at.is_(None),
+            LaunchToken.status.in_(["pending", "revoked", "expired"]),
+        ).with_for_update().execution_options(populate_existing=True))).scalars()
+        for old in previous:
+            await _release_unconsumed_trial(db, old)
 
     existing_launch: LaunchToken | None = None
     if execution_mode == "batch" and idempotency_key:
@@ -332,7 +389,16 @@ async def create_launch_grant(
         await target_profile_service.bind_launch(db, token, {
             "profileId": target_profile_id, "revision": target_profile_revision, "capability": capability,
             "scriptKey": script_key, "toolVersion": tool_version, "runnerApiVersion": 2,
+            **({"courseRef": course_ref} if course_ref else {}),
         })
+    if commercial and json.loads(commercial.snapshot)["definition"]["business_line"] == "trial":
+        quota_capability = CAPABILITY_ALIASES.get(str(target_tool.get("capability_key")), str(target_tool.get("capability_key")))
+        if quota_capability in TRIAL_CAPABILITIES:
+            try:
+                await CommercialService(db).reserve_trial(commercial.id, quota_capability, trial_operation_id(token), current_user)
+            except Exception:
+                await db.rollback()
+                raise
     await _commit_or_rollback(db)
     logger.info("创建 launch token: user=%s, tool=%s, platform=%s", user_id, tool_id, platform_key)
 
@@ -393,7 +459,9 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
     if launch.status != "pending":
         return await _error(db, "Token 状态无效", 403)
     if launch.expires_at < datetime.now():
-        return await _error(db, "Token 已过期", 403)
+        await _release_unconsumed_trial(db, launch)
+        await _commit_or_rollback(db)
+        return error_response("Token 已过期", 403)
     if not auth_code or effective_license_status(auth_code) != "active":
         return await _error(db, "授权已经失效，请重新登录", 403)
     if not await _device_is_authorized(db, code_id, launch.user_id, launch.device_id):
@@ -419,13 +487,18 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
     requires_profile = bool(tool.get("requires_target_profile") or tool.get("target_capability") or int(tool.get("runner_api_version", 1)) >= 2)
     if requires_profile and not target_binding:
         raise target_profile_service.fail("TARGET_PROFILE_REQUIRED", "启动授权缺少目标入口绑定，不能执行新工具")
+    signed_target = None
     if target_binding:
         if target_binding["scriptKey"] != launch.script_key or target_binding["runnerApiVersion"] != 2:
             raise target_profile_service.fail("TARGET_LAUNCH_CONFLICT", "启动授权与入口适配器不匹配")
         current_capability = tool.get("target_capability")
         if current_capability and current_capability != target_binding["capability"]:
             raise target_profile_service.fail("TARGET_LAUNCH_CONFLICT", "工具能力已变化，请重新核验入口")
-        await target_profile_service.approved_profile(db, target_binding["profileId"], target_binding["revision"], target_binding["capability"])
+        signed_target = await target_profile_service.approved_profile(db, target_binding["profileId"], target_binding["revision"], target_binding["capability"])
+    _, target_url = resolve_tool_runtime(tool, launch.platform_key)
+    if signed_target:
+        target_url = signed_target["profile"]["entryUrl"]
+    await _assert_runtime_scope(db, launch.user_id, code_id, tool, target_url, signed_target, (target_binding or {}).get("courseRef"))
     if auth_code.plan_id:
         plan = (await db.execute(select(Plan).where(Plan.id == auth_code.plan_id)
                                  .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()

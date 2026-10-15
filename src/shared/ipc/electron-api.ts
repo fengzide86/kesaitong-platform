@@ -143,6 +143,7 @@ export interface OpenExternalResult {
 }
 
 export interface ToolboxElectronApi {
+  scenes?: import('./scenario-contract.js').LocalScenesBridge
   recovery?: RecoveryBridge
   targets?: TargetsBridge
   runtime?: { controlApiBase?: string; deviceId?: string; deviceName?: string }

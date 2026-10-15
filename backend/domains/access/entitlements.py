@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
@@ -10,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_current_user
 from database import get_db
-from models import AuthCode, Plan, Setting
+from models import AuthCode, Order, Plan, Setting
+from models.commercial import CommercialGrant, CommercialRefundEntitlementReview, TrialQuota
 
 from .plan_identity import fixed_plan_entitlements
 
@@ -64,6 +66,33 @@ async def resolve_product_access(db: AsyncSession, auth_code_id: int | None) -> 
     if not row:
         return {"product_type": "consumer", "entitlements": normalize_entitlements({}, "consumer"), "enabled": False}
     auth_code, plan = row
+    commercial = await db.scalar(select(CommercialGrant).where(CommercialGrant.auth_code_id == auth_code.id))
+    if commercial:
+        snapshot = json.loads(commercial.snapshot)
+        allowed = snapshot["definition"]["allowed_capabilities"]
+        if commercial.status != "active" or commercial.ends_at <= datetime.utcnow():
+            allowed = []
+        if commercial.order_id:
+            order = await db.get(Order, commercial.order_id)
+            if not order or order.status != "paid":
+                allowed = []
+            elif order.refund_amount:
+                review = await db.scalar(select(CommercialRefundEntitlementReview).where(
+                    CommercialRefundEntitlementReview.order_id == order.id,
+                    CommercialRefundEntitlementReview.refund_amount_snapshot == order.refund_amount,
+                ))
+                retained = json.loads(review.retained_capabilities) if review else []
+                allowed = [capability for capability in allowed if capability in retained]
+        quotas = (await db.scalars(select(TrialQuota).where(TrialQuota.grant_id == commercial.id))).all()
+        unavailable = {quota.capability for quota in quotas if quota.available == 0}
+        allowed = [capability for capability in allowed if capability not in unavailable]
+        return {
+            "auth_code": auth_code, "plan": plan, "product_type": "consumer", "enabled": False,
+            "plan_name": snapshot["definition"]["name"],
+            "entitlements": normalize_entitlements({"allowed_capabilities": allowed,
+                                                     "commercial_grant_id": commercial.id, "plan_code": snapshot["sku"],
+                                                     "trial_quotas": {quota.capability: {"available": quota.available, "consumed": quota.consumed} for quota in quotas}}, "consumer"),
+        }
     product_type = (getattr(plan, "product_type", None) or "consumer").lower()
     entitlements = normalize_entitlements(
         fixed_plan_entitlements(getattr(plan, "name", None), getattr(plan, "entitlements", None)),

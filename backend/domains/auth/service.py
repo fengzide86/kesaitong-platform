@@ -301,6 +301,9 @@ class AuthService:
         platform_list = [p.strip() for p in platform_scope.split(",")]
         
         access = await resolve_product_access(self.db, code_obj.id)
+        plan_name = access.get("plan_name", plan_name)
+        plan_code = access["entitlements"].get("plan_code", plan_code)
+        product_type = access["product_type"]
         return success_response(
             data={
                 "token": token,
@@ -373,10 +376,11 @@ class AuthService:
                 select(Plan.name).where(Plan.id == code_obj.plan_id)
             )
             plan_name = plan_result.scalar() or "未知"
-            access = await resolve_product_access(self.db, code_obj.id)
-            product_type = access["product_type"]
-            entitlements = access["entitlements"]
-            business_workspace_enabled = access["enabled"]
+        access = await resolve_product_access(self.db, code_obj.id)
+        plan_name = access.get("plan_name", plan_name)
+        product_type = access["product_type"]
+        entitlements = access["entitlements"]
+        business_workspace_enabled = access["enabled"]
 
         active_seats = len([seat for seat in (code_obj.seats or []) if seat.status == "active"])
         device_used = len(code_obj.devices or [])
@@ -426,16 +430,19 @@ class AuthService:
             )
             auth_code = auth_code_result.scalars().first()
             
-            if auth_code and auth_code.plan_id:
-                plan_result = await self.db.execute(
-                    select(Plan.name, Plan.product_type, Plan.entitlements).where(Plan.id == auth_code.plan_id)
-                )
-                plan_row = plan_result.first()
-                if plan_row:
-                    plan_name = plan_row[0] or "未知"
-                    product_type = plan_row[1] or "consumer"
+            if auth_code:
+                if auth_code.plan_id:
+                    plan_result = await self.db.execute(
+                        select(Plan.name, Plan.product_type, Plan.entitlements).where(Plan.id == auth_code.plan_id)
+                    )
+                    plan_row = plan_result.first()
+                    if plan_row:
+                        plan_name = plan_row[0] or "未知"
+                        product_type = plan_row[1] or "consumer"
                 expires_at = auth_code.expires_at.isoformat() if auth_code.expires_at else None
                 access = await resolve_product_access(self.db, auth_code.id)
+                plan_name = access.get("plan_name", plan_name)
+                product_type = access["product_type"]
                 entitlements = access["entitlements"]
                 business_workspace_enabled = access["enabled"]
         

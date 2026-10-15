@@ -153,6 +153,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/features/agency/AgencyManagementView.vue'),
         meta: { title: '代理与交付', roles: ['super_admin'] },
       },
+      { path: 'commercial', name: 'AdminCommercial', component: () => import('@/views/admin/CommercialView.vue'), meta: { title: '商品与项目权益', roles: ['super_admin'] } },
+      { path: 'team-ledger', name: 'AdminTeamLedger', component: () => import('@/views/admin/TeamLedgerView.vue'), meta: { title: '成员结算台账', roles: ['super_admin'] } },
+      { path: 'scenarios', name: 'AdminScenarios', component: () => import('@/views/admin/ScenariosView.vue'), meta: { title: '场景与运行权限', roles: ['super_admin'] } },
+      { path: 'local-runtime', name: 'AdminLocalRuntime', component: () => import('@/views/admin/LocalRuntimeView.vue'), meta: { title: '本机多账号现场', roles: ['super_admin', 'operator', 'support'] } },
       {
         path: 'dashboard',
         name: 'AdminDashboard',

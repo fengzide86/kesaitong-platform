@@ -77,6 +77,14 @@ try {
     'dist-electron/electron/desktop-main.cjs',
     'dist-electron/electron/desktop-application.cjs',
     'dist-electron/electron/automation/execution-lease.cjs',
+    'dist-electron/electron/automation/local-scenes-controller.cjs',
+    'dist-electron/electron/automation/scenario-policy-client.cjs',
+    'dist-electron/electron/automation/toolkit-runtime.cjs',
+    'dist-electron/electron/automation/toolkit-examples.cjs',
+    'dist-electron/electron/automation/workspace-browser-sessions.cjs',
+    'dist-electron/electron/freight/desktop-freight-controller.cjs',
+    'dist-electron/src/shared/ipc/scenario-contract.js',
+    'dist-electron/src/shared/ipc/toolkit-contract.js',
     'dist-electron/electron/automation/desktop-automation-controller.cjs',
     'dist-electron/electron/automation/targets/target-controller.cjs',
     'dist-electron/electron/automation/targets/target-runner.cjs',
@@ -188,8 +196,9 @@ try {
   page.on('pageerror', error => diagnostic.errors.push(error.message))
   await page.waitForFunction(() => Boolean(window.electronAPI?.runtime?.deviceId) && !document.querySelector('.startup-loading'), null, { timeout: 20_000 })
   assert.match(page.url(), /^app:\/\/toolbox\//)
-  const bridge = await page.evaluate(() => ({ methods: Object.keys(window.electronAPI.targets || {}).sort(), controlApi: window.electronAPI.runtime.controlApiBase, title: document.title }))
+  const bridge = await page.evaluate(() => ({ methods: Object.keys(window.electronAPI.targets || {}).sort(), sceneMethods: Object.keys(window.electronAPI.scenes || {}).sort(), controlApi: window.electronAPI.runtime.controlApiBase, title: document.title }))
   assert.deepEqual(bridge.methods, ['close', 'detect', 'execute', 'listReceipts', 'open', 'preflight', 'reconcile', 'refresh'].sort())
+  assert.deepEqual(bridge.sceneMethods, ['bounds', 'close', 'hide', 'list', 'open', 'policy', 'select'].sort())
   assert.equal(bridge.controlApi, api)
   assert.ok((await page.locator('body').innerText()).includes('授权码'), 'Native login UI must render')
   await page.waitForFunction(() => ['.login-form-card', '.brand-content'].every(selector => {

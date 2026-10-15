@@ -84,7 +84,7 @@ function mayOpenExternalUrl(url: string): boolean {
 }
 
 registerAppScheme()
-installWebContentsNavigationPolicy(mayOpenExternalUrl)
+installWebContentsNavigationPolicy(mayOpenExternalUrl, url => automationController.mayNavigateRuntime(url))
 
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
@@ -105,8 +105,9 @@ const ipc = createTrustedIpcRegistrar({
   errorMessage,
 })
 
-ipc.handle('open-external', async (_event: IpcMainInvokeEvent, url: unknown) => {
+ipc.handle('open-external', async (event: IpcMainInvokeEvent, url: unknown) => {
   if (typeof url === 'string' && mayOpenExternalUrl(url)) {
+    if (!await automationController.checkExternalNavigation(event.sender, url)) return
     await shell.openExternal(url)
     return { success: true }
   }
@@ -121,14 +122,16 @@ const notificationManager = new NotificationManager({
   getWindow: () => mainWindow,
   getSelectedBatchItemId: () => automationController.selectedItemId(),
 })
-const freightController = new DesktopFreightController({
+const freightController: DesktopFreightController = new DesktopFreightController({
+  getExecutionLease: () => automationController.toolExecutionLease(),
   getWindow: () => mainWindow,
   registerAutomationHandle: ipc.automationHandle,
 })
-const automationController = new DesktopAutomationController({
+const automationController: DesktopAutomationController = new DesktopAutomationController({
   automationEnabled: AUTOMATION_RUNTIME_ENABLED,
   controlApiBase: CONTROL_API_BASE,
   runtimeRoot: RUNTIME_ROOT,
+  deviceId: DEVICE_IDENTITY.deviceId,
   getWindow: () => mainWindow,
   getDefaultFreightWorkbookPath: () => freightController.defaultWorkbookPath(),
   registerTrustedHandle: ipc.handle,
@@ -202,6 +205,12 @@ app.whenReady().then(async () => {
     cancelActiveWork: () => automationController.cancelActiveForWindowClose(),
     approveWebview: (partition, preferences) => automationController.browserSessions.approve(partition, preferences),
     webviewAttached: guest => automationController.browserSessions.attached(guest),
+    mayNavigateRuntime: url => automationController.mayNavigateRuntime(url),
+    checkExternalNavigation: async url => {
+      const sender = mainWindow?.webContents
+      if (!sender || sender.isDestroyed()) throw new Error('主窗口已失效')
+      return automationController.checkExternalNavigation(sender, url)
+    },
     onClosed: () => {
       automationController.clearDemoActivity()
       mainWindow = null

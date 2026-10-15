@@ -209,9 +209,10 @@ jobs:
       - name: Upgrade an empty MariaDB database through every Alembic migration
         working-directory: backend
         run: python -m alembic upgrade head
-      - name: Verify MariaDB order, activation, admin and profit-policy concurrency
+      - name: Verify MariaDB framework, order, activation, admin and profit-policy concurrency
         run: >-
           python -m pytest
+          backend/tests/integration/test_mariadb_framework.py
           backend/tests/integration/test_mariadb_order_concurrency.py
           backend/tests/integration/test_mariadb_hardening.py
           --rootdir=backend -q -rs

@@ -2,9 +2,11 @@ import { app, dialog, type BrowserWindow, type IpcMainInvokeEvent } from 'electr
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { quoteFreight } from '../../src/shared/freight/rate-engine.js'
 import type { FreightQuoteRequest, FreightRatePack } from '../../src/shared/freight/types.js'
 import type { TrustedHandleRegistrar } from '../ipc/trusted-ipc.cjs'
+import { ToolkitRuntime } from '../automation/toolkit-runtime.cjs'
+import { freightTool } from '../automation/toolkit-examples.cjs'
+import type { ExecutionLease } from '../automation/execution-lease.cjs'
 
 const { parseFreightWorkbook } = require('./rate-pack.cjs') as {
   parseFreightWorkbook: (filePath: string, options: UnknownRecord) => Promise<UnknownRecord>
@@ -15,6 +17,7 @@ type UnknownRecord = Record<string, unknown>
 interface DesktopFreightControllerOptions {
   getWindow: () => BrowserWindow | null | undefined
   registerAutomationHandle: TrustedHandleRegistrar
+  getExecutionLease: () => ExecutionLease
 }
 
 function asRecord(value: unknown): UnknownRecord {
@@ -27,10 +30,12 @@ export class DesktopFreightController {
   private readonly registerAutomationHandle: TrustedHandleRegistrar
   private selectedWorkbookPath: string | null = null
   private defaultPackCache: { mtimeMs: number; parsed: UnknownRecord } | null = null
+  private readonly getExecutionLease: () => ExecutionLease
 
   constructor(options: DesktopFreightControllerOptions) {
     this.getWindow = options.getWindow
     this.registerAutomationHandle = options.registerAutomationHandle
+    this.getExecutionLease = options.getExecutionLease
   }
 
   defaultWorkbookPath(): string {
@@ -68,13 +73,26 @@ export class DesktopFreightController {
     )
     this.registerAutomationHandle(
       'freight:quote',
-      async (_event: IpcMainInvokeEvent, rawPayload: unknown) => {
+      async (event: IpcMainInvokeEvent, rawPayload: unknown) => {
         const payload = asRecord(rawPayload)
         const parsed = payload.pack ? { pack: payload.pack } : await this.loadDefaultPack()
-        return quoteFreight(
-          asRecord(parsed).pack as FreightRatePack,
-          asRecord(payload.request) as unknown as FreightQuoteRequest,
-        )
+        const pack = asRecord(parsed).pack as FreightRatePack
+        const tool = freightTool(pack, async () => ({ schemaVersion: 1, principal: { kind: 'local', id: `window-${event.sender.id}` },
+          siteOrigin: null, accountSlot: null, localAccountRef: null, projectRef: null, mode: 'local', policyRevision: `freight:${pack.version}` }))
+        const runtime = new ToolkitRuntime(tool, {
+          lease: this.getExecutionLease(),
+          authorize: async (_context, descriptor) => {
+            if (event.sender.isDestroyed() || event.sender !== this.getWindow()?.webContents || descriptor.effect !== 'calculation') throw new Error('本机计算上下文已失效')
+          },
+          saveIntent: async () => { throw new Error('本机运费计算不得写入外部平台') },
+          // Pure calculator outputs are returned to the user, not recorded as
+          // external task completion or customer execution income/usage.
+          saveResult: async () => {},
+        })
+        const prepared = await runtime.prepare(asRecord(payload.request) as unknown as FreightQuoteRequest)
+        const verified = await runtime.execute(prepared.operationId)
+        if (verified.status !== 'verified') throw new Error('本机运费计算结果未通过复核')
+        return verified.result
       },
     )
   }

@@ -185,7 +185,7 @@ async def mark_order_paid(
     actor: dict[str, object] = Depends(require_commerce_operator),
 ) -> object:
     order = await OrderService(db).mark_paid(order_id, actor, request)
-    return {"success": True, "message": "订单已确认收款并生成分润", "data": OrderService.serialize(order)}
+    return {"success": True, "message": "订单已确认收款；新版商品分配金额须另行确认", "data": OrderService.serialize(order)}
 
 
 @router.post("/{order_id}/cancel", response_model=OrderEnvelope, response_model_exclude_unset=True)
@@ -209,4 +209,4 @@ async def refund_order(
     actor: dict[str, object] = Depends(require_commerce_operator),
 ) -> object:
     order = await OrderService(db).refund(order_id, req.reason, actor, request)
-    return {"success": True, "message": "订单已退款，分润记录已冲正", "data": OrderService.serialize(order)}
+    return {"success": True, "message": "订单已退款；新版成员分配进入差额核对", "data": OrderService.serialize(order)}

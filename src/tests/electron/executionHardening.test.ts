@@ -22,6 +22,7 @@ function fixture(blockAt?: string) {
   let blocked = false
   const pause = async (stage: string) => { if (!blocked && stage === blockAt) { blocked = true; reached.open(); await hold.promise } }
   let userId = 1
+  let competition = false
   const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, getURL: () => 'app://toolbox/index.html', send: vi.fn(), executeJavaScript: async () => `verified-fixture-token-${userId}` })
   const window = { webContents: sender, isDestroyed: () => false }
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
@@ -44,13 +45,24 @@ function fixture(blockAt?: string) {
   }
   const sessions = new Map<string, object>()
   const guests = new Map<number, object>()
+  const targetWindows: TargetWindow[] = []
+  class TargetWindow extends EventEmitter {
+    destroyed = false
+    url = 'about:blank'
+    webContents = Object.assign(new EventEmitter(), { id: 1000 + targetWindows.length, getURL: () => this.url, isDestroyed: () => this.destroyed, setWindowOpenHandler: vi.fn() })
+    constructor(readonly configuration: { webPreferences: { partition: string } }) { super(); targetWindows.push(this) }
+    loadURL = vi.fn(async (url: string) => { this.url = url; await pause('target-load') })
+    show = vi.fn(); focus = vi.fn(); isDestroyed = () => this.destroyed
+    destroy() { if (!this.destroyed) { this.destroyed = true; this.emit('closed') } }
+  }
   const electron = {
-    app: Object.assign(new EventEmitter(), { isPackaged: true, getPath: () => root, getVersion: () => 'test' }), safeStorage: codec, shell: {},
+    app: Object.assign(new EventEmitter(), { isPackaged: true, getPath: () => root, getVersion: () => 'test' }), safeStorage: codec, shell: { openExternal: vi.fn(async () => {}) }, BrowserWindow: TargetWindow,
     dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: ['fixture.csv'] }) },
-    session: { fromPartition: (partition: string) => { if (!sessions.has(partition)) sessions.set(partition, {}); return sessions.get(partition)! } },
+    session: { fromPartition: (partition: string) => { if (!sessions.has(partition)) sessions.set(partition, Object.assign(new EventEmitter(), { clearStorageData: vi.fn(async () => {}), setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() })); return sessions.get(partition)! } },
     webContents: { fromId: (id: number) => guests.get(id) || ({ id, getType: () => 'webview', hostWebContents: sender }) },
     net: { fetch: async (url: string) => {
       if (url.endsWith('/api/auth/me')) { await pause('auth'); return { ok: true, json: async () => ({ success: true, data: { role: 'user', user_id: userId, device_id: 'device' } }) } }
+      if (url.endsWith('/api/scenarios/me')) return { ok: true, json: async () => ({ success: true, data: { schemaVersion: 1, principal: { kind: 'customer', id: String(userId) }, revision: competition ? 'competition' : 'none', status: competition ? 'active' : 'unassigned', mode: competition ? 'competition' : 'training', entryUrl: competition ? 'https://www.idtrade.cn/User/Contest' : null, allowedOrigins: competition ? ['https://www.idtrade.cn'] : [], maxScenes: 1, checkedAt: new Date().toISOString(), expiresAt: competition ? new Date(Date.now() + 3600000).toISOString() : null, refreshAfterSeconds: 30 } }) }
       if (url.endsWith('/api/tools')) { await pause('catalog'); return { ok: true, json: async () => [{ id: 'single_tool', single_input_schema: [] }] } }
       throw new Error(`Unexpected fixture request: ${url}`)
     } },
@@ -58,7 +70,7 @@ function fixture(blockAt?: string) {
   const { ExecutionReportOutbox } = require(resolve('dist-electron/electron/automation/execution-report-outbox.cjs'))
   let reportOutbox!: { reserve(token: string): Promise<string> }
   class Outbox extends ExecutionReportOutbox {
-    constructor(options: Data) { super({ ...options, request: reportRequest }); reportOutbox = { reserve: token => this.reserve(token) } }
+    constructor(options: Data) { super({ ...options, request: reportRequest }); if (!options.reportPath) reportOutbox = { reserve: token => this.reserve(token) } }
     async reserve(token: unknown) { const id = await super.reserve(token); await pause('reservation'); return id }
   }
   class Host {
@@ -81,6 +93,9 @@ function fixture(blockAt?: string) {
     'electron': electron, 'runner-client.cjs': { RunnerClient: FakeRunner },
     'embedded-browser-host.cjs': { EmbeddedBrowserHost: Host }, 'embedded-browser-host-manager.cjs': { EmbeddedBrowserHostManager: HostManager },
     'execution-report-outbox.cjs': { ExecutionReportOutbox: Outbox },
+    // The real target lifecycle is exercised; native page inspection is not
+    // relevant to the account ownership and navigation-surface assertions.
+    'webcontents-port.cjs': { createOwnedWebContentsPort: () => ({ kind: 'fixture', inspect: vi.fn(), dispose: vi.fn() }) },
     'batch-importer.cjs': { parseBatchFile: async () => ({ importId: 'import', fileName: 'fixture.csv', rows: [{ itemId: 'item', sourceRow: 2, input: { account: 'batch-fixture' }, preview: {}, accountLabelMasked: '***' }], errors: [] }) },
   }
   const modules = new Map<string, { exports: unknown }>()
@@ -102,10 +117,10 @@ function fixture(blockAt?: string) {
   const { createTrustedIpcRegistrar } = require(resolve('dist-electron/electron/ipc/trusted-ipc.cjs'))
   const registrar = createTrustedIpcRegistrar({ ipcMain: { handle: (name: string, handler: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(name, handler), on: vi.fn() }, getWindow: () => window, allowDevelopmentOrigin: false, automationEnabled: true, errorMessage: () => 'fixture error' })
   const { DesktopAutomationController: Controller } = load(resolve('dist-electron/electron/automation/desktop-automation-controller.cjs')) as { DesktopAutomationController: typeof DesktopAutomationController }
-  const controller = new Controller({ automationEnabled: true, controlApiBase: 'https://control.invalid', runtimeRoot: root, getWindow: () => window as never, getDefaultFreightWorkbookPath: () => '', registerTrustedHandle: registrar.handle, registerAutomationHandle: registrar.automationHandle, registerTrustedOn: registrar.on, mayOpenExternalUrl: () => false, onActivityChanged: vi.fn(), showNotification: vi.fn() })
+  const controller = new Controller({ automationEnabled: true, controlApiBase: 'https://control.invalid', runtimeRoot: root, getWindow: () => window as never, getDefaultFreightWorkbookPath: () => '', registerTrustedHandle: registrar.handle, registerAutomationHandle: registrar.automationHandle, registerTrustedOn: registrar.on, mayOpenExternalUrl: url => url === 'https://www.idtrade.cn', onActivityChanged: vi.fn(), showNotification: vi.fn() })
   controller.registerIpc()
   const invoke = async (name: string, ...args: unknown[]) => handlers.get(name)!({ sender, senderFrame: { url: sender.getURL() } }, ...args)
-  const single = () => invoke('automation:start', { id: 'single_tool', name: 'fixture', executionMode: 'live', launchGrant: { token: 'single-grant' }, executionContext: { input: { account: 'single-fixture' } } })
+  const single = () => invoke('automation:start', { id: 'single_tool', name: 'fixture', targetUrl: 'https://fixture.test/tool', executionMode: 'live', launchGrant: { token: 'single-grant' }, executionContext: { input: { account: 'single-fixture' } } })
   const batch = async () => {
     await invoke('batch:select-import-file', {})
     await invoke('batch:create', { importId: 'import', batchId: 'batch', recordKind: 'live', tool: { id: 'batch_tool', name: 'fixture' } })
@@ -121,7 +136,7 @@ function fixture(blockAt?: string) {
     if (attach) controller.browserSessions.attached(created as never)
     return created
   }
-  return { controller, single, batch, startBatch, invoke, hold, reached, runners, browserCalls, reportRequest, reportOutbox, root, electron, load, guest, changeOwner: (id: number) => { userId = id } }
+  return { controller, single, batch, startBatch, invoke, hold, reached, runners, browserCalls, reportRequest, reportOutbox, root, electron, load, guest, sender, sessions, targetWindows, setCompetition: () => { competition = true }, changeOwner: (id: number) => { userId = id } }
 }
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup() })
 
@@ -241,6 +256,53 @@ describe('R07 batch execution receipt persistence', () => {
 })
 
 describe('R04 installed WebView event policy', () => {
+  it('opens competition recovery inside the guarded target and preserves recovery ownership', async () => {
+    const test = fixture(); test.setCompetition()
+    const internals = test.controller as unknown as {
+      resolveRecoveryOwner(sender: unknown): Promise<string>
+      recovery: { begin(owner: string, tool: Data, input: Data): { id: string } }
+    }
+    const owner = await internals.resolveRecoveryOwner(test.sender)
+    const record = internals.recovery.begin(owner, { id: 'tool', targetUrl: 'https://www.idtrade.cn/User/Contest' }, {})
+    await test.invoke('recovery:open-platform', record.id)
+    expect(test.electron.shell.openExternal).not.toHaveBeenCalled()
+    expect(test.targetWindows).toHaveLength(1)
+    expect(test.targetWindows[0]!.url).toBe('https://www.idtrade.cn/')
+    const event = { preventDefault: vi.fn() }
+    test.targetWindows[0]!.webContents.emit('will-redirect', event, 'https://outside.test/')
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    test.changeOwner(2)
+    await expect(test.invoke('recovery:open-platform', record.id)).rejects.toThrow()
+    expect(test.electron.shell.openExternal).not.toHaveBeenCalled()
+    expect(test.targetWindows).toHaveLength(1)
+  })
+  it('does not turn recovery navigation into a public external link after logout', async () => {
+    const test = fixture(); test.setCompetition()
+    const internals = test.controller as unknown as {
+      resolveRecoveryOwner(sender: unknown): Promise<string>
+      recovery: { begin(owner: string, tool: Data, input: Data): { id: string }; origin(owner: string, id: string): string }
+    }
+    const owner = await internals.resolveRecoveryOwner(test.sender)
+    const record = internals.recovery.begin(owner, { id: 'tool', targetUrl: 'https://www.idtrade.cn/User/Contest' }, {})
+    const origin = internals.recovery.origin.bind(internals.recovery)
+    vi.spyOn(internals.recovery, 'origin').mockImplementation((key, id) => {
+      const url = origin(key, id)
+      vi.spyOn(test.sender, 'executeJavaScript').mockResolvedValue('')
+      return url
+    })
+    await expect(test.invoke('recovery:open-platform', record.id)).rejects.toThrow('身份已变化')
+    expect(test.electron.shell.openExternal).not.toHaveBeenCalled()
+    expect(test.targetWindows).toHaveLength(0)
+  })
+  it('competition external links stay in guarded Electron instead of escaping through OS redirects', async () => {
+    const test = fixture(); test.setCompetition()
+    const targets = (test.controller as unknown as { targets: { openAssignedUrl(sender: unknown, url: string): Promise<void> } }).targets
+    const open = vi.spyOn(targets, 'openAssignedUrl').mockResolvedValue()
+    expect(await test.controller.checkExternalNavigation(test.sender as never, 'https://www.idtrade.cn/path')).toBe(false)
+    expect(open).toHaveBeenCalledWith(test.sender, 'https://www.idtrade.cn/path', undefined)
+    await expect(test.controller.checkExternalNavigation(test.sender as never, 'https://www.idtrade.cn.evil.test/path')).rejects.toThrow('SCENARIO_ROUTE_BLOCKED')
+    expect(open).toHaveBeenCalledOnce()
+  })
   it('allows V2 login/list/detail redirects and rejects other HTTP targets', () => {
     const f = fixture()
     const { installWebContentsNavigationPolicy } = f.load(resolve('dist-electron/electron/core/main-window.cjs')) as { installWebContentsNavigationPolicy(fn: () => boolean): void }
@@ -259,10 +321,40 @@ describe('R04 installed WebView event policy', () => {
 })
 
 describe('owner-derived single browser sessions', () => {
+  it('retires legacy and target account sessions in both directions, including late legacy attachment', async () => {
+    const test = fixture()
+    const legacy = await test.invoke('automation:prepare-browser', 'amazon') as { partition: string }
+    expect(test.controller.browserSessions.approve(legacy.partition, {})).toBe(true)
+    const guest = test.guest(legacy.partition, 101)
+    await test.invoke('automation:register-browser', 101)
+    expect(test.controller.browserSessions.approve(legacy.partition, {})).toBe(true)
+    await test.invoke('targets:open', { entryUrl: 'https://fixture.test/login' })
+    expect(guest.close).toHaveBeenCalledOnce()
+    expect(test.controller.browserSessions.hasGrant).toBe(false)
+    expect(test.guest(legacy.partition, 102).close).toHaveBeenCalledOnce()
+    expect(test.controller.browserSessions.approve(legacy.partition, {})).toBe(false)
+    const target = test.targetWindows[0]!
+    expect(target.isDestroyed()).toBe(false)
+    const replacement = await test.invoke('automation:prepare-browser', 'amazon') as { partition: string }
+    expect(target.isDestroyed()).toBe(true)
+    expect(replacement.partition).not.toBe(legacy.partition)
+    expect(test.sessions.get(target.configuration.webPreferences.partition)).toMatchObject({ clearStorageData: expect.any(Function) })
+    const targetSession = test.sessions.get(target.configuration.webPreferences.partition) as { clearStorageData: ReturnType<typeof vi.fn> }
+    expect(targetSession.clearStorageData).toHaveBeenCalledOnce()
+  })
+  it('does not issue a legacy account grant while a target open is still in flight', async () => {
+    const test = fixture('target-load')
+    const pending = test.invoke('targets:open', { entryUrl: 'https://fixture.test/login' })
+    await test.reached.promise
+    await expect(test.invoke('automation:prepare-browser', 'amazon')).rejects.toThrow('RUN_ALREADY_ACTIVE')
+    expect(test.controller.browserSessions.hasGrant).toBe(false)
+    expect(test.targetWindows.filter(window => !window.isDestroyed())).toHaveLength(1)
+    test.hold.open(); await pending
+  })
   it('changes verified owner, stops old work, destroys old guest and refuses its late registration', async () => {
     const f = fixture()
     const a = await f.invoke('automation:prepare-browser', 'amazon') as { partition: string }
-    expect(a.partition).toMatch(/^persist:kst-workspace-v1-[a-f0-9]{64}$/)
+    expect(a.partition).toMatch(/^kst-workspace-v2-[a-f0-9]{64}$/)
     expect(f.controller.browserSessions.approve(a.partition, {})).toBe(true)
     const old = f.guest(a.partition, 100)
     await f.invoke('automation:register-browser', 100)
@@ -277,12 +369,12 @@ describe('owner-derived single browser sessions', () => {
     expect(f.controller.browserSessions.approve('persist:tool-workspace', {})).toBe(false)
     expect(f.controller.browserSessions.approve('persist:kst-workspace-v1-' + 'a'.repeat(64), {})).toBe(false)
   })
-  it('preserves same-owner data identity without adopting old shared cookies; platforms remain distinct', async () => {
+  it('uses fresh sessions after logout and never adopts previous account cookies', async () => {
     const f = fixture()
     const a = await f.invoke('automation:prepare-browser', 'amazon') as { partition: string }
     await f.invoke('recovery:revoke-session')
     expect(f.controller.browserSessions.approve(a.partition, {})).toBe(false)
-    expect(await f.invoke('automation:prepare-browser', 'amazon')).toEqual(a)
+    expect(await f.invoke('automation:prepare-browser', 'amazon')).not.toEqual(a)
     const other = await f.invoke('automation:prepare-browser', 'aliexpress') as { partition: string }
     expect(other.partition).not.toBe(a.partition)
     expect(f.controller.browserSessions.approve('batch-attempt-1', {})).toBe(true)
