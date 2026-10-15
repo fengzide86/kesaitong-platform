@@ -52,7 +52,7 @@ test('prepared artifacts require backend, installer, blockmap and manifest witho
   assert.doesNotMatch(source, /function publishWeb\(|function createWebArtifact\(|deploy-web\.sh|\['run', 'build:web'\]/)
   assert.match(source, /ops\/deploy\/retire-web\.py/)
   assert.match(source, /ops\/web-retired\/sw\.js/)
-  assert.match(source, /run\('npm', \['run', 'verify:release'\]/)
+  assert.match(source, /run\('npm', \['run', 'verify:release:attested'\]/)
 })
 
 function retiredRequest(override = () => undefined) {

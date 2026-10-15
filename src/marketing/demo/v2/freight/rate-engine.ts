@@ -15,7 +15,6 @@ function roundMoney(value: number): number {
   const tolerance = Math.min(Number.EPSILON * Math.max(1, Math.abs(cents)) * 4, 1e-7)
   return Math.round(Math.abs(cents - halfCent) <= tolerance ? halfCent : cents) / 100
 }
-
 function ceilCent(value: number): number {
   const cents = value * 100
   if (!Number.isFinite(cents) || Math.abs(cents) > Number.MAX_SAFE_INTEGER) return NaN
@@ -260,3 +259,4 @@ export function quoteFreight(packInput: FreightRatePack, request: FreightQuoteRe
     warnings,
   }
 }
+

@@ -55,4 +55,4 @@ python3 ops/deploy/retire-web.py \
 - 单元测试 1,037 项、Electron workflow 6 项通过；类型、lint、架构、OpenAPI 兼容、API 契约、deadcode 和凭据审计通过。
 - 独立官网的电脑/手机视觉及既有安装包下载验收见 [官网验收记录](./WEB_RETIREMENT_OFFICIAL_ACCEPTANCE.md)。官网当前展示 1.8.12，此次没有擅自替换其内容或下载链接。
 
-正式新版本需依次经过最新 main、GitHub 七项 CI、完整 verify:release、安装包审计和四阶段发布器验收。新状态 schemaVersion=2，仅含后端/桌面产物；schemaVersion=1 历史记录保持原样，在任何网络、锁或写入前拒绝续跑。不以本地候选包冒充已发布安装包；最终发布状态及下载信息以发布器 state.json 为准。
+正式新版本需依次经过最新 main、GitHub 八项 CI、同 SHA CI 证明、安装包审计和四阶段发布器验收。需要完整本地质量门禁时单独运行 `verify:release`；生产发布器会复用已核验的 CI 结果并保留发布策略、MariaDB 证明、线上健康和下线检查。新状态 schemaVersion=2，仅含后端/桌面产物；schemaVersion=1 历史记录保持原样，在任何网络、锁或写入前拒绝续跑。不以本地候选包冒充已发布安装包；最终发布状态及下载信息以发布器 state.json 为准。

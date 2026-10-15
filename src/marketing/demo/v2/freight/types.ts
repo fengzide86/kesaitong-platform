@@ -3,7 +3,6 @@ export interface FreightDimensionsCm {
   width: number
   height: number
 }
-
 export interface FreightTier {
   maxWeightG: number
   perKgCny: number
@@ -84,3 +83,4 @@ export interface FreightQuoteResult {
   candidates: FreightQuoteCandidate[]
   warnings: string[]
 }
+

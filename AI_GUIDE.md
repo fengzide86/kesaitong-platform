@@ -53,7 +53,7 @@
 
 - 当前发行目标是 unsigned Windows NSIS，客户可能看到“未知发布者”，这是已接受的产品取舍。
 - 当前 `internal` 安装包只包含前端产物、编译后的 Electron CJS、必要生产依赖和模板、费率、品牌资源，不包含 Python 后端；`npm run package:audit` 会拒绝内嵌后端文件。
-- 生产发布使用 `node scripts/toolbox-cli.mjs release --publish --version=x.y.z`，同一提交依次发布后端与桌面更新，并验证业务网页版持续下线。要求干净工作区、HEAD 等于已推送的最新 `origin/main`、八项必需 CI（含真实后端旅程及依赖安全）通过且版本高于线上和远端标签。生产不生成或上传业务 Web；`build:web` 仅保留本地预览和隔离界面测试。
+- 生产发布使用 `node scripts/toolbox-cli.mjs release --publish --version=x.y.z`，同一提交依次发布后端与桌面更新，并验证业务网页版持续下线。要求干净工作区、HEAD 等于已推送的最新 `origin/main`、八项必需 CI（含真实后端旅程及依赖安全）通过且版本高于线上和远端标签。发布器复用已核验的同 SHA CI 结果，只补做发布策略、MariaDB 证明、桌面构建/审计和线上检查；`npm run verify:release` 仍用于需要完整本地门禁的场景。生产不生成或上传业务 Web；`build:web` 仅保留本地预览和隔离界面测试。
 - 生产发布禁止 `--skip-verify` 和 `--skip-build`。新版发布状态为 schemaVersion=2，阶段为 `prepared → backend_deployed → desktop_published → verified`；中断后使用匹配的 `--resume=release-id`。历史 schemaVersion=1 只保留记录，禁止自动迁移或续跑；先核对原发布和租约，再建立新版本发布。后端回滚不得重新开放业务网页。
 - 系统与宣传官网一起发布使用 `node scripts/toolbox-cli.mjs joint-release --version=x.y.z` 或 `联合发布.bat`：先只读核验官网账号及已有项目，再执行原系统完整发布，最后按官网配置发布独立静态站点。正式官网 `https://kesaitong.top` 使用 GitHub Pages；必须显式配置 `KST_MARKETING_PROVIDER=github-pages` 和已核验仓库，不能默认按旧 Cloudflare 项目发布。`--resume` 传递给系统发布器，`--dry-run` 仅做本地官网配置检查，不连接网络。两个通道不是全局原子事务；官网失败但系统成功时只运行 `官网发布.bat` 恢复，不重复发布系统，也不声称整体已完成。
 - 桌面更新经服务器私有暂存区和 `publish_update.py` 校验后原子发布；管理端“应用更新”仍用于查看记录和处理已暂存版本。
