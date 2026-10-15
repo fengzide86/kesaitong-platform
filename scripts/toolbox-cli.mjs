@@ -968,8 +968,8 @@ function releaseArtifacts(version, releaseDir = path.join(root, 'release')) {
   return { installer, blockmap, manifest: manifestPath }
 }
 
-function copyDesktopArtifacts(version, artifactDir) {
-  const built = releaseArtifacts(version)
+function copyDesktopArtifactsFromRelease(version, releaseDir, artifactDir) {
+  const built = releaseArtifacts(version, releaseDir)
   const desktopDir = path.join(artifactDir, 'desktop')
   fs.rmSync(desktopDir, { recursive: true, force: true })
   fs.mkdirSync(desktopDir, { recursive: true })
@@ -980,6 +980,63 @@ function copyDesktopArtifacts(version, artifactDir) {
     copied[name] = artifactRecord(target)
   }
   return copied
+}
+
+function copyDesktopArtifacts(version, artifactDir) {
+  return copyDesktopArtifactsFromRelease(version, path.join(root, 'release'), artifactDir)
+}
+
+function findDownloadedReleaseDirectory(baseDir) {
+  const queue = [{ directory: baseDir, depth: 0 }]
+  while (queue.length) {
+    const current = queue.shift()
+    if (fs.existsSync(path.join(current.directory, 'latest.yml'))) return current.directory
+    if (current.depth >= 3) continue
+    for (const entry of fs.readdirSync(current.directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        queue.push({ directory: path.join(current.directory, entry.name), depth: current.depth + 1 })
+      }
+    }
+  }
+  fail(`GitHub Windows 制品缺少 latest.yml：${baseDir}`)
+}
+
+function successfulCiWorkflowRun(repository, commitSha) {
+  let runs
+  try {
+    runs = JSON.parse(output('gh', [
+      'run', 'list', '--repo', repository, '--workflow', 'test.yml', '--commit', commitSha,
+      '--json', 'databaseId,headSha,status,conclusion', '--limit', '20',
+    ]))
+  } catch (error) {
+    fail(`无法读取提交对应的 GitHub CI 运行：${error instanceof Error ? error.message : error}`)
+  }
+  const run = Array.isArray(runs) && runs.find(candidate => (
+    candidate?.headSha === commitSha
+    && candidate?.status === 'completed'
+    && candidate?.conclusion === 'success'
+    && Number.isInteger(Number(candidate?.databaseId))
+  ))
+  if (!run) fail(`提交 ${commitSha.slice(0, 12)} 没有可复用的成功 GitHub CI 运行`)
+  return String(run.databaseId)
+}
+
+function downloadCiDesktopArtifacts(version, commitSha, artifactDir) {
+  const repository = parseGithubRepository(gitOutput(['remote', 'get-url', 'origin']))
+  const runId = successfulCiWorkflowRun(repository, commitSha)
+  const staging = path.join(os.tmpdir(), `kst-ci-desktop-${commitSha.slice(0, 12)}-${releaseSessionId}`)
+  fs.rmSync(staging, { recursive: true, force: true })
+  fs.mkdirSync(staging, { recursive: true })
+  try {
+    run('gh', [
+      'run', 'download', runId, '--repo', repository,
+      '--name', 'windows-nsis-and-update-artifacts', '--dir', staging,
+    ])
+    const releaseDir = findDownloadedReleaseDirectory(staging)
+    return copyDesktopArtifactsFromRelease(version, releaseDir, artifactDir)
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true })
+  }
 }
 
 function releaseVerificationEnvironment(ciAttestedSha = '') {
@@ -1013,9 +1070,16 @@ async function prepareRelease(state, ciAttestedSha) {
   const artifactDir = path.join(releaseStateDirectory(state.releaseId), 'artifacts')
   fs.mkdirSync(artifactDir, { recursive: true })
   run('npm', ['run', 'verify:release:attested'], { env: releaseVerificationEnvironment(ciAttestedSha) })
-  run('npm', ['run', 'electron:release'])
-  run('npm', ['run', 'package:audit'])
-  const desktop = copyDesktopArtifacts(state.version, artifactDir)
+  let desktop
+  try {
+    desktop = downloadCiDesktopArtifacts(state.version, state.commitSha, artifactDir)
+    log(`复用同一提交的 Windows CI 安装包：${state.commitSha.slice(0, 12)}`)
+  } catch (error) {
+    log(`CI 安装包复用失败，回退本地 NSIS 构建：${error instanceof Error ? error.message : error}`)
+    run('npm', ['run', 'electron:release'])
+    run('npm', ['run', 'package:audit'])
+    desktop = copyDesktopArtifacts(state.version, artifactDir)
+  }
   const backend = artifactRecord(deploymentArchive(state.version, state.commitSha, artifactDir))
   return { backend, desktop }
 }
