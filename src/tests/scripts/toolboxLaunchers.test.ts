@@ -47,9 +47,13 @@ function execute(root: string, args: string[], entry?: string, overrides: NodeJS
     TOOLBOX_GH_EXE: '', TOOLBOX_DRY_RUN: '', TOOLBOX_PREVIEW_BACKEND: 'local', TOOLBOX_RELEASE_VERSION: '', ...overrides }
   return entry
     ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/v:off', '/s', '/c', `call "${path.join(root, entry)}" ${args.join(' ')}`],
-      { cwd: os.tmpdir(), env: environment, encoding: 'utf8', timeout: 20_000, windowsVerbatimArguments: true })
+      // The real BAT wrapper starts a fresh cmd/Node chain. On the Windows
+      // hosted runner, the launcher matrix can take longer while other tests
+      // are tearing down; keep a bounded window without killing the child
+      // before it releases the temporary path.
+      { cwd: os.tmpdir(), env: environment, encoding: 'utf8', timeout: 60_000, windowsVerbatimArguments: true })
     : spawnSync(process.execPath, [path.join(root, 'scripts', 'toolbox-cli.mjs'), ...args],
-      { cwd: os.tmpdir(), env: environment, encoding: 'utf8', timeout: 20_000 })
+      { cwd: os.tmpdir(), env: environment, encoding: 'utf8', timeout: 60_000 })
 }
 
 afterEach(() => {
