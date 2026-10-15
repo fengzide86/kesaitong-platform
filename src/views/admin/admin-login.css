@@ -1,6 +1,6 @@
 /* Shared brand and controls; a quieter team entry with its own visual identity. */
 .login-container.auth-entry-shell {
-  --auth-entry-background: linear-gradient(115deg, #e6edf4 0%, #ecf1f6 46%, #f6f8fb 100%);
+  --auth-entry-background: linear-gradient(115deg, #e2eaf4 0%, #ebf1f8 48%, #f6f8fc 100%);
   display: grid;
   grid-template-columns: minmax(0, 1.04fr) minmax(400px, .96fr);
   min-height: 100svh;

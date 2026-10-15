@@ -89,8 +89,8 @@
             <a href="#" @click.prevent="showHelp" class="footer-link"><HelpCircle :size="15" />使用帮助</a>
             <a href="#" @click.prevent="showContact" class="footer-link"><Phone :size="15" />联系客服</a>
             <a href="#/user/terms" class="footer-link"><FileText :size="14" />服务条款</a>
-            <a href="#/admin/login" class="footer-link admin-link"><Shield :size="14" />管理端入口</a>
           </div>
+          <a href="#/admin/login" class="footer-link admin-link"><Shield :size="14" />管理端入口</a>
         </nav>
       </div>
 
@@ -870,59 +870,6 @@ const {
   animation: spin 0.8s linear infinite;
 }
 
-/* 底部链接 */
-.footer-links {
-  display: grid;
-  grid-template-columns: repeat(4, max-content);
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-}
-
-.footer-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: var(--type-control);
-  color: var(--color-text-secondary);
-  text-decoration: none;
-  transition: all 0.2s ease;
-  padding: 0.25rem 0.4rem;
-  border-radius: 6px;
-}
-
-.footer-link:hover {
-  color: var(--color-primary);
-  background: rgba(14, 165, 233, 0.05);
-}
-
-.footer-link svg {
-  width: 14px;
-  height: 14px;
-}
-
-.admin-link {
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-.admin-link:hover {
-  color: var(--color-primary-hover);
-  background: rgba(14, 165, 233, 0.08);
-}
-
-/* 底部版权 */
-.login-footer {
-  margin-top: 2rem;
-  text-align: center;
-}
-
-.login-footer p {
-  font-size: var(--type-meta);
-  color: var(--color-text-secondary);
-}
-
 /* ===== 弹窗 ===== */
 .modal-overlay {
   display: none;
@@ -1193,10 +1140,6 @@ const {
   .login-form-card {
     padding: 1.75rem;
   }
-
-  .footer-links {
-    gap: 0.3rem;
-  }
 }
 
 /* v6 明亮精密主题：保留承诺内容，移除深色赛博装饰 */
@@ -1278,8 +1221,7 @@ const {
 }
 .card-accent { height: 3px; background: linear-gradient(90deg, var(--color-primary), var(--color-premium)); }
 .logo-section h2 { color: var(--color-text); letter-spacing: -.02em; }
-.logo-section p,
-.login-footer { color: var(--color-text-secondary); }
+.logo-section p { color: var(--color-text-secondary); }
 .connection-status { border-color: var(--color-border); background: var(--color-surface-soft); }
 .connection-status.online { color: var(--color-success); }
 .form-group label { color: var(--color-text); font-weight: 700; }
@@ -1302,8 +1244,6 @@ const {
 .btn-login:hover:not(:disabled) { background: var(--color-primary-hover); box-shadow: 0 11px 26px rgba(45, 95, 202, .24); }
 .error-message { color: var(--color-danger); border-color: rgba(195, 61, 73, .18); background: var(--color-danger-soft); }
 .success-message { color: var(--color-success); border-color: rgba(22, 138, 99, .18); background: var(--color-success-soft); }
-.footer-link { color: var(--color-text-secondary); }
-.footer-link:hover { color: var(--color-primary); }
 .modal-overlay { background: var(--color-overlay); backdrop-filter: blur(5px); }
 .modal { border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-overlay); }
 
@@ -1356,16 +1296,12 @@ const {
   .feature-tag { padding: 6px 4px; font-size:var(--type-meta); background: var(--color-surface); }
   .login-form-section { padding: 16px 0 0; background: transparent; }
   .login-form-card { max-width: 460px; padding: 26px 28px; }
-  .login-footer { margin-top: 12px; }
 }
 
 @media (max-width: 520px) {
   .login-page { align-content: start; padding: 18px 14px; }
   .login-brand-lockup :deep(.kst-lockup-logo) { width: min(100%, 168px); }
   .login-form-card { padding: 24px 18px; }
-  .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-  .footer-link { justify-content: center; }
-  .login-footer p { line-height: 1.5; }
 }
 
 /* v7 视觉收口：痛点优先、单一阅读轴、低频品牌动效 */
@@ -1422,14 +1358,10 @@ const {
 .input-wrapper input { height: 50px; padding: 0 42px; border: 1px solid #d8dee8; border-radius: 9px; color: #182033; background: #fff; font-size: 15px; }
 .input-wrapper input::placeholder { color: #98a2b3; }
 .input-wrapper input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(45,95,202,.12); }
-.device-info { min-height: 36px; margin-bottom: 22px; padding: 0 11px; border-radius: 8px; color: #667085; background: #f8f9fb; font-size: 12px; }
+.device-info { min-height: 36px; margin-bottom: 22px; padding: 6px 11px; border-radius: 8px; color: #667085; background: #f8f9fb; font-size: 12px; }
 .device-info strong { color: #344054; font-weight: 650; }
 .btn-login { min-height: 50px; border-radius: 9px; background: var(--color-primary); box-shadow: 0 8px 20px rgba(45,95,202,.18); font-size: 15px; font-weight: 700; }
 .btn-login:hover:not(:disabled) { background: var(--color-primary-hover); box-shadow: 0 11px 26px rgba(45,95,202,.24); transform: translateY(-1px); }
-.footer-links { margin-top: 24px; gap: 8px 10px; }
-.footer-link { min-height: 36px; color: #667085; font-size: 12px; }
-.admin-link { grid-column: 1 / -1; justify-self: center; color: #98a2b3; }
-.login-footer { margin-top: 18px; color: #98a2b3; font-size: 11px; }
 @keyframes loginContentIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes loginCardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes logoBreath { 0%, 100% { box-shadow: 0 7px 18px rgba(45,95,202,.10); } 50% { box-shadow: 0 9px 24px rgba(45,95,202,.18); } }
@@ -1470,8 +1402,6 @@ const {
   .pain-item p { font-size: 12px; line-height: 1.45; }
   .login-form-card { padding: 26px 18px 22px; }
   .card-accent { margin: -26px -18px 24px; }
-  .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-link { grid-column: 1 / -1; }
   .feature-tags .feature-tag:nth-child(2) { border-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1721,12 +1651,10 @@ const {
   box-shadow: var(--shadow-medium);
 }
 .login-page.auth-entry-shell .brand-content { position: relative; z-index: 1; }
-.login-page.auth-entry-shell .login-footer { position: absolute; right: 24px; bottom: 18px; left: 24px; }
 @media (max-width: 760px) {
   .login-page.auth-entry-shell { grid-template-columns: 1fr; overflow-y: auto; }
   .login-page.auth-entry-shell > .login-brand { min-height: 330px; padding: 32px 24px 28px; }
   .login-page.auth-entry-shell > .login-form-section { min-height: 0; padding: 24px 18px 66px; }
-  .login-page.auth-entry-shell .login-footer { bottom: 16px; }
 }
 
 /* v12：把登录页左侧从抽象背景改成真实产品结构预览；不改变登录行为。 */
@@ -1886,17 +1814,10 @@ const {
 .btn-loading { position: absolute; inset: 0; visibility: hidden; }
 .btn-loading.visible { visibility: visible; }
 .spinner { animation: auth-spinner 1.2s linear infinite; }
-.device-info { display: flex; justify-content: center; align-items: flex-start; gap: 8px; margin-top: 20px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
-.device-info svg { flex: 0 0 auto; margin-top: 2px; }
+.device-info { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.device-info svg { flex: 0 0 auto; margin-top: 0; }
+.device-info > span { min-width: 0; overflow-wrap: anywhere; text-align: center; }
 .device-info strong { font-weight: 500; }
-.footer-links { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--color-border); }
-.support-links, .secondary-links { display: flex; justify-content: space-between; gap: 16px; }
-.secondary-links { margin-top: 12px; }
-.footer-link { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; text-decoration: none; transition: color var(--motion-fast); }
-.support-links .footer-link { color: var(--color-text); }
-.secondary-links .footer-link { font-size: 12px; }
-.footer-link:hover { color: var(--color-primary); }
-.login-footer { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
 @keyframes auth-surface-breathe { 0%, 100% { opacity: .40; transform: translate3d(0, 0, 0) scale(1); } 50% { opacity: .72; transform: translate3d(14px, -8px, 0) scale(1.025); } }
 @keyframes auth-surface-glint { 0%, 22% { opacity: 0; transform: translate3d(-12px, -4px, 0) rotate(-20deg); } 38% { opacity: .46; } 56%, 100% { opacity: 0; transform: translate3d(130px, 92px, 0) rotate(-20deg); } }
 @keyframes auth-workflow-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
@@ -1928,7 +1849,6 @@ const {
   .logo-section h2 { font-size: 26px; }
   .logo-section p { font-size: 13px; }
   .login-card-topline { margin-bottom: 20px; }
-  .login-footer { text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   .login-brand::before, .login-brand::after, .workflow-card, .spinner { animation: none !important; }
@@ -1940,6 +1860,7 @@ const {
 .login-page.auth-entry-shell {
   grid-template-columns: minmax(0, 1.04fr) minmax(400px, .96fr);
   padding: 0;
+  overflow-y: auto;
   background: var(--auth-entry-background);
 }
 
@@ -2140,37 +2061,64 @@ const {
 }
 
 .login-page.auth-entry-shell .footer-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
   margin-top: 24px;
   padding-top: 20px;
+  border-top: 1px solid var(--color-border);
 }
 
 .login-page.auth-entry-shell .footer-links-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px 18px;
+  gap: 4px 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .login-page.auth-entry-shell .footer-link {
-  color: #778398;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px;
+  border-radius: 6px;
+  color: #5b6a80;
+  font-size: 13px;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease;
 }
 
 .login-page.auth-entry-shell .footer-link:hover {
   color: #456fbe;
+  background: rgba(69, 111, 190, .05);
+}
+
+.login-page.auth-entry-shell .footer-link svg {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
 }
 
 .login-page.auth-entry-shell .admin-link {
-  color: #536786;
-  font-weight: 600;
+  color: #778398;
+  font-weight: 500;
 }
 
 .login-page.auth-entry-shell .login-footer {
-  position: absolute;
-  right: 24px;
-  bottom: 18px;
-  left: 24px;
-  color: #9aa4b3;
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
   text-align: center;
 }
 
@@ -2205,10 +2153,9 @@ const {
   .login-page.auth-entry-shell .brand-boundary { margin-top: 20px; }
   .login-page.auth-entry-shell > .login-form-section {
     min-height: 0;
-    padding: 28px 18px 68px;
+    padding: 28px 18px 24px;
   }
   .login-page.auth-entry-shell .login-form-card { padding: 34px 24px 28px; }
-  .login-page.auth-entry-shell .login-footer { bottom: 18px; }
 }
 
 @media (max-width: 420px) {
@@ -2269,11 +2216,12 @@ const {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 24px;
   box-sizing: border-box;
 }
 
 .login-page.auth-entry-shell .login-form-card {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: min(100%, 420px);
   height: auto;
   min-height: 0;
@@ -2286,10 +2234,6 @@ const {
     left: 0;
     opacity: .32;
     clip-path: inset(0 0 0 30%);
-  }
-
-  .login-page.auth-entry-shell > .login-form-section {
-    display: block;
   }
 }
 
@@ -2392,11 +2336,6 @@ const {
 
 .login-page.auth-entry-shell .device-info { color: #52617a; }
 
-.login-page.auth-entry-shell .footer-link {
-  color: #5b6a80;
-  font-size: 13px;
-}
-
 @media (max-width: 760px) {
   .login-page.auth-entry-shell .brand-shapes {
     inset: -10% -22% -8% -10%;
@@ -2416,7 +2355,7 @@ const {
     text-wrap: balance;
   }
   .login-page.auth-entry-shell .brand-desc { font-size: 15px; }
-  .login-page.auth-entry-shell .login-form-card { width: auto; padding: 34px 24px 28px; }
+  .login-page.auth-entry-shell .login-form-card { width: min(100%, 420px); padding: 34px 24px 28px; }
 }
 
 @media (max-width: 420px) {

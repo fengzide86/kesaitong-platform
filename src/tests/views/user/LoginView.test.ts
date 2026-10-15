@@ -119,6 +119,19 @@ describe('LoginView', () => {
       expect(links.length).toBe(4) // 使用帮助、联系客服、服务条款、管理端登录
       expect(links.at(-1)?.text()).toContain('管理端入口')
     })
+
+    it('帮助、客服和条款同组，管理端入口独立为次级操作', () => {
+      const wrapper = mountWithPinia(LoginView)
+      const nav = wrapper.get('nav.footer-links')
+      expect(nav.findAll('.footer-links-row > a').map(link => link.text())).toEqual([
+        '使用帮助', '联系客服', '服务条款'
+      ])
+      const adminLink = nav.get(':scope > .admin-link')
+      expect(adminLink.attributes('href')).toBe('#/admin/login')
+      expect(nav.get('.footer-links-row a[href="#/user/terms"]').text()).toBe('服务条款')
+      expect(wrapper.get('.login-footer').element.parentElement).toBe(wrapper.get('.login-form-section').element)
+      wrapper.unmount()
+    })
   })
 
   describe('授权码验证测试', () => {
