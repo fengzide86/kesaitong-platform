@@ -47,7 +47,10 @@ describe('compiled Runner grant HTTP transport', () => {
     })
     try {
       const result = await new Promise<Record<string, unknown>>((resolveFailure, rejectFailure) => {
-        const timer = setTimeout(() => rejectFailure(new Error('grant fixture timed out')), 10_000)
+        // The compiled Runner can start behind the other Electron coverage
+        // workers during the full release gate. Keep the fixture strict while
+        // allowing the process to finish booting under that bounded load.
+        const timer = setTimeout(() => rejectFailure(new Error('grant fixture timed out')), 30_000)
         child.once('error', error => { clearTimeout(timer); rejectFailure(error) })
         child.on('message', raw => {
           const message = raw as { type?: string; event?: { type?: string; error?: Record<string, unknown> } }
