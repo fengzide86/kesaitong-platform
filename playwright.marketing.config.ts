@@ -1,6 +1,9 @@
 import { defineConfig } from '@playwright/test'
 
-const port = 4200
+const port = Number(process.env.PLAYWRIGHT_MARKETING_PORT || 4200)
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error('PLAYWRIGHT_MARKETING_PORT must be an integer between 1 and 65535')
+}
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?.trim() || undefined
 // The desktop runtime may provide Node without an npm shim on PATH. Calling
 // Vite through the current Node executable keeps the marketing smoke test
