@@ -267,7 +267,8 @@ describe('independent marketing site information architecture', () => {
     })
     wrappers.push(empty, baseline)
     expect(empty.find('.metric-comparison').exists()).toBe(false)
-    expect(baseline.text()).toContain('辅助数据待实测')
+    expect(baseline.text()).toContain('辅助数据暂未公开')
+    expect(baseline.text()).not.toContain('待补充')
     expect(baseline.text()).toContain('人工基线')
   })
 

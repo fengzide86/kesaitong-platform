@@ -82,9 +82,32 @@ onUnmounted(() => {
 .app-layout {
   --shell-header-height: 88px;
   min-height: 100vh;
+  position: relative;
   background: var(--color-canvas);
   display: flex;
   flex-direction: column;
+}
+
+/* 管理后台延续同一品牌线索，但不复用登录页轮廓图案。 */
+.app-layout::before {
+  content: '';
+  position: fixed;
+  top: calc(var(--shell-header-height) + 18px);
+  left: var(--sidebar-width, 200px);
+  width: min(260px, 28vw);
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(45, 95, 202, .16), rgba(169, 133, 82, .10), transparent);
+  transform-origin: left center;
+  animation: shell-brand-breathe 8s ease-in-out infinite;
+}
+
+.app-layout > * { position: relative; z-index: 1; }
+
+@keyframes shell-brand-breathe {
+  0%, 100% { opacity: .3; transform: scaleX(.8); }
+  50% { opacity: .68; transform: scaleX(1); }
 }
 
 /* Header 左侧留空，为固定侧边栏让位 */
@@ -236,5 +259,9 @@ onUnmounted(() => {
 
 @media (max-width: 767px) {
   .app-layout { --shell-header-height: 64px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-layout::before { animation: none; opacity: .42; transform: none; }
 }
 </style>

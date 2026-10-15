@@ -55,6 +55,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     define: {
+      'import.meta.env.VITE_DESKTOP_BUILD': JSON.stringify(desktopBuild),
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageMetadata.version),
       // .env.production contains the desktop control-plane fallback. Local
       // browser renderer tests use their own origin (/api), unless an isolated

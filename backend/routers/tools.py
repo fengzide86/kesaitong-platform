@@ -6,17 +6,18 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from fastapi.routing import APIRoute
 from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import get_current_admin, get_current_user
 from core.deprecation import log_deprecated_api_call
+from core.safe_target_route import SafeTargetRoute
 from database import get_db
 from domains.automation import launch_service
 from domains.catalog import normalize_tool_config as normalize_tool_config
 from domains.catalog import resolve_tool_runtime as resolve_tool_runtime
 from domains.catalog import service as catalog_service
+from schemas.target_profiles import TargetProfileListResponse, TargetProfileResponse, TargetProfileSubmission
 from schemas.tools import (
     ConfigJsonValue,
     ConfigUpdateResponse,
@@ -26,9 +27,10 @@ from schemas.tools import (
     LaunchGrantVerifyResponse,
     ToolConfigUpdateResponse,
 )
+from services import target_profile_service
 
 
-class LaunchVerifyRoute(APIRoute):
+class LaunchVerifyRoute(SafeTargetRoute):
     """Limit credential-safe validation responses to the two verify endpoints."""
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
@@ -68,6 +70,23 @@ class LaunchVerifyRoute(APIRoute):
 
 
 router = APIRouter(route_class=LaunchVerifyRoute)
+
+
+@router.get("/target-profiles", response_model=TargetProfileListResponse)
+async def list_target_profiles(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    return {"success": True, "message": "ok", "data": await target_profile_service.list_profiles(db, current_user)}
+
+
+@router.post("/target-profiles", response_model=TargetProfileResponse)
+async def submit_target_profile(
+    payload: TargetProfileSubmission,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    return {"success": True, "message": "入口已登记，审核前仅可识别，不可执行", "data": await target_profile_service.submit_profile(db, payload, current_user)}
 
 
 @router.get("/categories", response_model=list[ConfigJsonValue])
@@ -166,6 +185,9 @@ async def create_launch_token(
     client_batch_id: str | None = Query(None, max_length=100),
     client_item_id: str | None = Query(None, max_length=100),
     idempotency_key: str | None = Query(None, max_length=200),
+    target_profile_id: str | None = Query(None, min_length=1, max_length=64),
+    target_profile_revision: int | None = Query(None, ge=1),
+    client_runner_api_version: int = Query(1, ge=1, le=2),
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -181,6 +203,9 @@ async def create_launch_token(
         client_item_id=client_item_id,
         idempotency_key=idempotency_key,
         current_user=current_user,
+        target_profile_id=target_profile_id,
+        target_profile_revision=target_profile_revision,
+        client_runner_api_version=client_runner_api_version,
     )
 
 

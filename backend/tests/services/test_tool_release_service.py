@@ -88,3 +88,24 @@ def test_rollback_promotes_target_and_retires_current_stable():
     assert releases[0]["status"] == "published"
     assert releases[0]["rollout_percentage"] == 100
     assert releases[1]["status"] == "retired"
+
+
+def test_protocol_two_release_is_filtered_before_gray_selection():
+    releases = [
+        {"tool_id": "tool_a", "version": "1.0.0", "channel": "stable", "status": "published", "runner_api_version": 1},
+        {"tool_id": "tool_a", "version": "2.0.0", "channel": "canary", "status": "published", "rollout_percentage": 100, "runner_api_version": 2},
+    ]
+    assert resolve_release(releases, "tool_a", "device-1", 1)["version"] == "1.0.0"
+    assert resolve_release(releases, "tool_a", "device-1", 2)["version"] == "2.0.0"
+    assert resolve_release(releases[1:], "tool_a", "device-1", 1) is None
+
+
+def test_new_manifest_signs_required_capability_with_protocol_two():
+    private, public = key_pair()
+    release = create_release({"tool_id": "template", "version": "1.0.0", "script_key": "bjysoft-v2-template.1",
+                              "runner_api_version": 2, "required_capability": "template.create.v1"}, private)
+    assert release["manifest"]["schemaVersion"] == 2
+    assert release["manifest"]["requiredCapability"] == "template.create.v1"
+    assert verify_manifest_signature(release["manifest"], release["signature"], public)
+    release["manifest"]["requiredCapability"] = "orders.dispatch"
+    assert not verify_manifest_signature(release["manifest"], release["signature"], public)

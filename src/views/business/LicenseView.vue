@@ -1,6 +1,6 @@
 <template>
   <div class="license-page">
-    <PageHeader eyebrow="BUSINESS LICENSE" title="专业授权信息" description="核对当前套餐、本机设备与席位，以及真实任务的运行条件。">
+    <PageHeader eyebrow="专业授权" title="专业授权信息" description="核对当前套餐、本机设备与席位，以及真实任务的运行条件。">
       <template #actions><button class="refresh-license" type="button" :disabled="loading" @click="loadLicense"><RefreshCw :size="15" />刷新授权</button></template>
     </PageHeader>
     <p v-if="loading" role="status">正在核对套餐与本机授权…</p>
@@ -8,7 +8,7 @@
     <section v-if="user" class="license-card">
       <div class="license-mark"><BadgeCheck :size="26" /></div>
       <div><small>当前专业授权</small><h2>{{ user.plan_name || '专业批量版' }}</h2><p>有效期至 {{ formatDate(user.expires_at) }}</p></div>
-      <span class="business-badge">BUSINESS</span>
+      <span class="business-badge">专业工作台</span>
     </section>
     <section v-if="user && !loading && !loadError" class="limits-grid">
       <article><span>这台电脑</span><strong>{{ deviceAuthorized ? '已授权' : '未识别到本机授权' }}</strong><small>{{ devices.length }} / {{ user.max_devices }} 台设备</small></article>

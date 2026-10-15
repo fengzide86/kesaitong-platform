@@ -1,0 +1,18 @@
+.auth-entry-shell {
+  --auth-line: rgba(74, 113, 192, .2);
+  --auth-entry-background: linear-gradient(110deg, #f7f9fd 0%, #f4f7fc 38%, #fbfcfe 82%);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(400px, .96fr);
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #f6f8fb;
+  isolation: isolate;
+}
+
+.auth-entry-shell > * {
+  min-width: 0;
+}

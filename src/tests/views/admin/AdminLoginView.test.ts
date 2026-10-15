@@ -44,22 +44,29 @@ describe('AdminLoginView', () => {
       expect(wrapper.find('.login-card').exists()).toBe(true)
     })
 
-    it('应该显示标题"管理员登录"', () => {
+    it('应该显示标题"管理端登录"', () => {
       const wrapper = mountWithPinia(AdminLoginView)
-      expect(wrapper.find('h1').text()).toBe('管理员登录')
+      expect(wrapper.find('h1').text()).toBe('管理端登录')
     })
 
     it('应该显示课赛通管理端品牌且移除临时 AMZ 标志', () => {
       const wrapper = mountWithPinia(AdminLoginView)
       const brand = wrapper.find('.context-brand [data-testid="kst-brand-lockup"]')
-      expect(brand.attributes('aria-label')).toBe('课赛通 KST，运营控制中心')
+      expect(brand.attributes('aria-label')).toBe('课赛通 KST，团队工作台')
       expect(wrapper.find('.context-mark').exists()).toBe(false)
       expect(wrapper.text()).not.toContain('Automation Suite')
     })
 
+    it('应该显示管理端能力说明与权限提示', () => {
+      const wrapper = mountWithPinia(AdminLoginView)
+      expect(wrapper.find('.context-capabilities').exists()).toBe(true)
+      expect(wrapper.find('.context-security').text()).toContain('登录后按账号权限开放对应功能')
+      expect(wrapper.find('.brand-product-scene').exists()).toBe(false)
+    })
+
     it('应该显示副标题提示', () => {
       const wrapper = mountWithPinia(AdminLoginView)
-      expect(wrapper.text()).toContain('使用自己的后台账号登录，自动进入对应工作台')
+      expect(wrapper.text()).toContain('面向运营、客服与代理的协作入口。')
     })
 
     it('应该渲染密码输入框', () => {
@@ -73,7 +80,7 @@ describe('AdminLoginView', () => {
       const wrapper = mountWithPinia(AdminLoginView)
       const btn = wrapper.find('.btn-login')
       expect(btn.exists()).toBe(true)
-      expect(btn.text()).toContain('登录管理后台')
+      expect(btn.text()).toContain('登录并进入工作台')
     })
 
     it('应该渲染返回用户登录链接', () => {
@@ -253,7 +260,7 @@ describe('AdminLoginView', () => {
       const wrapper = mountWithPinia(AdminLoginView)
       const label = wrapper.find('label[for="adminPassword"]')
       expect(label.exists()).toBe(true)
-      expect(label.text()).toBe('管理员密码')
+      expect(label.text()).toBe('密码')
     })
 
     it('错误消息应该有 role="alert"', () => {

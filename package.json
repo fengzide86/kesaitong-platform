@@ -1,6 +1,6 @@
 {
   "name": "amazon-toolbox",
-  "version": "1.8.15",
+  "version": "1.8.16",
   "description": "课赛通 KST · 跨境电商赛训效率平台",
   "author": "课赛通 KST 团队",
   "private": true,
@@ -23,7 +23,7 @@
     "preview:marketing": "vite preview --config vite.marketing.config.ts --host 127.0.0.1 --port 4200",
     "marketing:audit": "node scripts/audit-marketing-build.mjs",
     "marketing:publish": "node scripts/publish-marketing.mjs",
-    "test:marketing-publish": "node --test scripts/tests/marketing-publish.test.mjs",
+    "test:marketing-publish": "node --test scripts/tests/marketing-publish.test.mjs scripts/tests/marketing-download.test.mjs",
     "test:e2e:marketing": "node scripts/with-toolbox-data-root.mjs -- playwright test --config=playwright.marketing.config.ts",
     "verify:marketing": "npm run test:marketing-publish && npm run build:marketing && npm run marketing:audit && node scripts/with-toolbox-data-root.mjs --set PLAYWRIGHT_MARKETING_PREBUILT=1 -- playwright test --config=playwright.marketing.config.ts",
     "web:audit": "node scripts/audit-web-build.mjs",
@@ -34,10 +34,10 @@
     "electron:dev": "node scripts/electron-dev.mjs",
     "backend:build": "cd backend && python -m PyInstaller --noconfirm --clean --distpath build\\dist --workpath build\\work toolbox-backend.spec && copy /Y build\\dist\\toolbox-backend.exe ..\\electron\\toolbox-backend.exe",
     "desktop:prepare-nsis": "node scripts/prepare-nsis-template.mjs",
-    "electron:build": "npm run desktop:prepare-nsis && npm run electron:compile && npm run build:desktop && node scripts/with-toolbox-data-root.mjs --set CSC_IDENTITY_AUTO_DISCOVERY=false -- electron-builder --win nsis",
+    "electron:build": "npm run release:policy && npm run desktop:prepare-nsis && npm run electron:compile && npm run build:desktop && node scripts/with-toolbox-data-root.mjs --set CSC_IDENTITY_AUTO_DISCOVERY=false -- electron-builder --win nsis && node scripts/report-update-delta.mjs",
     "release:validate": "tsx scripts/validate-release-env.ts",
     "release:policy": "node scripts/verify-release-configuration.mjs",
-    "electron:release": "npm run release:validate && npm run desktop:prepare-nsis && npm run electron:compile && npm run build:desktop && node scripts/with-toolbox-data-root.mjs --set CSC_IDENTITY_AUTO_DISCOVERY=false -- electron-builder --win nsis",
+    "electron:release": "npm run release:policy && npm run release:validate && npm run desktop:prepare-nsis && npm run electron:compile && npm run build:desktop && node scripts/with-toolbox-data-root.mjs --set CSC_IDENTITY_AUTO_DISCOVERY=false -- electron-builder --win nsis && node scripts/report-update-delta.mjs",
     "electron:preview": "npm run electron:compile && electron .",
     "test": "npm run electron:compile && npm run test:unit && npm run test:electron-workflow",
     "test:run": "npm test",
@@ -94,7 +94,7 @@
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "playwright-core": "^1.61.1",
-    "zod": "^4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",
@@ -111,7 +111,7 @@
     "autoprefixer": "^10.5.0",
     "electron": "42.11.12",
     "electron-builder": "26.15.3",
-    "electron-winstaller": "5.4.0",
+    "electron-winstaller": "5.4.4",
     "element-plus": "^2.14.2",
     "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
@@ -135,7 +135,7 @@
     "wrangler": "4.149.0"
   },
   "allowScripts": {
-    "electron-winstaller@5.4.0": true,
+    "electron-winstaller@5.4.4": true,
     "esbuild@0.28.2": true,
     "workerd@1.20261006.1": true
   },
@@ -148,6 +148,8 @@
     "appId": "com.amazon.toolbox",
     "productName": "课赛通 KST",
     "artifactName": "KST Setup ${version}.${ext}",
+    "electronLanguages": ["zh-CN", "zh-TW", "en-US"],
+    "beforePack": "scripts/verify-package-dependency-tree.cjs",
     "afterPack": "scripts/brand-after-pack.cjs",
     "directories": {
       "output": "release"
@@ -180,6 +182,7 @@
       "!**/*.ts",
       "!**/*.cts",
       "!dist-electron/electron/smoke/**",
+      "!node_modules/exceljs/dist{,/**}",
       "!**/test/**",
       "!**/tests/**",
       "!**/*.md"

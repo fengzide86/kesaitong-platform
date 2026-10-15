@@ -1,7 +1,7 @@
 <template>
   <section>
     <div class="intro">
-      <div><span class="eyebrow">FROM CUSTOMER TO DELIVERY</span><h1>每一笔交付，都有迹可循。</h1><p>跟进自己的客户，提交订单，确认授权已送达。</p></div><el-button
+      <div><span class="eyebrow">客户到交付</span><h1>每一笔交付，都有迹可循。</h1><p>跟进自己的客户，提交订单，确认授权已送达。</p></div><el-button
         :loading="loading"
         @click="load"
       >

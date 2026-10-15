@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader eyebrow="SYSTEM CONFIGURATION" title="系统设置" description="维护客服联系方式、套餐规则与后台运行配置。" />
+    <PageHeader eyebrow="系统设置" title="系统设置" description="维护客服联系方式、套餐规则与后台运行配置。" />
 
     <el-card class="settings-card" shadow="never">
       <template #header><div class="card-header"><span>基本设置</span></div></template>

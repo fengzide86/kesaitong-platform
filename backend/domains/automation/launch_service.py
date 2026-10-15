@@ -17,6 +17,7 @@ from core.response import ErrorCodes, error_response, success_response
 from domains.access import effective_license_status, lock_auth_code, resolve_plan_code, resolve_product_access
 from domains.catalog import normalize_tool_config, resolve_tool_runtime
 from models import AuthSeat, AutomationBatch, Device, LaunchToken, Plan, Setting, User
+from services import target_profile_service
 from services.tool_release_service import build_manifest, resolve_release_for_launch, sign_manifest
 
 logger = get_logger(__name__)
@@ -66,6 +67,9 @@ async def create_launch_grant(
     client_item_id: str | None,
     idempotency_key: str | None,
     current_user: dict[str, Any],
+    target_profile_id: str | None = None,
+    target_profile_revision: int | None = None,
+    client_runner_api_version: int = 1,
 ) -> dict[str, Any]:
     """Validate access and create or reuse one short-lived launch grant."""
     if settings.TOOL_EXECUTION_MODE != "live":
@@ -214,7 +218,9 @@ async def create_launch_grant(
         return await _error(db, "当前设备或席位已失效，请使用授权码重新登录", 403)
 
     script_key, target_url = resolve_tool_runtime(target_tool, platform_key)
-    release = await resolve_release_for_launch(db, tool_id, device_id or str(user_id))
+    release = await resolve_release_for_launch(db, tool_id, device_id or str(user_id), client_runner_api_version)
+    if release is None and await resolve_release_for_launch(db, tool_id, device_id or str(user_id), 2):
+        raise target_profile_service.fail("RUNNER_VERSION_MISMATCH", "当前工具版本需要更新客户端，不能回退旧工具执行")
     if release:
         manifest = release["manifest"]
         signature = release["signature"]
@@ -241,6 +247,35 @@ async def create_launch_grant(
         )
         signature = sign_manifest(manifest) if signature_required else None
         signing_key_id = settings.TOOL_SIGNING_KEY_ID if signature_required else None
+
+    signed_target: dict[str, Any] | None = None
+    capability = str(target_tool.get("target_capability") or manifest.get("requiredCapability") or "")
+    if manifest.get("requiredCapability") and target_tool.get("target_capability") and manifest["requiredCapability"] != target_tool["target_capability"]:
+        raise target_profile_service.fail("TARGET_CAPABILITY_MISMATCH", "工具配置与签名发行能力不一致")
+    requires_profile = bool(target_tool.get("requires_target_profile") or capability or runner_api_version >= 2)
+    if requires_profile:
+        if client_runner_api_version != 2 or runner_api_version != 2:
+            raise target_profile_service.fail("RUNNER_VERSION_MISMATCH", "该工具需要 Runner 协议 2，不支持旧客户端执行")
+        if not target_profile_id or not target_profile_revision or capability != target_profile_service.TEMPLATE_CAPABILITY:
+            raise target_profile_service.fail("TARGET_PROFILE_REQUIRED", "请选择已审核且支持当前工具的入口")
+        signed_target = await target_profile_service.approved_profile(db, target_profile_id, target_profile_revision, capability)
+        if signed_target["profile"]["productKey"] != platform_key:
+            raise target_profile_service.fail("TARGET_PRODUCT_MISMATCH", "入口所属产品与当前工具不同")
+        target_url = signed_target["profile"]["entryUrl"]
+        # Bind permission-affecting context into the exact signed manifest, not
+        # just renderer metadata. Existing release signatures remain unchanged.
+        manifest = {**manifest, "schemaVersion": 2, "targetProfileId": target_profile_id,
+                    "targetProfileRevision": target_profile_revision, "requiredCapability": capability}
+        try:
+            signature = sign_manifest(manifest)
+        except (ValueError, TypeError):
+            raise target_profile_service.fail("TARGET_SIGNING_UNAVAILABLE", "工具签名密钥不可用，未创建启动授权", 503) from None
+        signing_key_id = settings.TOOL_SIGNING_KEY_ID
+        signature_required = True
+    elif target_profile_id is not None or target_profile_revision is not None:
+        raise target_profile_service.fail("TARGET_PROFILE_NOT_SUPPORTED", "该旧工具没有目标入口能力，不能绑定新入口后执行")
+    if runner_api_version > client_runner_api_version:
+        raise target_profile_service.fail("RUNNER_VERSION_MISMATCH", "客户端 Runner 协议不支持当前工具")
 
     existing_launch: LaunchToken | None = None
     if execution_mode == "batch" and idempotency_key:
@@ -293,6 +328,11 @@ async def create_launch_grant(
                     idempotency_key=idempotency_key,
                 )
             )
+    if signed_target:
+        await target_profile_service.bind_launch(db, token, {
+            "profileId": target_profile_id, "revision": target_profile_revision, "capability": capability,
+            "scriptKey": script_key, "toolVersion": tool_version, "runnerApiVersion": 2,
+        })
     await _commit_or_rollback(db)
     logger.info("创建 launch token: user=%s, tool=%s, platform=%s", user_id, tool_id, platform_key)
 
@@ -321,6 +361,7 @@ async def create_launch_grant(
                 "execution_mode": execution_mode,
                 "client_batch_id": client_batch_id,
                 "client_item_id": client_item_id,
+                **({"target_profile": signed_target} if signed_target else {}),
             },
         }
     )
@@ -374,6 +415,17 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
         or tool.get("platform_key") != launch.platform_key
     ):
         return await _error(db, "工具当前不可执行", 403)
+    target_binding = await target_profile_service.read_launch_binding(db, token)
+    requires_profile = bool(tool.get("requires_target_profile") or tool.get("target_capability") or int(tool.get("runner_api_version", 1)) >= 2)
+    if requires_profile and not target_binding:
+        raise target_profile_service.fail("TARGET_PROFILE_REQUIRED", "启动授权缺少目标入口绑定，不能执行新工具")
+    if target_binding:
+        if target_binding["scriptKey"] != launch.script_key or target_binding["runnerApiVersion"] != 2:
+            raise target_profile_service.fail("TARGET_LAUNCH_CONFLICT", "启动授权与入口适配器不匹配")
+        current_capability = tool.get("target_capability")
+        if current_capability and current_capability != target_binding["capability"]:
+            raise target_profile_service.fail("TARGET_LAUNCH_CONFLICT", "工具能力已变化，请重新核验入口")
+        await target_profile_service.approved_profile(db, target_binding["profileId"], target_binding["revision"], target_binding["capability"])
     if auth_code.plan_id:
         plan = (await db.execute(select(Plan).where(Plan.id == auth_code.plan_id)
                                  .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
@@ -420,5 +472,7 @@ async def verify_launch_grant(db: AsyncSession, token: str) -> dict[str, Any]:
             "execution_mode": launch.execution_mode,
             "client_batch_id": launch.client_batch_id,
             "client_item_id": launch.client_item_id,
+            **({"target_profile_id": target_binding["profileId"], "target_profile_revision": target_binding["revision"],
+                "required_capability": target_binding["capability"]} if target_binding else {}),
         }
     )

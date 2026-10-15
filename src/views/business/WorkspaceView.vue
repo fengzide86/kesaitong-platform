@@ -1,7 +1,7 @@
 <template>
   <div data-testid="business-workspace-page" :class="['batch-workspace', { 'has-batch': store.isActive || store.snapshot.status === 'completed' }]">
     <PageHeader
-      eyebrow="BATCH AUTOMATION"
+      eyebrow="批量自动处理"
       title="批量自动化工作台"
       description="按业务任务找到已开放工具，导入自己的 Excel 并检查字段；真实批量执行由桌面端提供。"
     >
@@ -28,7 +28,7 @@
       </section>
 
       <section v-else-if="!customerTools.length" class="workspace-ready-empty">
-        <div class="ready-brand"><span>BUSINESS WORKSPACE</span><strong>专业工作台</strong></div>
+        <div class="ready-brand"><span>专业工作台</span><strong>专业工作台</strong></div>
         <div class="ready-symbol"><Boxes :size="30" /></div>
         <h1>当前还没有开放的批量工具</h1>
         <p>当前目录没有向你开放真实批量工具。内部测试工具不会替代真实功能；你可以先准备业务资料、检查授权或联系支持。</p>

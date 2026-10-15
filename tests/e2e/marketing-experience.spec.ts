@@ -151,6 +151,30 @@ test('closing an active demo cancels pending work and restores the tools page', 
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden')
 })
 
+for (const width of [1440, 390]) {
+  test(`failed demo opens its reason instead of hiding it above the form at ${width}px`, async ({ page }, info) => {
+    test.setTimeout(60_000)
+    await page.setViewportSize({ width, height: 900 })
+    await openTask(page, 'product')
+    await page.locator('[data-action="run"]').click()
+    await expect(page.locator('[name="parentSku"].v2-demo-target')).toHaveCount(1, { timeout: 30_000 })
+    await page.getByRole('button', { name: '暂停', exact: true }).click()
+    // An actual editable field is changed while paused; a timer must not turn
+    // this invalid form into a fake successful publish.
+    await page.locator('[name="title"]').fill('')
+    await page.locator('[data-action="open-demo-controller"]').click()
+    await page.getByLabel('演示速度', { exact: true }).selectOption('flow')
+    await page.getByRole('button', { name: '继续', exact: true }).click()
+    const reason = page.getByTestId('demo-failure-reason')
+    await expect(reason).toContainText('请检查标记的字段', { timeout: 15_000 })
+    await expect(reason).toBeInViewport({ ratio: 1 })
+    await expect(page.getByTestId('demo-outcome')).toHaveCount(0)
+    await expect(page.locator('[data-action="run"]')).toBeInViewport({ ratio: 1 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+    await page.screenshot({ path: info.outputPath(`failure-reason-${width}.png`) })
+  })
+}
+
 for (const width of [1440, 1280, 768, 390]) {
   test(`product save controls follow the active form panel at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 900 })

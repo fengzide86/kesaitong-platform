@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { hasPreparedArtifacts, reconcileBackendCheckpoint, validateReleaseState, verifyDesktopDownloadRange, verifyResumeHead, verifyRetiredWeb } from '../toolbox-cli.mjs'
+import { hasPreparedArtifacts, reconcileBackendCheckpoint, validateReleaseState, verifyDesktopDownloadRange, verifyResumeHead, verifyRetiredWeb, verifyTargetProfileApi } from '../toolbox-cli.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const releaseId = '1.8.14-0123456789ab'
@@ -102,6 +102,29 @@ test('retirement rejects missing cleanup worker or HTML masquerading as a worker
     const { request } = retiredRequest(route => route === '/sw.js' ? response : undefined)
     await assert.rejects(verifyRetiredWeb('https://control.example', request), /Service Worker/)
   }
+})
+
+test('target-profile readiness accepts an unauthenticated route but rejects a missing route', async () => {
+  const calls = []
+  const request = async (url, options) => {
+    calls.push({ url, options })
+    return new Response(null, { status: 401 })
+  }
+  assert.deepEqual(await verifyTargetProfileApi('https://control.example/', request), {
+    status: 'ready',
+    routes: ['/api/tools/target-profiles', '/api/tool-releases/target-profiles'],
+  })
+  assert.equal(calls.length, 2)
+  assert.ok(calls.every(call => call.options.method === 'GET' && call.options.redirect === 'manual'))
+
+  await assert.rejects(
+    verifyTargetProfileApi('https://control.example', async url => new Response('missing', { status: url.endsWith('/api/tools/target-profiles') ? 404 : 401 })),
+    /target-profile API readiness.*404/,
+  )
+  await assert.rejects(
+    verifyTargetProfileApi('https://control.example', async () => new Response(null, { status: 302, headers: { location: '/login' } })),
+    /target-profile API readiness.*302/,
+  )
 })
 
 test('installer download survives retirement with exact HTTP range semantics', async () => {

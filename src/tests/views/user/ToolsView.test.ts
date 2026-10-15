@@ -4,8 +4,11 @@ import { createPinia, setActivePinia } from 'pinia'
 import ToolsView from '@/views/user/ToolsView.vue'
 import { useAppStore } from '@/stores/app'
 import { usePlatformStore } from '@/stores/platform'
+import { targetObservation, targetPreview, targetProfile, targetReceipt } from '../../features/target-fixtures'
 
 const mocks = vi.hoisted(() => ({ getTools: vi.fn(), createToolLaunchGrant: vi.fn(), push: vi.fn(), showToast: vi.fn(), download: vi.fn(), route: { query: {} as Record<string, unknown> } }))
+const targetMocks = vi.hoisted(() => ({ list: vi.fn() }))
+vi.mock('@/utils/api/target-profiles', () => ({ listTargetProfiles: targetMocks.list, submitTargetProfile: vi.fn() }))
 vi.mock('@/utils/api', () => ({ getTools: mocks.getTools, createToolLaunchGrant: mocks.createToolLaunchGrant }))
 vi.mock('@/utils', () => ({ showToast: mocks.showToast }))
 vi.mock('@/runtime/desktop-download', () => ({ downloadDesktopInstaller: mocks.download }))
@@ -26,6 +29,7 @@ function mountView() {
 describe('ToolsView 真实任务目录', () => {
   beforeEach(() => {
     vi.clearAllMocks(); localStorage.removeItem('toolbox_current_platform'); mocks.route.query = {}; mocks.getTools.mockResolvedValue([])
+    targetMocks.list.mockResolvedValue([targetProfile()])
     mocks.download.mockResolvedValue('https://example.test/KST.exe')
     mocks.createToolLaunchGrant.mockResolvedValue({ grant: { token: 'test', target_url: 'https://example.test', script_key: 'listing' } })
     Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined })
@@ -33,9 +37,22 @@ describe('ToolsView 真实任务目录', () => {
   })
   it('八任务三组始终保留准备要求，空目录不伪造工具', async () => {
     const wrapper = mountView(); await flushPromises()
+    expect(wrapper.get('[data-testid="directory-intro"]').text()).toContain('按任务找工具')
     expect(wrapper.findAll('[data-task-id]').map(card => card.attributes('data-task-id'))).toEqual(['company', 'sourcing', 'product', 'shipping', 'marketing', 'fba', 'orders', 'pricing'])
     expect(wrapper.findAll('.task-group h3').map(item => item.text())).toEqual(['开局与选品', '商品与经营', '配送与履约'])
     expect(wrapper.text()).toContain('准备公司登记资料'); expect(wrapper.text()).toContain('当前平台尚无开放工具'); wrapper.unmount()
+  })
+  it('目录层级使用任务说明和消费者操作文案，不暴露内部适配器字段', async () => {
+    desktop(); mocks.getTools.mockResolvedValue([liveTool({ preparation_notes: ['先核对商品资料'] })])
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.text()).toContain('先把公司和商品方向理清。')
+    expect(wrapper.get('.task-group-count').text()).toBe('2 个任务')
+    const card = wrapper.get('[data-testid="tool-card-商品发布工具"]')
+    expect(card.text()).toContain('需要准备无需填写')
+    expect(card.text()).toContain('查看能力与准备')
+    expect(card.text()).toContain('查看准备项')
+    expect(card.text()).not.toMatch(/target_capability|runner_api_version|适配器/i)
+    wrapper.unmount()
   })
   it('empty catalog links directly to authorization and support without inventing a task', async () => {
     const wrapper = mountView(); await flushPromises()
@@ -159,6 +176,30 @@ describe('ToolsView 真实任务目录', () => {
     expect(mocks.createToolLaunchGrant).not.toHaveBeenCalled(); expect(useAppStore().toolVisible).toBe(false)
     await (wrapper.vm as unknown as { confirmRun: () => Promise<void> }).confirmRun(); await flushPromises()
     expect(useAppStore().currentTool.executionMode).toBe('live'); expect(mocks.createToolLaunchGrant).toHaveBeenCalledOnce(); wrapper.unmount()
+  })
+  it.each([true, undefined])('已发布目标工具从真实目录进入入口预检和结果闭环，保留搜索且不走旧 Runner (%s)', async requiresProfile => {
+    const targets = { open: vi.fn().mockResolvedValue(undefined), refresh: vi.fn(), detect: vi.fn().mockResolvedValue(targetObservation()), preflight: vi.fn().mockResolvedValue(targetPreview()), execute: vi.fn().mockResolvedValue(targetReceipt()), listReceipts: vi.fn().mockResolvedValue([]) }
+    Object.defineProperty(window, 'electronAPI', { configurable: true, value: { automation: {}, targets } })
+    mocks.getTools.mockResolvedValue([liveTool({ id: 'template-tool', name: '配送模板工具', target_capability: 'template.create.v1', requires_target_profile: requiresProfile, runner_api_version: 2 })])
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.find('.target-body').exists()).toBe(true)
+    await wrapper.get('[data-testid="tool-card-配送模板工具"]').trigger('click'); await flushPromises()
+    expect(wrapper.find('input[type="search"]').exists()).toBe(true); expect(wrapper.find('.target-body').exists()).toBe(true)
+    await wrapper.get('[data-testid="target-profile-select"]').setValue('school-a'); await wrapper.get('.target-entry-form').trigger('submit'); await flushPromises()
+    await wrapper.get('[data-testid="target-detect"]').trigger('click'); await flushPromises()
+    await wrapper.get('input[placeholder="输入本次要创建的模板名称"]').setValue('测试模板')
+    expect(wrapper.get('input[aria-label="固定运输时效"]').element).toHaveProperty('value', '14 - 28 天')
+    await wrapper.get('.template-form').trigger('submit'); await flushPromises()
+    expect(targets.preflight).toHaveBeenCalledWith(expect.objectContaining({ toolId: 'template-tool', profileId: 'school-a', profileRevision: 1 }))
+    await wrapper.get('.target-confirm input').setValue(true); await wrapper.get('.target-preview button').trigger('click'); await flushPromises()
+    expect(targets.execute).toHaveBeenCalledExactlyOnceWith({ planId: 'plan-1' }); expect(wrapper.get('.target-result').text()).toContain('已核验成功')
+    expect(mocks.createToolLaunchGrant).not.toHaveBeenCalled(); expect(useAppStore().toolVisible).toBe(false); wrapper.unmount()
+  })
+  it.each([{ runner_api_version: 2 }, { target_capability: 'template.create.v1', runner_api_version: 3 }])('目标能力或协议尚未接入时不会回退到旧工具对话框 (%j)', async state => {
+    desktop(); mocks.getTools.mockResolvedValue([liveTool(state)]); const wrapper = mountView(); await flushPromises()
+    await wrapper.get('[data-testid="tool-card-商品发布工具"]').trigger('click'); await flushPromises()
+    expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining('不能使用通用脚本执行'), 'info')
+    expect(mocks.createToolLaunchGrant).not.toHaveBeenCalled(); expect(wrapper.find('[data-testid="platform-account-confirmation"]').exists()).toBe(false); wrapper.unmount()
   })
   it('文件参数由本机选择，取消保留原值，更换和清除不展示完整路径', async () => {
     const select = vi.fn().mockResolvedValueOnce({ filePath: 'D:\\本机 资料\\商品表.csv', fileName: '商品表.csv' }).mockResolvedValueOnce(null).mockResolvedValueOnce({ filePath: 'D:\\本机 资料\\新表.csv', fileName: '新表.csv' })

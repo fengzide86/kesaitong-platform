@@ -1,7 +1,7 @@
 <template>
   <main class="rate-center" data-route-focus>
     <PageHeader
-      eyebrow="FREIGHT RATE CONTROL"
+      eyebrow="物流费率管理"
       title="物流费率中心"
       description="将 Excel 转换为可核验、可签名、可回退的标准费率包。页面适配器与费率版本互不影响。"
     >
@@ -92,7 +92,7 @@
 
       <aside class="release-column">
         <article class="panel release-list">
-          <header><div><span>VERSION HISTORY</span><h2>版本与回退</h2></div><History :size="20" /></header>
+          <header><div><span>版本历史</span><h2>版本与回退</h2></div><History :size="20" /></header>
           <div v-if="!releases.length" class="empty-release">尚未保存费率版本</div>
           <div v-for="release in releases" :key="`${release.pack_id}:${release.version}`" class="release-item">
             <div><span :class="['release-status', release.status]">{{ release.status }}</span><strong>{{ release.name }}</strong><small>{{ release.pack_id }} · {{ release.version }}</small></div>

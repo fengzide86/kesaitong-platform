@@ -1,6 +1,6 @@
 <template>
   <section class="account-panel">
-    <span class="eyebrow">YOUR ACCOUNT</span><h1>个人账号</h1>
+    <span class="eyebrow">账号信息</span><h1>个人账号</h1>
     <p>此账号用于客户跟进与授权交付，不具有平台管理权限。</p>
     <dl><dt>显示名称</dt><dd>{{ user?.display_name || '—' }}</dd><dt>登录账号</dt><dd>{{ user?.username || '—' }}</dd><dt>当前角色</dt><dd>代理运营</dd><dt>数据范围</dt><dd>归属本代理的客户、订单、授权及售后</dd></dl>
     <div class="actions">

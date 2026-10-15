@@ -25,6 +25,9 @@ const forbidden = entries.filter(entry => {
   if (/(?:^|\/)(?:tests?|docs)(?:\/|$)/i.test(normalized)) return true
   if (/(?:^|\/)smoke(?:\/|$)/i.test(normalized)) return true
   if (/^\/?scripts(?:\/|$)/i.test(normalized)) return true
+  if (/^\/?node_modules\/exceljs\/dist(?:\/|$)/i.test(normalized)) return true
+  if (/^\/?dist\/assets\/(?:js|css)\/LandingView-/i.test(normalized)) return true
+  if (/^\/?dist\/assets\/jpg\/(?:team-qualification|competition-award)/i.test(normalized)) return true
   return /(?:admin_)?token\.txt$/i.test(normalized)
 })
 
@@ -121,6 +124,18 @@ if (!indexSource.includes('startup-loading')) internalPolicyFailures.push('stati
 if (internalPolicyFailures.length) {
   throw new Error(`Missing internal desktop runtime policy: ${internalPolicyFailures.join(', ')}`)
 }
+
+const metadata = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+const packagedExecutable = path.join(packageRoot, `${metadata.build.productName}.exe`)
+const spreadsheetCheck = execFileSync(packagedExecutable, [path.join(root, 'scripts/verify-packaged-spreadsheet.cjs'), asarPath], {
+  cwd: packageRoot, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_PATH: '' },
+  windowsHide: true, timeout: 30_000, encoding: 'utf8',
+})
+if (!spreadsheetCheck.includes('packaged_spreadsheet_roundtrip=verified')) throw new Error('Packaged spreadsheet smoke returned no verified result')
+console.log(spreadsheetCheck.trim())
+const actualLocales = fs.readdirSync(path.join(packageRoot, 'locales')).filter(filename => filename.endsWith('.pak')).sort()
+if (JSON.stringify(actualLocales) !== JSON.stringify(['en-US.pak', 'zh-CN.pak', 'zh-TW.pak'])) throw new Error(`Unexpected packaged locales: ${actualLocales.join(', ')}`)
+console.log('package_locales=zh-CN,zh-TW,en-US')
 
 console.log(`package_entries=${entries.length}`)
 console.log('package_forbidden_entries=0')

@@ -1,9 +1,9 @@
 <template>
   <div v-loading="loading" class="business-access-page">
     <PageHeader
-      eyebrow="BUSINESS OPERATIONS"
-      title="专业工作台"
-      description="管理 B 端登录入口、专业套餐与内部验证授权"
+      eyebrow="工作台开放"
+      title="工作台开放"
+      description="管理专业工作台的登录入口、套餐与内部验证授权"
     >
       <template #actions>
         <router-link class="secondary-link" to="/admin/authcodes?product=business">查看 B 端授权码</router-link>
@@ -59,7 +59,7 @@
           <h3>{{ nextActionTitle }}</h3>
           <p>{{ nextActionDescription }}</p>
         </div>
-        <span class="validation-badge">INTERNAL VALIDATION</span>
+        <span class="validation-badge">内部验证</span>
       </header>
 
       <div class="action-grid">

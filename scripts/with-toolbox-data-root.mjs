@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { npmEnvironment, resolveNpm } from './npm-toolchain.mjs'
 
 const isWindows = process.platform === 'win32'
 const args = process.argv.slice(2)
@@ -50,6 +51,7 @@ for (let index = 0; index < optionArgs.length; index += 1) {
 }
 
 const [requestedCommand, ...requestedArgs] = commandArgs
+const npmToolchain = ['npm', 'npx'].includes(requestedCommand) ? resolveNpm({ projectRoot: process.cwd(), environment: env }) : null
 const localWindowsShim = path.resolve('node_modules', '.bin', `${requestedCommand}.cmd`)
 const resolvedCommand = isWindows && fs.existsSync(localWindowsShim)
   ? localWindowsShim
@@ -62,19 +64,19 @@ const quoteForCmd = value => {
   if (/\r|\n|\0/.test(text)) throw new Error('Command arguments cannot contain control characters')
   return /[\s&|<>^]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
-const command = isWindows && resolvedCommand.toLowerCase().endsWith('.cmd')
+const command = npmToolchain ? npmToolchain.nodeExecutable : isWindows && resolvedCommand.toLowerCase().endsWith('.cmd')
   ? process.env.ComSpec || 'cmd.exe'
   : resolvedCommand
-const spawnedArgs = command === resolvedCommand
+const spawnedArgs = npmToolchain ? [requestedCommand === 'npx' ? path.join(path.dirname(npmToolchain.cli), 'npx-cli.js') : npmToolchain.cli, ...requestedArgs] : command === resolvedCommand
   ? requestedArgs
   : ['/d', '/v:off', '/s', '/c', `call ${[resolvedCommand, ...requestedArgs].map(quoteForCmd).join(' ')}`]
 
 const child = spawn(command, spawnedArgs, {
   cwd: process.cwd(),
-  env,
+  env: npmToolchain ? npmEnvironment(npmToolchain, env) : env,
   stdio: 'inherit',
   windowsHide: true,
-  windowsVerbatimArguments: command !== resolvedCommand,
+  windowsVerbatimArguments: !npmToolchain && command !== resolvedCommand,
 })
 
 child.once('error', error => {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { api, request } from '@/utils/api'
+import { api, request, ApiError, type ApiUploadProgress } from '@/utils/api'
 
 const stagedFileSchema = z.object({
   name: z.string(),
@@ -35,12 +35,17 @@ export async function listUpdateReleases(): Promise<UpdateRelease[]> {
   return z.array(releaseSchema).parse(await api.get('/api/updates/releases', {}, { cache: false }))
 }
 
-export async function stageUpdateRelease(files: File[], version?: string): Promise<UpdateRelease> {
+export async function stageUpdateRelease(files: File[], version?: string, options: { signal?: AbortSignal; onProgress?: (progress: ApiUploadProgress) => void } = {}): Promise<UpdateRelease> {
   const form = new FormData()
   if (version) form.append('version', version)
   for (const file of files) form.append('files', file, file.name)
-  const response = await request('/api/updates/releases/stage', { method: 'POST', body: form })
-  return releaseSchema.parse(unwrapResponseData(response))
+  const response = await request('/api/updates/releases/stage', {
+    method: 'POST', body: form, timeoutMs: 30 * 60 * 1000, retry: 'none',
+    signal: options.signal, onUploadProgress: options.onProgress,
+  })
+  const result = releaseSchema.safeParse(unwrapResponseData(response))
+  if (!result.success) throw new ApiError('上传响应格式未确认，请先核对版本列表', { kind: 'parse' })
+  return result.data
 }
 
 export async function publishUpdateRelease(version: string): Promise<UpdateRelease> {

@@ -75,6 +75,11 @@ release-admin-ux/
 release-hardening/
 release-hardening-final/
 release-hardening-accepted/
+release-update-acceptance/
+release-update-accepted/
+release-update-accepted-ui/
+release-multi-target-candidate/
+release-target-live-candidate/
 test-results/
 playwright-report/
 .automation-profiles/

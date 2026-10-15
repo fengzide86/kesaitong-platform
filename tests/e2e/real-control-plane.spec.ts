@@ -31,7 +31,7 @@ async function authorize(page: Page, identity: 'consumer' | 'business' | 'busine
   await page.goto('/#/user/login')
   await page.getByLabel('授权码', { exact: true }).fill(credentials[identity])
   const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/verify' && r.request().method() === 'POST')
-  await page.getByRole('button', { name: '验证并登录' }).click()
+  await page.getByRole('button', { name: '登录并开始使用' }).click()
   expect((await response).status()).toBe(200)
   await expect(page).toHaveURL(identity === 'consumer' ? /#\/user\/tools/ : /#\/business\/overview/)
 }
@@ -289,9 +289,9 @@ test('B 端离线历史读取不伪称自动恢复，联网重读保留取消终
 
 test('后台真实登录、支出记账、创建续费及确认入账，汇总与数据库一致', async ({ page }) => {
   await page.goto('/#/admin/login')
-  await page.getByLabel('管理账号', { exact: true }).fill(credentials.staff_username)
-  await page.getByLabel('管理员密码', { exact: true }).fill(credentials.staff_password)
-  await page.getByRole('button', { name: '登录管理后台' }).click()
+  await page.getByLabel('后台账号', { exact: true }).fill(credentials.staff_username)
+  await page.getByLabel('密码', { exact: true }).fill(credentials.staff_password)
+  await page.getByRole('button', { name: '登录并进入工作台' }).click()
   await expect(page).not.toHaveURL(/admin\/login/)
   await page.goto('/#/admin/expenses')
   await expect(page.getByRole('heading', { name: '公账支出' })).toBeVisible()
@@ -350,10 +350,10 @@ test('代理真实交付闭环：建档、提交订单、负责人收款发放�
   const supportReply = '已提供首次安装指引，客户可使用授权在本机登录。'
   const loginStaff = async (target: Page, username: string, password: string, destination: RegExp): Promise<void> => {
     await target.goto('/#/admin/login')
-    await target.getByLabel('管理账号', { exact: true }).fill(username)
-    await target.getByLabel('管理员密码', { exact: true }).fill(password)
+    await target.getByLabel('后台账号', { exact: true }).fill(username)
+    await target.getByLabel('密码', { exact: true }).fill(password)
     const login = target.waitForResponse(response => new URL(response.url()).pathname === '/api/staff/auth/login' && response.request().method() === 'POST')
-    await target.getByRole('button', { name: '登录管理后台' }).click()
+    await target.getByRole('button', { name: '登录并进入工作台' }).click()
     expect((await login).ok()).toBe(true)
     await expect(target).toHaveURL(destination)
   }

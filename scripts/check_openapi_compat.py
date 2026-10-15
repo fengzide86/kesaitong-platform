@@ -41,6 +41,19 @@ ADMIN_OPTIONAL_FILTERS: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     ("/api/staff/accounts", "get"): {"q": {"type": "string", "maxLength": 100, "default": ""}},
 }
 
+# Protocol 2 is additive: legacy clients retain runner API 1 by default. These
+# three reviewed query additions may appear only on the two launch routes.
+TARGET_OPTIONAL_BINDINGS = {
+    "target_profile_id": nullable({"type": "string", "minLength": 1, "maxLength": 64}),
+    "target_profile_revision": nullable({"type": "integer", "minimum": 1}),
+    "client_runner_api_version": {"type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+}
+REVIEWED_OPTIONAL_PARAMETERS = {
+    **ADMIN_OPTIONAL_FILTERS,
+    ("/api/tools/{tool_id}/launch-grant", "post"): TARGET_OPTIONAL_BINDINGS,
+    ("/api/tools/{tool_id}/launch-token", "post"): TARGET_OPTIONAL_BINDINGS,
+}
+
 # Intentional hardening rejects formerly invalid values. These are not a
 # blanket schema exemption: defaults, nullability, properties and bounds must
 # match the reviewed shape, or the original untouched model, exactly.
@@ -77,6 +90,13 @@ EXTEND_OPERATION = ("/api/auth-codes/{code_id}/extend", "post")
 EXTEND_REQUEST_MODEL = {"type": "object", "additionalProperties": False, "required": ["days"], "properties": {
     "days": {"type": "integer", "minimum": 1.0, "maximum": 3650.0},
 }}
+TARGET_EXTENSION_OPERATIONS = {
+    ("/api/tools/target-profiles", "get"): (None, "TargetProfileListResponse"),
+    ("/api/tools/target-profiles", "post"): ("TargetProfileSubmission", "TargetProfileResponse"),
+    ("/api/tool-releases/target-profiles", "get"): (None, "TargetProfileListResponse"),
+    ("/api/tool-releases/target-profiles/{profile_id}/review", "post"): ("TargetProfileReview", "TargetProfileResponse"),
+    ("/api/executions/reconcile", "post"): ("ExecutionReconcileRequest", "ExecutionReportResponse"),
+}
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -152,7 +172,7 @@ def same_contract(before: dict[str, Any] | None, after: dict[str, Any] | None) -
 
 
 def is_compatible_admin_context_filters(key: tuple[str, str], before: dict[str, Any], after: dict[str, Any]) -> bool:
-    reviewed = ADMIN_OPTIONAL_FILTERS.get(key)
+    reviewed = REVIEWED_OPTIONAL_PARAMETERS.get(key)
     if reviewed is None:
         return False
     original = parameter_contracts(before)
@@ -205,6 +225,19 @@ def is_compatible_launch_transport(
 
 
 def is_reviewed_extension_operation(key: tuple[str, str], operation: dict[str, Any], schema: dict[str, Any]) -> bool:
+    if key in TARGET_EXTENSION_OPERATIONS:
+        request_model, response_model = TARGET_EXTENSION_OPERATIONS[key]
+        expected_body = None if request_model is None else {"required": True, "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{request_model}"}}}}
+        expected_parameters = [] if "{profile_id}" not in key[0] else [("profile_id", "path", True)]
+        expected_responses = {"200": {"content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{response_model}"}}}}}
+        if request_model:
+            expected_responses["422"] = {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}
+        models = schema.get("components", {}).get("schemas", {})
+        strict_request = request_model is None or models.get(request_model, {}).get("additionalProperties") is False
+        return (parameter_signature(operation) == expected_parameters
+                and same_contract(schema_without_documentation(operation.get("requestBody")), expected_body)
+                and same_contract({code: schema_without_documentation(value) for code, value in operation.get("responses", {}).items()}, expected_responses)
+                and operation.get("security") == [{"HTTPBearer": []}] and strict_request)
     if key != EXTEND_OPERATION:
         return False
     expected_parameters = [{"name": "code_id", "in": "path", "required": True, "schema": {"type": "integer"}}]
@@ -242,7 +275,7 @@ def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[str]:
         launch_migration = is_compatible_launch_transport(key, before, after, current)
         parameter_compatible = (
             is_compatible_admin_context_filters(key, before, after)
-            if key in ADMIN_OPTIONAL_FILTERS
+            if key in REVIEWED_OPTIONAL_PARAMETERS
             else parameter_signature(before) == parameter_signature(after)
         )
         if not parameter_compatible and not launch_migration:

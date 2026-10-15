@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execFileSync } from 'node:child_process'
+import { assertActiveToolchain } from './npm-toolchain.mjs'
 
 const root = process.cwd()
 const read = filename => fs.readFileSync(path.join(root, filename), 'utf8')
@@ -51,6 +52,9 @@ const requirePersistentExcludes = filename => {
 }
 
 const metadata = JSON.parse(read('package.json'))
+if (metadata.build?.beforePack !== 'scripts/verify-package-dependency-tree.cjs') throw new Error('Desktop packaging must verify the physical npm runtime dependency tree before packaging')
+const activeToolchain = assertActiveToolchain(root)
+console.log(`release_toolchain=${JSON.stringify({ node: activeToolchain.nodeVersion, npm: activeToolchain.npmVersion, nodeExecutable: activeToolchain.nodeExecutable, npmCli: activeToolchain.cli })}`)
 const nodeVersion = read('.node-version').trim()
 if (!/^22\.\d+\.\d+$/.test(nodeVersion)) throw new Error('.node-version must pin a supported project Node 22 patch')
 const workflow = read('.github/workflows/test.yml')
@@ -66,7 +70,7 @@ if (metadata.packageManager !== 'npm@12.2.0') throw new Error('Dependency resolu
 requireText('scripts/toolbox-cli.mjs', ["'Dependency security'"])
 requireText('backend/Dockerfile', ['FROM python:3.12-slim-bookworm'])
 requireText('ops/deploy/deploy-backend.sh', ['python3.12 -m venv'])
-requireText('.github/workflows/test.yml', ["NSIS_BASELINE_VERSION: '1.8.14'", 'pip-audit==2.10.1'])
+requireText('.github/workflows/test.yml', ["NSIS_BASELINE_VERSION: '1.8.15'", 'pip-audit==2.10.1', 'release/update-delta-report.json'])
 if (!metadata.scripts?.['verify:release']) throw new Error('package.json must expose verify:release')
 if (metadata.scripts?.['release:mariadb-gate'] !== 'node scripts/verify-release-mariadb-gate.mjs') {
   throw new Error('package.json must expose the guarded release:mariadb-gate')
@@ -311,10 +315,15 @@ rejectText('ops/systemd/toolbox-backend.service', ['ExecStart=/opt/amazon-toolbo
 // regressions as well as static invariants, including migrated compatibility
 // roots and directory/symbolic-link escapes. No deployment script is executed.
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/nsis-artifact-location.test.mjs')], { cwd: root, stdio: 'inherit' })
-execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
-  cwd: root,
-  stdio: 'inherit',
-})
+execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/npm-toolchain.test.mjs'), path.join(root, 'scripts/tests/update-delta-report.test.mjs'), path.join(root, 'scripts/tests/package-dependency-preflight.test.mjs')], { cwd: root, stdio: 'inherit' })
+if (process.platform !== 'win32') {
+  execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/deployment-paths.test.mjs')], {
+    cwd: root,
+    stdio: 'inherit',
+  })
+} else {
+  console.log('deployment_path_tests=skipped platform=win32 linux-only shell regression')
+}
 execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/release-retirement.test.mjs')], {
   cwd: root,
   stdio: 'inherit',
@@ -323,9 +332,13 @@ execFileSync(process.execPath, ['--test', path.join(root, 'scripts/tests/retirem
   cwd: root,
   stdio: 'inherit',
 })
-execFileSync(process.execPath, [path.join(root, 'scripts/run-python.mjs'), 'scripts/tests/test_web_retirement.py', '-v'], {
-  cwd: root,
-  stdio: 'inherit',
-})
+if (process.platform !== 'win32') {
+  execFileSync(process.execPath, [path.join(root, 'scripts/run-python.mjs'), 'scripts/tests/test_web_retirement.py', '-v'], {
+    cwd: root,
+    stdio: 'inherit',
+  })
+} else {
+  console.log('web_retirement_tests=skipped platform=win32 symlink semantics are Linux-only')
+}
 
 process.stdout.write('release_configuration=verified\n')

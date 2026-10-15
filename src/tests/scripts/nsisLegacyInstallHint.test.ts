@@ -38,7 +38,7 @@ describe('strict historical installer identity and location hint', () => {
     expect(() => readInstallerIdentity({ build: { appId: NSIS_APP_ID, nsis: { guid: NSIS_APP_GUID } } })).toThrow('custom NSIS GUID')
   })
 
-  it.each(['1.8.5', '1.8.7', '1.8.8', '1.8.14'])('checks actual installed ASAR package version %s', async version => {
+  it.each(['1.8.5', '1.8.7', '1.8.8', '1.8.14', '1.8.15'])('checks actual installed ASAR package version %s', async version => {
     mkdirSync(scratchParent, { recursive: true })
     const directory = mkdtempSync(join(scratchParent, 'kst-identity-test-'))
     scratchDirectories.push(directory)
@@ -108,14 +108,15 @@ describe('strict historical installer identity and location hint', () => {
     expect(script).toContain('registryAndShortcutsRemoved = $true')
   })
 
-  it('pins current production 1.8.14 without weakening old upgrade fixtures', () => {
+  it('pins current production 1.8.15 without weakening old upgrade fixtures', () => {
     const workflow = readFileSync(resolve('.github/workflows/test.yml'), 'utf8')
     expect(script).toContain("'1.8.14' = 'nsis-upgrade-fixture-1.8.14.json'")
-    const upgrade = workflow.split(/\r?\n/).find(line => line.includes("-PreviousVersion '1.8.14'"))
+    expect(script).toContain("'1.8.15' = 'nsis-upgrade-fixture-1.8.15.json'")
+    const upgrade = workflow.split(/\r?\n/).find(line => line.includes("-PreviousVersion '1.8.15'"))
     expect(upgrade).toContain('-DiagnosticAttempts 1')
     expect(upgrade).not.toContain('-LegacyInstallLocationHint')
-    const fixture = JSON.parse(readFileSync(resolve('scripts/nsis-upgrade-fixture-1.8.14.json'), 'utf8'))
-    expect(fixture.version).toBe('1.8.14')
+    const fixture = JSON.parse(readFileSync(resolve('scripts/nsis-upgrade-fixture-1.8.15.json'), 'utf8'))
+    expect(fixture.version).toBe('1.8.15')
     expect(fixture.sha512).toMatch(/^[a-f0-9]{128}$/)
   })
 

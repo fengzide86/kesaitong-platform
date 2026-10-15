@@ -139,8 +139,9 @@ export interface components {
     "DeviceUnbindResponse": { "message": string; "success": boolean }
     "EntitlementsResponse": { "batch_execution": boolean; "desktop_notification": boolean; "max_batch_rows": number; "max_open_sessions": number; "multi_account_workspace": boolean; "usage_metering": boolean; [key: string]: unknown }
     "ExecutionPageResponse": { "data": Array<components['schemas']["ExecutionResponse"]>; "page": number; "page_size": number; "total": number }
+    "ExecutionReconcileRequest": { "adapter_version"?: string | null; "completed_steps"?: number; "object_ref": string; "page_fingerprint"?: string | null; "run_id": string; "status": "succeeded"; "verification": "same-object-list-and-details" }
     "ExecutionReportResponse": { "data"?: components['schemas']["ExecutionReportResult"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
-    "ExecutionReportResult": { "accepted": boolean; "duplicate": boolean; "execution_id"?: number | null }
+    "ExecutionReportResult": { "accepted": boolean; "duplicate": boolean; "execution_id"?: number | null; "reconciled"?: boolean }
     "ExecutionResponse": { "created_at"?: string | null; "detail"?: string | null; "error_code"?: string | null; "id": number; "record_kind"?: "live"; "status": string; "tool_id"?: string | null; "tool_name"?: string | null; "verification": string }
     "ExpenseAttachmentResponse": { "created_at"?: string | null; "expense_id": number; "id": number; "mime_type": string; "original_name": string; "sha256": string; "size_bytes": number }
     "ExpenseCategoryCreate": { "name": string; "sort_order"?: number }
@@ -197,10 +198,10 @@ export interface components {
     "KnowledgeStatsResponse": { "active": number; "categories": number; "total": number; "vector_store": components['schemas']["KnowledgeVectorStoreResponse"] }
     "KnowledgeUpdateRequest": { "capability_key"?: string | null; "category"?: string | null; "content"?: string | null; "keywords"?: Array<string> | null; "platform_key"?: string | null; "priority"?: string | null; "status"?: string | null; "title"?: string | null }
     "KnowledgeVectorStoreResponse": { "enabled": boolean; "reason": string }
-    "LaunchDataResponse": { "category": string; "client_batch_id": string | null; "client_item_id": string | null; "description": string; "execution_mode": string; "expires_at": string; "platform_key": string; "runner_api_version": number; "script_key": string; "signature_required": boolean; "signing_key_id": string | null; "target_url": string; "token": string; "tool_id": string; "tool_manifest": components['schemas']["ToolManifestResponse"]; "tool_module": string | null; "tool_name": string | null; "tool_signature": string | null; "tool_version": string }
+    "LaunchDataResponse": { "category": string; "client_batch_id": string | null; "client_item_id": string | null; "description": string; "execution_mode": string; "expires_at": string; "platform_key": string; "runner_api_version": number; "script_key": string; "signature_required": boolean; "signing_key_id": string | null; "target_profile"?: components['schemas']["SignedTargetProfile"] | null; "target_url": string; "token": string; "tool_id": string; "tool_manifest": components['schemas']["ToolManifestResponse"]; "tool_module": string | null; "tool_name": string | null; "tool_signature": string | null; "tool_version": string }
     "LaunchGrantDataResponse": { "expires_at": string; "expires_in": number; "launch_data": components['schemas']["LaunchDataResponse"]; "token": string }
     "LaunchGrantSuccessResponse": { "data": components['schemas']["LaunchGrantDataResponse"]; "message": string; "success": true }
-    "LaunchGrantVerifyDataResponse": { "auth_code_id": number; "client_batch_id": string | null; "client_item_id": string | null; "device_id": string; "execution_mode": string; "platform_key": string; "script_key": string; "tool_id": string; "user_id": number; "valid": true }
+    "LaunchGrantVerifyDataResponse": { "auth_code_id": number; "client_batch_id": string | null; "client_item_id": string | null; "device_id": string; "execution_mode": string; "platform_key": string; "required_capability"?: string | null; "script_key": string; "target_profile_id"?: string | null; "target_profile_revision"?: number | null; "tool_id": string; "user_id": number; "valid": true }
     "LaunchGrantVerifyRequest": { "token": string }
     "LaunchGrantVerifySuccessResponse": { "data": components['schemas']["LaunchGrantVerifyDataResponse"]; "message": string; "success": true }
     "LegacyAdminStatusData": { "role": "admin" }
@@ -246,6 +247,7 @@ export interface components {
     "SettingResponse": { "created_at"?: string | null; "description"?: string | null; "id": number; "key": string; "value"?: string | null }
     "SettingUpdate": { "description"?: string | null; "key": string; "value": string }
     "SettingUpdateResponse": { "success": boolean }
+    "SignedTargetProfile": { "profile": components['schemas']["TargetProfile"]; "signature": string | null; "signingKeyId": string | null }
     "StaffAccountCreate": { "agency_id"?: number | null; "display_name": string; "password": string; "role": "super_admin" | "operator" | "support" | "agent"; "username": string }
     "StaffAccountEnvelope": { "data"?: components['schemas']["StaffAccountResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "StaffAccountListEnvelope": { "data"?: Array<components['schemas']["StaffAccountResponse"]> | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
@@ -259,8 +261,17 @@ export interface components {
     "StaffPasswordReset": { "new_password": string }
     "StaffSessionEnvelope": { "data"?: components['schemas']["StaffSessionResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "StaffSessionResponse": { "agency_id"?: number | null; "auth_code_id"?: null; "capabilities"?: Array<string>; "device_id"?: null; "display_name": string; "force_password_reset": boolean; "name": string; "role": "super_admin" | "operator" | "support" | "agent"; "staff_id": number; "status": "active" | "disabled"; "token": string; "token_version": number; "user_id": number; "username": string }
+    "TargetEvidence": { "edition"?: "v2" | "v3" | "unknown"; "markers"?: Array<"amazon-v2" | "amazon-v3" | "seller-shipping-template" | "course-index">; "pageFingerprint"?: string | null; "pageFingerprints"?: components['schemas']["TargetPageFingerprints"] | null; "source"?: "client-observed" | "admin-verified" }
+    "TargetExecutionScope": { "courseRef": string; "evidenceRef": string; "scenario"?: "training"; "source"?: "admin-verified"; "stage"?: "not_applicable" }
+    "TargetPageFingerprints": { "courseMap"?: string | null; "templateEditor"?: string | null; "templateList"?: string | null }
+    "TargetProfile": { "adapterVersion": string | null; "allowedRoutes": Array<components['schemas']["TargetRoute"]>; "capabilities": Array<string>; "edition": "v2" | "v3" | "unknown"; "entryUrl": string; "evidence": components['schemas']["TargetEvidence"]; "executionScopes"?: Array<components['schemas']["TargetExecutionScope"]>; "id": string; "name": string; "productKey": "amazon"; "providerId": "bjysoft"; "reviewStatus": "pending" | "approved" | "rejected" | "disabled"; "revision": number; "schemaVersion"?: 1 }
+    "TargetProfileListResponse": { "data": Array<components['schemas']["SignedTargetProfile"]>; "message": string; "success": true }
+    "TargetProfileResponse": { "data": components['schemas']["SignedTargetProfile"]; "message": string; "success": true }
+    "TargetProfileReview": { "adapterVersion"?: "bjysoft-v2-template.1" | null; "allowedRoutes"?: Array<components['schemas']["TargetRoute"]> | null; "capabilities"?: Array<"template.create.v1"> | null; "edition"?: "v2" | "v3" | "unknown" | null; "evidence"?: components['schemas']["TargetEvidence"] | null; "executionScopes"?: Array<components['schemas']["TargetExecutionScope"]> | null; "reviewStatus": "approved" | "rejected" | "disabled"; "revision": number }
+    "TargetProfileSubmission": { "edition"?: "v2" | "v3" | "unknown"; "entryUrl": string; "evidence"?: components['schemas']["TargetEvidence"]; "name": string; "productKey"?: "amazon"; "providerId"?: "bjysoft" }
+    "TargetRoute": { "origin": string; "pathPrefix": string; "role": "entry" | "login" | "business" }
     "ToolConfigUpdateResponse": { "data": Array<{ [key: string]: components['schemas']["JsonValue"] }>; "success": true }
-    "ToolManifestResponse": { "artifactSha256": string | null; "artifactUrl": string | null; "runnerApiVersion": number; "schemaVersion": number; "scriptKey": string; "toolId": string; "version": string }
+    "ToolManifestResponse": { "artifactSha256": string | null; "artifactUrl": string | null; "requiredCapability"?: string | null; "runnerApiVersion": number; "schemaVersion": number; "scriptKey": string; "targetProfileId"?: string | null; "targetProfileRevision"?: number | null; "toolId": string; "version": string }
     "ToolOperationErrorResponse": { "detail"?: components['schemas']["JsonValue"] | null; "error_code": number; "message": string; "success": false }
     "ToolReleaseEnvelope": { "data": components['schemas']["ToolReleaseResponse"]; "message": string; "success": true }
     "ToolReleaseListEnvelope": { "data": Array<components['schemas']["ToolReleaseResponse"]>; "message": string; "success": true }
@@ -753,6 +764,11 @@ export interface operations {
     requestBody: never
     responses: { "200": components['schemas']["ExecutionPageResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
+  "reconcile_execution_api_executions_reconcile_post": {
+    parameters: never
+    requestBody: components['schemas']["ExecutionReconcileRequest"]
+    responses: { "200": components['schemas']["ExecutionReportResponse"]; "422": components['schemas']["HTTPValidationError"] }
+  }
   "report_execution_api_executions_report_post": {
     parameters: never
     requestBody: components['schemas']["RunnerExecutionReport"]
@@ -1223,6 +1239,16 @@ export interface operations {
     requestBody: {  }
     responses: { "200": components['schemas']["ToolReleaseEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
+  "list_registered_target_profiles_api_tool_releases_target_profiles_get": {
+    parameters: never
+    requestBody: never
+    responses: { "200": components['schemas']["TargetProfileListResponse"] }
+  }
+  "review_registered_target_profile_api_tool_releases_target_profiles__profile_id__review_post": {
+    parameters: { "path": { "profile_id": string } }
+    requestBody: components['schemas']["TargetProfileReview"]
+    responses: { "200": components['schemas']["TargetProfileResponse"]; "422": components['schemas']["HTTPValidationError"] }
+  }
   "rollback_tool_release_api_tool_releases__tool_id__rollback_post": {
     parameters: { "path": { "tool_id": string } }
     requestBody: {  }
@@ -1278,13 +1304,23 @@ export interface operations {
     requestBody: Array<components['schemas']["JsonValue"]>
     responses: { "200": components['schemas']["ConfigUpdateResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
+  "list_target_profiles_api_tools_target_profiles_get": {
+    parameters: never
+    requestBody: never
+    responses: { "200": components['schemas']["TargetProfileListResponse"] }
+  }
+  "submit_target_profile_api_tools_target_profiles_post": {
+    parameters: never
+    requestBody: components['schemas']["TargetProfileSubmission"]
+    responses: { "200": components['schemas']["TargetProfileResponse"]; "422": components['schemas']["HTTPValidationError"] }
+  }
   "create_launch_token_api_tools__tool_id__launch_grant_post": {
-    parameters: { "path": { "tool_id": string }; "query": { "platform_key": string; "execution_mode"?: string; "client_batch_id"?: string | null; "client_item_id"?: string | null; "idempotency_key"?: string | null } }
+    parameters: { "path": { "tool_id": string }; "query": { "platform_key": string; "execution_mode"?: string; "client_batch_id"?: string | null; "client_item_id"?: string | null; "idempotency_key"?: string | null; "target_profile_id"?: string | null; "target_profile_revision"?: number | null; "client_runner_api_version"?: number } }
     requestBody: never
     responses: { "200": components['schemas']["LaunchGrantSuccessResponse"] | components['schemas']["ToolOperationErrorResponse"]; "409": components['schemas']["schemas__tools__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "create_launch_token_api_tools__tool_id__launch_token_post": {
-    parameters: { "path": { "tool_id": string }; "query": { "platform_key": string; "execution_mode"?: string; "client_batch_id"?: string | null; "client_item_id"?: string | null; "idempotency_key"?: string | null } }
+    parameters: { "path": { "tool_id": string }; "query": { "platform_key": string; "execution_mode"?: string; "client_batch_id"?: string | null; "client_item_id"?: string | null; "idempotency_key"?: string | null; "target_profile_id"?: string | null; "target_profile_revision"?: number | null; "client_runner_api_version"?: number } }
     requestBody: never
     responses: { "200": components['schemas']["LaunchGrantSuccessResponse"] | components['schemas']["ToolOperationErrorResponse"]; "409": components['schemas']["schemas__tools__FeatureDisabledResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1579,6 +1615,9 @@ export interface paths {
   "/api/executions": {
     get: operations["list_executions_api_executions_get"]
   }
+  "/api/executions/reconcile": {
+    post: operations["reconcile_execution_api_executions_reconcile_post"]
+  }
   "/api/executions/report": {
     post: operations["report_execution_api_executions_report_post"]
   }
@@ -1813,6 +1852,12 @@ export interface paths {
     get: operations["list_tool_releases_api_tool_releases_get"]
     post: operations["add_tool_release_api_tool_releases_post"]
   }
+  "/api/tool-releases/target-profiles": {
+    get: operations["list_registered_target_profiles_api_tool_releases_target_profiles_get"]
+  }
+  "/api/tool-releases/target-profiles/{profile_id}/review": {
+    post: operations["review_registered_target_profile_api_tool_releases_target_profiles__profile_id__review_post"]
+  }
   "/api/tool-releases/{tool_id}/rollback": {
     post: operations["rollback_tool_release_api_tool_releases__tool_id__rollback_post"]
   }
@@ -1839,6 +1884,10 @@ export interface paths {
   "/api/tools/platforms": {
     get: operations["get_platforms_api_tools_platforms_get"]
     put: operations["update_platforms_api_tools_platforms_put"]
+  }
+  "/api/tools/target-profiles": {
+    get: operations["list_target_profiles_api_tools_target_profiles_get"]
+    post: operations["submit_target_profile_api_tools_target_profiles_post"]
   }
   "/api/tools/{tool_id}/launch-grant": {
     post: operations["create_launch_token_api_tools__tool_id__launch_grant_post"]

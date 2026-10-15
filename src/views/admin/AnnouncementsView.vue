@@ -37,7 +37,7 @@
     </AppSurface>
 
     <el-drawer v-model="editorOpen" size="min(680px, 94vw)" :close-on-click-modal="false" destroy-on-close>
-      <template #header><div class="drawer-heading"><p>MESSAGE COMPOSER</p><h2>{{ form.id ? '编辑公告' : '新建公告' }}</h2></div></template>
+      <template #header><div class="drawer-heading"><p>公告编辑</p><h2>{{ form.id ? '编辑公告' : '新建公告' }}</h2></div></template>
       <el-form label-position="top" class="composer-form">
         <div class="form-grid form-grid--2">
           <el-form-item label="发布人群"><el-segmented v-model="form.audience" :options="audienceOptions" /></el-form-item>

@@ -25,7 +25,7 @@
     </aside>
     <div class="agent-main">
       <header>
-        <div><span class="eyebrow">PARTNER WORKSPACE</span><strong>{{ route.meta.title }}</strong></div><router-link to="/agent/account">
+        <div><span class="eyebrow">代理工作台</span><strong>{{ route.meta.title }}</strong></div><router-link to="/agent/account">
           {{ displayName }}<span>代理运营</span>
         </router-link>
       </header>

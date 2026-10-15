@@ -114,7 +114,7 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
         await page.getByLabel('授权码', { exact: true }).fill(credentials[role])
         const [authenticated] = await Promise.all([
           page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/verify' && response.request().method() === 'POST'),
-          page.getByRole('button', { name: '验证并登录' }).click({ force: true }),
+          page.getByRole('button', { name: '登录并开始使用' }).click({ force: true }),
         ])
         expect(authenticated.status()).toBe(200)
         await expect(page).toHaveURL(role === 'consumer' ? /#\/user\/tools$/ : /#\/business\/overview$/)
@@ -158,16 +158,25 @@ for (const role of ['consumer', 'business', 'admin', 'agent']) {
           evidence.screenshots.push(await capture(application, page, 'business-records'))
         }
       } else {
-        await page.getByRole('link', { name: '管理员登录', exact: true }).click({ force: true })
+        await page.getByRole('link', { name: '管理端登录', exact: true }).click({ force: true })
         await expect(page).toHaveURL(/#\/admin\/login$/)
-        await page.getByLabel('管理账号', { exact: true }).fill(credentials[role === 'admin' ? 'staff_username' : 'agent_a_username'])
-        await page.getByLabel('管理员密码', { exact: true }).fill(credentials[role === 'admin' ? 'staff_password' : 'agent_a_password'])
-        await page.getByRole('button', { name: '登录管理后台' }).click({ force: true })
+        await page.getByLabel('后台账号', { exact: true }).fill(credentials[role === 'admin' ? 'staff_username' : 'agent_a_username'])
+        await page.getByLabel('密码', { exact: true }).fill(credentials[role === 'admin' ? 'staff_password' : 'agent_a_password'])
+        await page.getByRole('button', { name: '登录并进入工作台' }).click({ force: true })
         if (role === 'admin') {
           await expect(page).toHaveURL(/#\/admin\/dashboard$/)
           await expect(page.getByRole('region', { name: '待处理事项摘要' })).toBeVisible()
           await expect(page.getByRole('complementary', { name: '管理员导航' })).toBeVisible()
           evidence.screenshots.push(await capture(application, page, 'admin-dashboard'))
+          // The dashboard entry is the intended short path into the new
+          // platform-entry review page. Exercise the actual link and the
+          // default-open, read-only review state instead of only asserting
+          // that the dashboard rendered.
+          await page.getByRole('link', { name: '打开审核页', exact: true }).click({ force: true })
+          await expect(page).toHaveURL(/#\/admin\/target-reviews$/)
+          await expect(page.getByRole('heading', { name: '平台入口审核', exact: true })).toBeVisible()
+          await expect(page.getByText('尚无接入申请。用户在 Windows 工具箱检测新入口后可提交。', { exact: true })).toBeVisible()
+          evidence.screenshots.push(await capture(application, page, 'admin-target-reviews'))
         } else {
           await expect(page).toHaveURL(/#\/agent\/overview$/)
           await expect(page.getByRole('navigation', { name: '代理导航' })).toBeVisible()
@@ -236,7 +245,7 @@ test('packaged local recovery survives restart and manual review stays separate 
     // A restored session is not supposed to display the login form again.
     if (new URL(page.url()).hash === '#/user/login') {
       await page.getByLabel('授权码', { exact: true }).fill(credentials.consumer)
-      await page.getByRole('button', { name: '验证并登录' }).click({ force: true })
+        await page.getByRole('button', { name: '登录并开始使用' }).click({ force: true })
     }
     await expect(page).toHaveURL(/#\/user\/tools$/)
   }
@@ -310,7 +319,7 @@ test('packaged UI preserves brand and searchable tool directory at supported win
     expect(page.url()).toMatch(/^app:\/\/toolbox\/index\.html/)
     expect(await page.evaluate(() => window.electronAPI.runtime.controlApiBase)).toBe(api)
     await page.getByLabel('授权码', { exact: true }).fill(credentials.consumer)
-    await page.getByRole('button', { name: '验证并登录' }).click({ force: true })
+      await page.getByRole('button', { name: '登录并开始使用' }).click({ force: true })
     await expect(page).toHaveURL(/#\/user\/tools$/)
     await expect(page.locator('.skeleton-card')).toHaveCount(0)
     await expect.poll(() => page.locator('.tool-card').count()).toBeGreaterThan(0)

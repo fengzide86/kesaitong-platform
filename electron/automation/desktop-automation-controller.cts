@@ -32,6 +32,7 @@ import { LocalArtifactService } from './local-artifact-service.cjs'
 import { FileInputController, type LocalFileSnapshot } from './file-input-controller.cjs'
 import { ExecutionLease, type ExecutionPermit } from './execution-lease.cjs'
 import { WorkspaceBrowserSessions } from './workspace-browser-sessions.cjs'
+import { TargetExecutionController } from './targets/target-controller.cjs'
 import type { LocalArtifactReadRequest, LocalArtifactReadResult } from '../../src/shared/ipc/artifact-contract.js'
 
 type UnknownRecord = Record<string, unknown>
@@ -121,6 +122,7 @@ export class DesktopAutomationController {
   private runnerEpoch = 0
   private runnerSerial = 0
   private sessionRevocation: Promise<void> | null = null
+  private readonly targets: TargetExecutionController
 
   constructor(options: DesktopAutomationControllerOptions) {
     this.options = options
@@ -133,6 +135,12 @@ export class DesktopAutomationController {
       apiBase: options.controlApiBase,
       version: app.getVersion(),
       codec: safeStorage,
+    })
+    this.targets = new TargetExecutionController({
+      register: options.registerAutomationHandle, lease: this.executionLease, reports: this.reportOutbox,
+      resolveSession: sender => this.resolveRecoverySession(sender),
+      directory: join(app.getPath('userData'), 'target-operations'), apiBase: options.controlApiBase,
+      publicKeyB64: toolSigningConfig.publicKeyB64, signingKeyId: toolSigningConfig.keyId,
     })
     this.batchController = new DesktopBatchController({
       getWindow: options.getWindow,
@@ -153,6 +161,7 @@ export class DesktopAutomationController {
     this.registerToolLaunchIpc()
     this.registerSingleRunIpc()
     this.registerRecoveryIpc()
+    this.targets.register()
     this.fileInputs.register(this.options.registerAutomationHandle)
     this.options.registerAutomationHandle('artifacts:read', (event: IpcMainInvokeEvent, request: LocalArtifactReadRequest): LocalArtifactReadResult | Promise<LocalArtifactReadResult> => {
       if (this.pendingArtifactOwner?.owner === event.sender) {
@@ -194,12 +203,14 @@ export class DesktopAutomationController {
   }
 
   async cancelActiveForWindowClose(): Promise<void> {
+    this.targets.close()
     await this.batchController.cancelActiveForWindowClose()
     await this.cancelSingle()
   }
 
   async cleanup(): Promise<void> {
     this.closing = true
+    this.targets.dispose()
     this.runnerEpoch += 1
     this.executionLease.close()
     this.singlePermit = null
@@ -620,7 +631,10 @@ export class DesktopAutomationController {
   }
 
   private async revokeSession(): Promise<void> {
+      this.targets.close()
       this.runnerEpoch += 1
+      // Revokes the old owner's permit but preserves target host-drain fences;
+      // signing in again cannot overlap an unfinished browser operation.
       this.executionLease.invalidate()
       this.singlePermit = null
       const prior = this.singleRecovery

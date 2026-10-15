@@ -1,6 +1,6 @@
 <template>
   <div class="expenses-page">
-    <PageHeader eyebrow="COMPANY LEDGER" title="公账支出" description="记录公司实际发生的支出，并单独管理会员与周期续费。">
+    <PageHeader eyebrow="公账记录" title="公账支出" description="记录公司实际发生的支出，并单独管理会员与周期续费。">
       <template #actions>
         <div class="page-actions">
           <button v-if="isSuperAdmin" class="ghost-button" @click="openCategories"><Tags :size="15" />分类管理</button>

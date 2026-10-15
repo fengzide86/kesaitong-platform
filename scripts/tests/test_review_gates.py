@@ -53,6 +53,39 @@ def test_fixture_allowlist_is_exact_path_and_value():
                                   "scripts/tests/test_review_gates.py") == [1]
 
 
+@pytest.mark.parametrize(("file", "endpoint"), [
+    ("backend/tests/api/test_target_profiles.py", "http://" "192.168.1.2/a"),
+    ("src/tests/electron/targetController.test.ts", "http://" "10.28.2.187:851/User/LoginPage24"),
+    ("src/tests/electron/targetRuntimePolicy.test.ts", "http://" "192.168.1.1/"),
+])
+def test_negative_private_url_fixture_exception_is_exact_file_and_full_url(file, endpoint):
+    audit = load_script("audit_secrets")
+    literal = f'url = "{endpoint}"'
+    assert audit.suspicious_lines(literal, file) == []
+    assert audit.suspicious_lines(literal, file.replace("/", "\\")) == []
+    # Neither another test nor a production file inherits this exception.
+    for other_file in ("scripts/tests/test_review_gates.py", "src/new.vue", "other/" + file):
+        assert audit.suspicious_lines(literal, other_file) == [1]
+    # A path prefix, query, fragment, scheme, or separate endpoint is not the
+    # reviewed fixture. The safe URL must not hide another finding on its line.
+    for changed in (endpoint + "other", endpoint + "?token=sample", endpoint + "#sample", endpoint.replace("http:", "https:"), "http://" + "10.1.2.3/a"):
+        assert audit.suspicious_lines(f'url = "{changed}"', file) == [1]
+        assert audit.suspicious_lines(literal + f'; other = "{changed}"', file) == [1]
+    other = "another-" + "inert-audit-value"
+    assert audit.suspicious_lines(literal + f'; api_key = "{other}"', file) == [1]
+
+
+def test_negative_private_url_fixture_policy_has_no_wildcard_or_cross_file_exemption():
+    audit = load_script("audit_secrets")
+    assert len(audit.APPROVED_NEGATIVE_TEST_URLS) == 3
+    for file, urls in audit.APPROVED_NEGATIVE_TEST_URLS.items():
+        assert len(urls) == 1
+        endpoint = next(iter(urls))
+        for other_file in audit.APPROVED_NEGATIVE_TEST_URLS:
+            if file != other_file:
+                assert audit.suspicious_lines(f'url = "{endpoint}"', other_file) == [1]
+
+
 def test_constraints_validate_version_not_only_presence(tmp_path):
     gate = load_script("check_python_constraint_closure")
     pinned = tmp_path / "constraints.txt"

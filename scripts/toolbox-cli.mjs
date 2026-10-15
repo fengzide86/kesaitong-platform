@@ -7,6 +7,7 @@ import process from 'node:process'
 import readline from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { resolvePython } from './run-python.mjs'
+import { npmEnvironment, resolveNpm } from './npm-toolchain.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const isWindows = process.platform === 'win32'
@@ -30,26 +31,16 @@ function cmdQuote(value) {
   return /[\s&|<>^]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
-function invocation(command, args) {
-  if (isWindows && command === 'npm') {
-    // The managed Node 22 toolchain ships npm next to node.exe, while a
-    // fresh Codex/CI shell may intentionally omit npm from PATH. Resolve the
-    // sibling first so launchers and direct CLI calls use the same toolchain;
-    // retain the normal command fallback for user-installed Node setups.
-    const nodeExecutable = process.env.TOOLBOX_NODE_EXE || process.execPath
-    const siblingNpm = path.join(path.dirname(nodeExecutable), 'npm.cmd')
-    const npmExecutable = fs.existsSync(siblingNpm) ? siblingNpm : 'npm'
-    return {
-      command: process.env.ComSpec || 'cmd.exe',
-      args: ['/d', '/v:off', '/s', '/c', `"${[npmExecutable, ...args].map(cmdQuote).join(' ')}"`],
-      windowsVerbatimArguments: true,
-    }
+function invocation(command, args, environment = process.env) {
+  if (command === 'npm') {
+    const toolchain = resolveNpm({ projectRoot: root, environment })
+    return { command: toolchain.nodeExecutable, args: [toolchain.cli, ...args], env: npmEnvironment(toolchain, environment) }
   }
   return { command, args }
 }
 
 function run(command, args, options = {}) {
-  const call = invocation(command, args)
+  const call = invocation(command, args, options.env || process.env)
   const displayArgs = (options.redactValues || []).reduce(
     (current, secret) => secret ? current.replaceAll(String(secret), '<redacted>') : current,
     args.join(' '),
@@ -57,7 +48,7 @@ function run(command, args, options = {}) {
   log(`运行：${command} ${displayArgs}`)
   const result = spawnSync(call.command, call.args, {
     cwd: options.cwd || root,
-    env: options.env || process.env,
+    env: call.env || options.env || process.env,
     stdio: options.stdio || 'inherit',
     windowsHide: true,
     windowsVerbatimArguments: call.windowsVerbatimArguments,
@@ -69,12 +60,12 @@ function run(command, args, options = {}) {
 }
 
 function runAsync(command, args, options = {}) {
-  const call = invocation(command, args)
+  const call = invocation(command, args, options.env || process.env)
   log(`运行：${command} ${args.join(' ')}`)
   return new Promise((resolve, reject) => {
     const child = spawn(call.command, call.args, {
       cwd: options.cwd || root,
-      env: options.env || process.env,
+      env: call.env || options.env || process.env,
       stdio: options.stdio || 'inherit',
       windowsHide: options.windowsHide ?? true,
       windowsVerbatimArguments: call.windowsVerbatimArguments,
@@ -954,6 +945,7 @@ async function deployBackend(state, connection) {
     if (result.release_id !== state.releaseId) {
       fail(`部署后端发布 ID 不匹配：期望 ${state.releaseId}，实际 ${result.release_id}`)
     }
+    await verifyTargetProfileApi(state.controlUrl)
     await verifyRetiredWeb(state.controlUrl)
     log(`生产后端已部署：v${state.version} / ${state.commitSha.slice(0, 12)}`)
   } finally {
@@ -1054,6 +1046,31 @@ export async function verifyRetiredWeb(controlUrl, request = fetch) {
   return { status: 'retired', destination: RETIRED_WEB_DESTINATION }
 }
 
+// Target-profile registration and admin review are part of the backend/client
+// release contract. A missing route is different from an unauthenticated
+// route: the former proves that the compatible backend was not deployed.
+export async function verifyTargetProfileApi(controlUrl, request = fetch) {
+  const baseUrl = controlUrl.replace(/\/+$/, '')
+  const routes = ['/api/tools/target-profiles', '/api/tool-releases/target-profiles']
+  for (const route of routes) {
+    const response = await request(`${baseUrl}${route}`, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (response.status === 404) {
+      await response.body?.cancel()
+      fail(`target-profile API readiness 检查失败：${route} 返回 HTTP 404`)
+    }
+    if ((response.status < 200 || response.status >= 300) && ![401, 403].includes(response.status)) {
+      await response.body?.cancel()
+      fail(`target-profile API readiness 检查失败：${route} 返回 HTTP ${response.status}`)
+    }
+    await response.body?.cancel()
+  }
+  return { status: 'ready', routes }
+}
+
 export async function verifyDesktopDownloadRange(state, request = fetch) {
   const installer = state.artifacts.desktop.installer
   const url = `${state.controlUrl.replace(/\/+$/, '')}/updates/${encodeURIComponent(path.basename(installer.path))}`
@@ -1131,6 +1148,7 @@ async function verifyPublishedRelease(state) {
   if (live.release_id !== state.releaseId) fail(`最终健康检查发布 ID 不匹配：${live.release_id}`)
   const ready = await getJson(`${baseUrl}/api/health/ready`, 30_000)
   if (ready.status !== 'ok') fail(`生产就绪检查失败：${ready.status}`)
+  await verifyTargetProfileApi(baseUrl)
   await verifyRetiredWeb(baseUrl)
   if (!(await publishedDesktopMatches(state, baseUrl))) fail('最终桌面更新清单检查不匹配')
   await verifyDesktopDownloadRange(state)

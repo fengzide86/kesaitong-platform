@@ -6,7 +6,7 @@ function Test-Node22([string]$Executable) {
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) { return $false }
     try {
         $nodeVersion = & $Executable -p 'process.versions.node' 2>$null
-        return $LASTEXITCODE -eq 0 -and "$nodeVersion".Trim() -match '^22\.'
+        return $LASTEXITCODE -eq 0 -and "$nodeVersion".Trim() -eq $requiredNodeVersion
     } catch { return $false }
 }
 
@@ -19,10 +19,12 @@ function Test-GitHubCli([string]$Executable) {
 }
 
 try {
+    $requiredNodeVersion = (Get-Content -LiteralPath (Join-Path $projectRoot '.node-version') -Raw).Trim()
+    if ($requiredNodeVersion -notmatch '^22\.\d+\.\d+$') { throw '.node-version must pin an exact Node.js 22 version.' }
     $toolchains = Join-Path $(if ($env:TOOLBOX_DATA_ROOT) { $env:TOOLBOX_DATA_ROOT } else { 'D:\AmazonToolboxData' }) 'toolchains'
     $nodeExecutable = $null
     if ($env:TOOLBOX_NODE_EXE) {
-        if (-not (Test-Node22 $env:TOOLBOX_NODE_EXE)) { throw 'TOOLBOX_NODE_EXE must point to an existing Node.js 22 executable.' }
+        if (-not (Test-Node22 $env:TOOLBOX_NODE_EXE)) { throw "TOOLBOX_NODE_EXE must point to the pinned Node.js $requiredNodeVersion executable." }
         $nodeExecutable = $env:TOOLBOX_NODE_EXE
     } else {
         foreach ($pathNode in @(Get-Command node.exe -All -CommandType Application -ErrorAction SilentlyContinue)) {
@@ -38,7 +40,7 @@ try {
             }
         }
     }
-    if (-not $nodeExecutable) { throw 'Node.js 22 is required. Set TOOLBOX_NODE_EXE to its node.exe path; no runtime will be installed automatically.' }
+    if (-not $nodeExecutable) { throw "Node.js $requiredNodeVersion is required. Set TOOLBOX_NODE_EXE to its node.exe path; no runtime will be installed automatically." }
     $env:PATH = (Split-Path -Parent $nodeExecutable) + ';' + $env:PATH
 
     # The independent website is Node-only. Do not block its preview or recovery

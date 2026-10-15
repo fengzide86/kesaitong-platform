@@ -27,7 +27,7 @@ import { useUpdateStore } from './store'
 const store = useUpdateStore()
 const props = withDefaults(defineProps<{ detailsDisabled?: boolean }>(), { detailsDisabled: false })
 const shortLabel = computed(() => ({
-  checking: '', available: '发现新版本', downloading: '后台下载', downloaded: '可以重启',
+  checking: '', available: '发现新版本', downloading: '后台下载', cancelling: '正在取消', downloaded: '可以重启',
   restart_deferred: '更新已就绪', installing: '正在重启', cancelled: '重新下载', error: '更新异常', idle: '',
 })[store.state.status])
 const accessibleLabel = computed(() => props.detailsDisabled

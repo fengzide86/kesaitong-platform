@@ -24,6 +24,7 @@ const mockRouter = createRouter({
     { path: '/admin/knowledge', name: 'AdminKnowledge', component: { template: '<div />' } },
     { path: '/admin/ai-chat', name: 'AdminAIChat', component: { template: '<div />' } },
     { path: '/admin/announcements', name: 'AdminAnnouncements', component: { template: '<div />' } },
+    { path: '/admin/target-reviews', name: 'AdminTargetReviews', component: { template: '<div />' } },
     { path: '/admin/updates', name: 'AdminUpdates', component: { template: '<div />' } },
     { path: '/admin/freight-rates', name: 'AdminFreightRates', component: { template: '<div />' } },
     { path: '/admin/settings', name: 'AdminSettings', component: { template: '<div />' } },

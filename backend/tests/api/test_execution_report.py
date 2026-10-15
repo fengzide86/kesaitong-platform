@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
+from core.security import create_access_token
 from domains.automation import service as execution_service
 from models import AuthCode, LaunchToken, Setting, User
 from models.feedback import ExecutionVerification, RunLog
@@ -116,8 +117,65 @@ async def test_consumed_single_launch_grant_creates_one_verified_execution(
     duplicate = await client.post("/api/executions/report", json=payload)
     assert duplicate.status_code == 200
     assert get_data(duplicate)["duplicate"] is True
+    assert get_data(duplicate)["execution_id"] == log.id
     logs = (await db_session.execute(select(RunLog).where(RunLog.user_id == user_id))).scalars().all()
     assert len(logs) == 1
+
+    mismatched = await client.post("/api/executions/report", json={
+        **payload,
+        "run_id": "local-run-report-different",
+    })
+    assert mismatched.status_code == 409
+    assert "不匹配" in mismatched.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_owned_failed_execution_updates_control_record(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "TOOL_EXECUTION_MODE", "live")
+    auth_code = AuthCode(code="REPORT-RECONCILE-001", status="active")
+    db_session.add(auth_code)
+    await db_session.flush()
+    user = User(name="Reconcile User", auth_code_id=auth_code.id, device_id="device-reconcile")
+    db_session.add(user)
+    await db_session.flush()
+    launch = LaunchToken(
+        token="runner-reconcile-token-1234567890", user_id=user.id, auth_code_id=auth_code.id,
+        platform_key="amazon", tool_id="tool_listing_script", script_key="amazon.listing_script.v1",
+        device_id=user.device_id, expires_at=datetime.now() + timedelta(minutes=5), used_at=datetime.now(),
+        status="used", execution_mode="single",
+    )
+    db_session.add(launch)
+    await db_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token({'user_id': user.id, 'device_id': user.device_id})}"}
+    first = await client.post("/api/executions/report", json={
+        "token": launch.token, "run_id": "reconcile-run-1", "status": "failed",
+        "error_code": "TARGET_RESPONSE_TIMEOUT", "adapter_version": "bjysoft-v2-template.1",
+        "page_fingerprint": "a" * 64, "completed_steps": 5,
+    })
+    assert first.status_code == 200
+    reconcile = await client.post("/api/executions/reconcile", headers=headers, json={
+        "run_id": "reconcile-run-1", "status": "succeeded",
+        "verification": "same-object-list-and-details", "object_ref": "123",
+        "adapter_version": "bjysoft-v2-template.1", "page_fingerprint": "b" * 64,
+        "completed_steps": 8,
+    })
+    assert reconcile.status_code == 200
+    assert get_data(reconcile)["reconciled"] is True
+    log = (await db_session.execute(select(RunLog).where(RunLog.user_id == user.id))).scalar_one()
+    assert log.status == "success"
+    assert log.error_code is None
+    assert json.loads(log.detail or "{}")["object_ref"] == "123"
+    repeat = await client.post("/api/executions/reconcile", headers=headers, json={
+        "run_id": "reconcile-run-1", "status": "succeeded",
+        "verification": "same-object-list-and-details", "object_ref": "123",
+        "completed_steps": 8,
+    })
+    assert repeat.status_code == 200
+    assert get_data(repeat)["duplicate"] is True
 
 
 @pytest.mark.asyncio

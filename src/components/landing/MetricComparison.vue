@@ -121,13 +121,13 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
         <div class="metric-value-row">
           <div class="metric-before"><small>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</small><b data-testid="before-number">{{ formatNumber(metric.before!) }}<span>{{ metric.unit }}</span></b></div>
           <div class="metric-arrow" aria-hidden="true">→</div>
-          <div class="metric-after"><small>课赛通辅助{{ metric.metric === 'score' ? '后' : '' }}</small><b v-if="metric.after !== null" data-testid="after-number">{{ formatNumber(metric.after) }}<span>{{ metric.unit }}</span></b><b v-else class="metric-awaiting">待实测</b></div>
+          <div class="metric-after"><small>课赛通辅助{{ metric.metric === 'score' ? '后' : '' }}</small><b v-if="metric.after !== null" data-testid="after-number">{{ formatNumber(metric.after) }}<span>{{ metric.unit }}</span></b><b v-else class="metric-awaiting">辅助数据暂未公开</b></div>
         </div>
         <div class="metric-bars" :data-metric-index="index" aria-hidden="true"><div class="metric-bar-row"><span>{{ metric.metric === 'time' ? '自己操作' : '使用前' }}</span><i><em :style="{ width: width(metric, metric.before) }" /></i></div><div class="metric-bar-row metric-bar-row-after"><span>课赛通辅助</span><i><em :style="{ width: width(metric, metric.after) }" /></i></div></div>
         <div v-if="savedTime(metric) !== null" class="metric-saving"><span>少花</span><strong data-testid="delta-number">{{ formatNumber(savedTime(metric)!) }}</strong><span>分钟</span></div>
         <p v-if="delta(metric) && !metric.reported" class="metric-delta">变化 {{ delta(metric) }}</p>
         <p v-else-if="delta(metric) && savedTime(metric) === null" class="metric-delta">本案例变化 {{ delta(metric) }}</p>
-        <p v-else-if="!delta(metric)" class="metric-delta metric-pending">辅助数据待实测</p>
+        <p v-else-if="!delta(metric)" class="metric-delta metric-pending">仅展示人工基线</p>
       </article>
     </div>
 
@@ -136,9 +136,9 @@ onBeforeUnmount(() => visibilityObserver?.disconnect())
       <details v-if="provenanceMetrics.length" class="metric-source-details">
         <summary>查看计时来源</summary>
         <p v-for="(metric, index) in provenanceMetrics" :key="`${metric.metric}-${index}`" class="metric-source" data-testid="metric-provenance">
-          {{ taskScope(metric) || '任务范围待补充' }} ·
-          {{ hasSampleSize(metric) ? `样本 ${metric.sampleSize}` : '样本数待补充' }} ·
-          {{ isDate(metric.measuredAt) ? metric.measuredAt : '测试日期待补充' }} ·
+          <template v-if="taskScope(metric) && hasSampleSize(metric) && isDate(metric.measuredAt)">
+            {{ taskScope(metric) }} · 样本 {{ metric.sampleSize }} · {{ metric.measuredAt }} ·
+          </template>
           {{ metric.paired ? '数据来自配对实测' : '仅展示人工基线，尚无完整配对实测' }}
         </p>
       </details>

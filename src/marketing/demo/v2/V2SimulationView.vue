@@ -608,6 +608,9 @@ async function automatic() {
     const item = state.orders.find(item => item.id === demoOrder.value && item.status === '未发货')
     if (!item) { result('当前没有未发货样例订单，可重置样例。', true); running.value = false; runStatus.value = '未完成'; demoAction.value = ''; toolsOpen.value = true; activeRun = undefined; return }
     const itemId = item.id
+    // A stopped run (or a manual selection) can leave checked warehouse rows.
+    // This run owns only its selected order, never a previous batch selection.
+    warehouseSelected.value = []
     const currentOrder = () => { const latest = state.orders.find(order => order.id === itemId); if (!latest) throw new Error('该样例订单已不存在，自动操作已停止。'); return latest }
     let chosenCarrier = item.carrier
     const originalStage = item.warehouseStage
@@ -643,7 +646,7 @@ async function automatic() {
     const variantId = row.variant.id, selectedSku = row.variant.sku
     completedOutcome = () => { const saved = fbaBalances.value.get(variantId)!; return { task: 'fba', objectId: variantId, title: saved.product.title, before: '卖家自行配送', after: '亚马逊配送', facts: [{ label: '子 SKU', value: selectedSku }, { label: 'FNSKU', value: saved.fnsku }, { label: '到仓可售', value: `${saved.available} 件（尚未入库）` }], page: 'fba', params: { focus: variantId } } }
     taskSteps = [
-      { label: '打开 FBA 库存与转换入口', perform: async () => { fbaSelection.value = []; openFba(); await settle(); await click('[data-action="fba-new-conversion"]') } },
+      { label: '打开 FBA 库存与转换入口', perform: async () => { fbaSelection.value = []; openFba(); await settle(); await click('[data-action="fba-show-inventory"]'); await settle(); await click('[data-action="fba-new-conversion"]') } },
       { label: '勾选一个卖家配送子 SKU', perform: async () => { await settle(); await check(`[name="fbaSku"][value="${variantId}"]`); await click('[data-action="fba-selection-confirm"]') } },
       { label: '确认仅转换配送方式', perform: () => click('[data-action="fba-only-convert"]') },
       { label: '填写电池与危险品信息', perform: async () => { await settle(); await click(`[data-action="fba-hazard-open"][data-fba-variant="${variantId}"]`); await settle(); await check('[name="fbaBattery"][value="no"]'); await check('[name="fbaHazardous"][value="no"]'); await click('[data-action="fba-hazard-save"]') } },
@@ -686,7 +689,7 @@ async function automatic() {
       recentlySavedProductId.value = outcome.value.task === 'product' ? outcome.value.objectId : ''
       running.value = false; runStatus.value = '已完成，保存状态核对通过'; cursor.value = taskSteps.length; toolsOpen.value = true
     }
-  } catch (error) { if (run === generation) { running.value = false; runStatus.value = '未完成'; result(error instanceof Error ? error.message : '样例操作未完成。', true) } }
+  } catch (error) { if (run === generation) { running.value = false; runStatus.value = '未完成'; toolsOpen.value = true; result(error instanceof Error ? error.message : '样例操作未完成。', true) } }
   finally { if (activeRun === run) { activeRun = undefined; clearDemoTarget(); demoAction.value = '' } }
 }
 let dialogReturnFocus: HTMLElement | null = null
@@ -1831,6 +1834,7 @@ onBeforeUnmount(() => {
       :running="running"
       :paused="paused"
       :status="runStatus"
+      :failure-message="runStatus === '未完成' ? message : ''"
       :current-step="currentStep"
       :action="demoAction"
       :steps="steps"

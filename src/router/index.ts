@@ -5,14 +5,21 @@ import { hasBusinessWorkspaceAccess } from '@/features/auth/model'
 import type { BackofficeRole } from '@/features/auth/model'
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 
-const routes: RouteRecordRaw[] = [
-  // 用户端路由
+// A build-time branch keeps the website, its photographs and its simulation
+// out of the Windows package. The separate marketing build owns those pages.
+const landingRoutes: RouteRecordRaw[] = import.meta.env.VITE_DESKTOP_BUILD ? [
+  { path: '/', name: 'Landing', redirect: { name: 'UserLogin' } },
+] : [
   {
     path: '/',
     name: 'Landing',
     component: () => import('@/views/LandingView.vue'),
     meta: { title: '跨境电商赛训效率平台', public: true }
   },
+]
+
+const routes: RouteRecordRaw[] = [
+  ...landingRoutes,
   {
     path: '/user/login',
     name: 'UserLogin',
@@ -31,7 +38,7 @@ const routes: RouteRecordRaw[] = [
     alias: '/agent/login',
     name: 'AdminLogin',
     component: () => import('@/views/admin/AdminLoginView.vue'),
-    meta: { title: '管理员登录' }
+    meta: { title: '后台账号登录' }
   },
   {
     path: '/user',
@@ -162,7 +169,7 @@ const routes: RouteRecordRaw[] = [
         path: 'business-access',
         name: 'AdminBusinessAccess',
         component: () => import('@/views/admin/BusinessAccessView.vue'),
-        meta: { title: '专业工作台', skeleton: 'dashboard', roles: ['super_admin', 'operator'] }
+        meta: { title: '工作台开放', skeleton: 'dashboard', roles: ['super_admin', 'operator'] }
       },
       {
         path: 'orders',
@@ -217,6 +224,12 @@ const routes: RouteRecordRaw[] = [
         name: 'AdminAnnouncements',
         component: () => import('@/views/admin/AnnouncementsView.vue'),
         meta: { title: '公告管理', skeleton: 'table', roles: ['super_admin', 'operator', 'support'] }
+      },
+      {
+        path: 'target-reviews',
+        name: 'AdminTargetReviews',
+        component: () => import('@/views/admin/TargetReviewsView.vue'),
+        meta: { title: '平台入口审核', skeleton: 'default', roles: ['super_admin'] },
       },
       {
         path: 'updates',
