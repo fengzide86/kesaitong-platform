@@ -57,6 +57,7 @@ export function useAdminSettings() {
   })
 
   const showProfitModal = ref(false)
+  const profitPolicyVersion = ref<number | null>(null)
   const canEditProfitPolicy = computed(() => hasStaffPermission(authService.getRole(), 'profit.policy.write'))
   const profitRatios = ref({
     tech: 30,
@@ -96,6 +97,7 @@ export function useAdminSettings() {
     }
     if (profitPolicyResult.status === 'fulfilled') {
       const policy = profitPolicySchema.parse(profitPolicyResult.value)
+      profitPolicyVersion.value = policy.version
       profitRatios.value = {
         tech: Number((policy.ratios.tech * 100).toFixed(2)),
         market: Number((policy.ratios.market * 100).toFixed(2)),
@@ -294,6 +296,10 @@ export function useAdminSettings() {
 
   async function saveProfitRatios() {
     if (!canEditProfitPolicy.value) return
+    if (profitPolicyVersion.value === null) {
+      showToast('请先加载当前分润策略后再保存', 'error')
+      return
+    }
     if (Math.abs(profitTotal.value - 100) > 0.001) {
       showToast('分润比例总和必须为100%', 'error')
       return
@@ -307,11 +313,12 @@ export function useAdminSettings() {
         coordination: Number((profitRatios.value.coordination / 100).toFixed(6)),
         record: Number((profitRatios.value.record / 100).toFixed(6)),
       }
-      await updateProfitPolicy(normalizedRatios)
+      await updateProfitPolicy(normalizedRatios, profitPolicyVersion.value)
       showToast('分润比例已更新', 'success')
       showProfitModal.value = false
-    } catch {
-      showToast('保存失败', 'error')
+      await loadData()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '保存失败', 'error')
     }
   }
 

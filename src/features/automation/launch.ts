@@ -15,24 +15,6 @@ export function isLiveTool(tool: ToolCatalogItem): boolean {
     && (tool.availability === 'live' || tool.availability === 'live_beta')
 }
 
-export function buildDemoLaunch(tool: ToolCatalogItem, platformKey: string, input: UnknownRecord = {}): ActiveTool {
-  return {
-    id: tool.id,
-    name: tool.name,
-    module: tool.module,
-    category: tool.category,
-    platformKey,
-    capabilityKey: tool.capability_key,
-    targetUrl: `demo://${platformKey}/${encodeURIComponent(String(tool.id))}`,
-    executionMode: 'demo',
-    scenarioId: tool.demo_scenario_id,
-    demoRunId: randomId('demo_run_local'),
-    scriptKey: tool.script_key,
-    scriptStatus: tool.script_status,
-    executionContext: { mode: 'single', sessionId: randomId('demo_session'), input },
-  }
-}
-
 export function buildPreflightLaunch(tool: ToolCatalogItem, platformKey: string, input: UnknownRecord = {}): ActiveTool {
   return {
     id: tool.id,

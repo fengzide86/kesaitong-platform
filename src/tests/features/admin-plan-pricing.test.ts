@@ -49,6 +49,22 @@ describe('后台套餐改价确认与并发保护', () => {
   })
   afterEach(() => { wrapper?.unmount() })
 
+  it('未加载分润版本时不保存，加载后携带期望版本且冲突保留草稿', async () => {
+    const api = await mountSettings()
+    await api.saveProfitRatios()
+    expect(mocks.updateProfitPolicy).not.toHaveBeenCalled()
+    mocks.getProfitPolicy.mockResolvedValue({ version: 8, ratios: {
+      tech: 0.3, market: 0.25, product: 0.15, service: 0.15, coordination: 0.1, record: 0.05,
+    } })
+    await api.loadData()
+    api.openProfitEdit()
+    mocks.updateProfitPolicy.mockRejectedValue(new Error('策略已更新，请刷新后重试'))
+    await api.saveProfitRatios()
+    expect(mocks.updateProfitPolicy).toHaveBeenCalledWith(expect.any(Object), 8)
+    expect(api.showProfitModal.value).toBe(true)
+    expect(mocks.showToast).toHaveBeenCalledWith('策略已更新，请刷新后重试', 'error')
+  })
+
   it('无变化不保存，也不弹改价确认', async () => {
     const api = await mountSettings()
     await api.savePlan()

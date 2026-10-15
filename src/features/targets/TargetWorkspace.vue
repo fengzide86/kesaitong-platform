@@ -23,7 +23,7 @@
 
         <section v-if="selected || observation" class="target-tool-section" aria-label="配送模板真实工具"><div class="target-section-heading"><div><span class="target-kicker">下一步 · 真实工具</span><h2>配送模板</h2><p>只有入口审核通过且现场识别成功后，这里才会出现可填写的工具参数。</p></div><span class="target-tool-status">受控写入</span></div><p v-if="selected && selected.profile.reviewStatus === 'pending'" class="target-notice"><strong>正在等待团队审核。</strong>你无需填写技术版本、页面指纹或课程术语。审核员会依据脱敏识别证据确认范围；审核完成后刷新状态即可继续。</p><p v-else-if="selected && selected.profile.reviewStatus === 'rejected'" class="target-notice"><strong>入口暂未通过审核。</strong>请联系团队说明现场变化；不要重复提交同一个网址。</p><p v-else-if="selected && selected.profile.reviewStatus === 'disabled'" class="target-notice"><strong>此入口已停用新的执行。</strong>历史记录仍保留，需团队重新核验后恢复。</p><p v-else-if="!toolId && hasOpenTools === false" class="target-notice">当前目录尚无开放与已审核入口绑定的配送模板工具。请先联系团队，不会用模拟执行替代真实工具。</p><p v-else-if="!toolId" class="target-notice">请先在工具目录选择配送模板工具，再开始本次真实操作。</p><p v-else-if="!approved" class="target-notice">此入口还没有可执行的签名配置。刷新入口状态或联系管理员审核。</p>
           <form v-if="toolId" class="template-form" @submit.prevent="preflight">
-            <fieldset :disabled="busy || !approved"><legend>这次要做什么</legend><div class="target-fields"><label>现场类型<select data-testid="context-choice" v-model="contextChoice"><option value="training">课程实训</option><option value="practice">比赛练习</option><option value="formal">正式比赛</option></select><small>选择即可，不需要填写内部代码。正式比赛仍需已核验的比赛范围。</small></label><label>模板名称<input v-model.trim="input.name" maxlength="100" required placeholder="输入本次要创建的模板名称" /></label></div><p v-if="stage === 'formal'" class="formal-warning" role="note"><ShieldAlert :size="18" />正式比赛必须由团队单独核验；当前首期未开放正式比赛执行。</p><p class="target-muted">场景和阶段只是本次执行的选择，平台现场与管理员审核范围仍会再次核对。规则来源：本次模板配置；USD · 按重量 / 件数计费。</p></fieldset>
+            <fieldset :disabled="busy || !approved"><legend>这次要做什么</legend><div class="target-fields"><label>管理员分配的场景<input data-testid="assigned-context" :value="scenario === 'competition' ? '指定比赛' : '课程实训'" readonly><small>场景由管理端统一分配，不能在工具内自行切换。执行前仍由主进程重新验证。</small></label><label>模板名称<input v-model.trim="input.name" maxlength="100" required placeholder="输入本次要创建的模板名称" /></label></div><p v-if="scenario === 'competition'" class="formal-warning" role="note"><ShieldAlert :size="18" />比赛页面可以正常浏览；比赛写入动作尚未验收，不开放此实训执行器。</p><p class="target-muted">平台现场、项目期限与管理员审核范围会再次核对。规则来源：本次模板配置；USD · 按重量 / 件数计费。</p></fieldset>
             <fieldset :disabled="busy || !approved">
               <legend>运费规则</legend>
               <p class="target-muted">标准国内配送必须保留完整大陆地区，已为你预填。零运费只是可修改的初始值；未添加的可选配送服务将关闭。国际规则每行选一个实际可用国家，保存前还会核对平台控件。</p>
@@ -58,6 +58,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ChevronDown, Globe2, ShieldAlert } from '@lucide/vue'
 import { listTargetProfiles, submitTargetProfile } from '@/utils/api/target-profiles'
+import { api } from '@/utils/api/index'
+import { scenarioPolicySchema } from '@/shared/ipc/scenario-contract'
 import { TARGET_PROFILE_LIMITS, templateCreateInputSchema, type OperationReceipt, type ProbeObservation, type RunPlanPreview, type SignedTargetProfile, type TargetPreflightRequest, type TemplateCreateInput } from '@/shared/ipc/target-contract'
 import { V2_MAINLAND_COUNTRIES, V2_ISLAND_COUNTRIES, V2_TEMPLATE_SERVICE_OPTIONS, V2_TEMPLATE_FIXED_TRANSIT, V2_TEMPLATE_SELECTABLE_TRANSIT, v2TransitLabel } from '@/shared/ipc/target-template-options'
 import { displayEntry, editionLabels, reviewLabels, scenarioLabels, stageLabels, targetError, missingEvidenceLabel, reviewedMarkerNames } from './presentation'
@@ -81,14 +83,6 @@ const receipt = ref<OperationReceipt | null>(null)
 const receipts = ref<OperationReceipt[]>([])
 const scenario = ref<TargetPreflightRequest['scenario']>('training')
 const stage = ref<TargetPreflightRequest['stage']>('not_applicable')
-type ContextChoice = 'training' | 'practice' | 'formal'
-const contextChoice = computed<ContextChoice>({
-  get: () => scenario.value === 'training' || stage.value === 'not_applicable' ? 'training' : stage.value,
-  set: value => {
-    if (value === 'training') { scenario.value = 'training'; stage.value = 'not_applicable' }
-    else { scenario.value = 'competition'; stage.value = value }
-  },
-})
 const input = ref<TemplateCreateInput>({ name: '', currency: 'USD', pricingMode: 'weight-item', rules: [newRule()] })
 const phase = ref('')
 const busy = computed(() => Boolean(phase.value))
@@ -170,6 +164,18 @@ async function task(name: string, action: () => Promise<void>) { if (busy.value)
 async function load() {
   if (!bridge) return
   await task('load', async () => {
+    let assignedEntryUrl: string | null = null
+    try {
+      const assigned = scenarioPolicySchema.parse(await api.get('/api/scenarios/me', {}, { cache: false }))
+      scenario.value = assigned.mode
+      stage.value = assigned.mode === 'training' ? 'not_applicable' : 'formal'
+      if (assigned.mode === 'competition' && assigned.entryUrl) {
+        assignedEntryUrl = assigned.entryUrl
+        entryUrl.value = assignedEntryUrl
+      }
+    } catch {
+      notice.value = '场景策略暂时无法读取；打开或执行时会重新验证，未验证不能运行。'
+    }
     profiles.value = await listTargetProfiles()
     try {
       // Load local receipts with the entry list so the UI can block the same
@@ -181,7 +187,10 @@ async function load() {
     }
     loaded = true
     if (!selectedId.value) {
-      const approvedEntry = profiles.value.filter(row => row.profile.reviewStatus === 'approved')
+      // Never replace an administrator-assigned contest entry with the sole
+      // previously reviewed training URL. The host still enforces origins.
+      const approvedEntry = profiles.value.filter(row => row.profile.reviewStatus === 'approved'
+        && (!assignedEntryUrl || row.profile.entryUrl === assignedEntryUrl))
       if (approvedEntry.length === 1) selectProfile(approvedEntry[0]!.profile.id)
     }
     invalidate()

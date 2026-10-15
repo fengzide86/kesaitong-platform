@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.security import create_access_token
 from domains.automation import service as execution_service
+from domains.automation.schemas import ExecutionReconcileRequest
 from models import AuthCode, LaunchToken, Setting, User
 from models.feedback import ExecutionVerification, RunLog
 from tests.conftest import get_data
@@ -35,7 +37,7 @@ async def test_verify_does_not_consume_terminal_or_expired_grants(
     assert response.status_code == 200
     assert response.json()["success"] is False
     await db_session.refresh(launch)
-    assert launch.status == grant_status
+    assert launch.status == ("expired" if grant_status == "pending" and expiry_minutes < 0 else grant_status)
     assert launch.used_at is None
 
 
@@ -245,7 +247,7 @@ async def test_execution_read_model_only_returns_owned_verified_records(
 
     page = await execution_service.list_executions(
         db_session,
-        {"user_id": owner.id},
+        {"user_id": owner.id, "role": "user"},
         page=1,
         page_size=20,
         platform_key=None,
@@ -254,6 +256,32 @@ async def test_execution_read_model_only_returns_owned_verified_records(
 
     assert page["total"] == 1
     assert [item["id"] for item in page["data"]] == [visible.id]
-    detail = await execution_service.get_execution(db_session, {"user_id": owner.id}, visible.id)
+    detail = await execution_service.get_execution(db_session, {"user_id": owner.id, "role": "user"}, visible.id)
     assert detail["record_kind"] == "live"
     assert detail["verification"] == "verified"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", [{"role": "operator", "staff_id": 1}, {"role": "user", "staff_id": 1}, {}])
+async def test_staff_identity_cannot_access_same_number_customer_execution(db_session, identity):
+    customer = User(name="Numeric identity isolation", device_id="numeric-isolation")
+    db_session.add(customer)
+    await db_session.flush()
+    record = RunLog(user_id=customer.id, tool_id="owned-tool", status="failed",
+                    detail=json.dumps({"run_id": "owned-run"}), verification_state=ExecutionVerification.VERIFIED)
+    db_session.add(record)
+    await db_session.commit()
+    actor = {**identity, "user_id": customer.id}
+    with pytest.raises(HTTPException) as denied_list:
+        await execution_service.list_executions(db_session, actor, page=1, page_size=20, platform_key=None, tool_id=None)
+    assert denied_list.value.status_code == 403
+    with pytest.raises(HTTPException) as denied_detail:
+        await execution_service.get_execution(db_session, actor, record.id)
+    assert denied_detail.value.status_code == 403
+    request = ExecutionReconcileRequest(run_id="owned-run", status="succeeded",
+                                        verification="same-object-list-and-details", object_ref="object-1")
+    with pytest.raises(HTTPException) as denied_reconcile:
+        await execution_service.reconcile_execution(db_session, actor, request)
+    assert denied_reconcile.value.status_code == 403
+    await db_session.refresh(record)
+    assert record.status == "failed"

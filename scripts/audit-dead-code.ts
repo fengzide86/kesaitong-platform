@@ -70,6 +70,9 @@ const entries = new Set<string>([
   'electron/smoke/embedded-browser-smoke.cts',
   'electron/smoke/amazon-navigation-smoke.cts',
   'electron/smoke/app-protocol-smoke.cts',
+  'electron/smoke/local-scenes-smoke.cts',
+  // Loaded as an absolute preload path by the native local-scenes smoke.
+  'electron/smoke/local-scenes-smoke-preload.cts',
   ...[...sourceFiles].filter(file =>
     file.startsWith('scripts/')
     || file.startsWith('tests/')

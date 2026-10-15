@@ -1,11 +1,13 @@
 """CI-only upgrade rehearsal from the immutable, released 1.8.8 schema.
 
 Uses a second disposable MariaDB service, never the concurrency or production
-database. The target must be empty; this script never drops a database/table.
+database. The target must start empty; only the newly migrated, empty framework
+tables are downgraded to exercise rollback guards. No database is dropped.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import os
@@ -26,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE_COMMIT = "5da800e87c74efa7086c3d6772985f9bfbf29c21"
 BASELINE_VERSION = "1.8.8"
 OLD_REVISION = "20260816_data_integrity"
-NEW_REVISION = "20260922_agency_commission"
+PRE_FRAMEWORK_REVISION = "20260922_agency_commission"
+NEW_REVISION = "20261015_framework_commerce"
 TEST_DATABASE = "toolbox_upgrade_test"
 
 
@@ -120,12 +123,12 @@ def seed_history(connection: Connection) -> dict[str, list[dict[str, Any]]]:
         id=902, order_no="MIGRATION-OLD-ORDER", plan_id=901,
         plan_name_snapshot="Historical validation plan", plan_price_snapshot=Decimal("199.50"),
         plan_duration_days_snapshot=30, amount=Decimal("199.50"), status="paid",
-        paid_at=datetime(2026, 9, 1, 12, 0), created_by_staff_id=1,  # noqa: DTZ001 - preserve old naive SQL DATETIME
+        paid_at=datetime(2026, 9, 1, 12, 0), created_by_staff_id=1,
         updated_by_staff_id=1, platform_key="amazon", channel="historical",
     ))
     connection.execute(table(connection, "auth_codes").insert().values(
         id=903, code="MIGRATION-OLD-AUTH", plan_id=901, status="active",
-        expires_at=datetime(2030, 9, 1, 12, 0), max_devices=3, seat_limit=5,  # noqa: DTZ001 - preserve old wall-clock expiry
+        expires_at=datetime(2030, 9, 1, 12, 0), max_devices=3, seat_limit=5,
         platform_scope="amazon", scene_type="competition",
     ))
     connection.execute(table(connection, "users").insert().values(
@@ -172,6 +175,42 @@ def expect_constraint(connection: Connection, statement: Any, codes: set[int]) -
     else:
         savepoint.rollback()
         raise AssertionError("Expected database constraint was not enforced")
+
+
+def framework_tables() -> list[str]:
+    path = ROOT / "backend/alembic/versions/20261015_framework_commerce.py"
+    spec = importlib.util.spec_from_file_location("framework_upgrade_contract", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.TABLES
+
+
+def assert_framework_contract(connection: Connection, *, empty: bool = True) -> None:
+    # Compare the actual migrated database, never repair it with create_all.
+    sys.path.insert(0, str(ROOT / "backend"))
+    from models import Base
+
+    inspector = sa.inspect(connection)
+    names = framework_tables()
+    assert len(names) == 20 and len(set(names)) == 20
+    assert set(names) <= set(inspector.get_table_names())
+    for name in names:
+        expected = Base.metadata.tables[name]
+        assert {column["name"] for column in inspector.get_columns(name)} == set(expected.columns.keys()), name
+        actual_foreign = {(tuple(fk["constrained_columns"]), fk["referred_table"], tuple(fk["referred_columns"]))
+                          for fk in inspector.get_foreign_keys(name)}
+        expected_foreign = {(tuple(fk.column_keys), next(iter(fk.elements)).column.table.name,
+                             tuple(element.column.name for element in fk.elements)) for fk in expected.foreign_key_constraints}
+        assert expected_foreign <= actual_foreign, name
+        actual_unique = {tuple(item["column_names"]) for item in inspector.get_unique_constraints(name)}
+        expected_unique = {tuple(column.name for column in constraint.columns) for constraint in expected.constraints
+                           if isinstance(constraint, sa.UniqueConstraint)}
+        assert expected_unique <= actual_unique, name
+        actual_checks = {item["name"] for item in inspector.get_check_constraints(name)}
+        assert {constraint.name for constraint in expected.constraints if isinstance(constraint, sa.CheckConstraint)} <= actual_checks, name
+        if empty:
+            assert connection.execute(sa.text(f"SELECT COUNT(*) FROM {name}")).scalar_one() == 0, name
 
 
 def assert_new_contract(connection: Connection) -> None:
@@ -256,7 +295,9 @@ def main() -> None:
                     raise AssertionError("New schema revision is missing")
                 assert_history(connection, history)
                 assert_new_contract(connection)
+                assert_framework_contract(connection)
             report["checks"].extend(["historical_values_and_unassigned_ownership_preserved", "foreign_keys_unique_and_agent_role_constraints_enforced"])
+            report["checks"].append("framework_20_tables_empty_columns_foreign_keys_unique_checks_verified")
             # The existing SQLAlchemy pool must be disposed in the same event
             # loop used by the async gate; subprocess exit also isolates it.
             schema_gate(ROOT, current_env, succeeds=True)
@@ -264,16 +305,48 @@ def main() -> None:
             if "required=" + OLD_REVISION not in rejection:
                 raise AssertionError("Old runtime did not reject the new schema")
             run([sys.executable, "-m", "alembic", "upgrade", "head"], ROOT / "backend", current_env)
+            with engine.begin() as connection:
+                # This synthetic row must block before *any* framework table is dropped.
+                connection.execute(table(connection, "team_members").insert().values(
+                    id=910, name="Migration framework sentinel", active=True, version=1, ledger_version=1))
+                entries = table(connection, "team_ledger_entries")
+                probe = {"bucket": "due", "kind": "allocation", "amount": Decimal(0),
+                         "note": "Synthetic constraint probe", "snapshot": "{}", "created_by_staff_id": 1}
+                expect_constraint(connection, entries.insert().values(**probe), {4025, 3819})
+                expect_constraint(connection, entries.insert().values(**(probe | {"amount": Decimal(1), "bucket": "invalid"})), {4025, 3819})
+            rejection = run([sys.executable, "-m", "alembic", "downgrade", OLD_REVISION], ROOT / "backend", current_env, succeeds=False)
+            if "Framework or accounting data exists" not in rejection:
+                raise AssertionError("Downgrade did not preserve new framework history")
+            with engine.begin() as connection:
+                assert revision(connection) == NEW_REVISION
+                assert_framework_contract(connection, empty=False)
+                assert connection.execute(sa.text("SELECT name FROM team_members WHERE id=910")).scalar_one() == "Migration framework sentinel"
+                assert_history(connection, history)
+                connection.execute(sa.text("DELETE FROM team_members WHERE id=910"))
+            # Empty framework tables may be removed, but legacy commission
+            # history must remain guarded at its own explicit revision boundary.
+            run([sys.executable, "-m", "alembic", "downgrade", PRE_FRAMEWORK_REVISION], ROOT / "backend", current_env)
+            with engine.connect() as connection:
+                assert revision(connection) == PRE_FRAMEWORK_REVISION
+                assert not set(framework_tables()) & set(sa.inspect(connection).get_table_names())
+                assert_history(connection, history)
             rejection = run([sys.executable, "-m", "alembic", "downgrade", OLD_REVISION], ROOT / "backend", current_env, succeeds=False)
             if "Commission history exists" not in rejection:
                 raise AssertionError("Downgrade did not preserve commission history for the expected reason")
             with engine.connect() as connection:
-                if revision(connection) != NEW_REVISION:
+                if revision(connection) != PRE_FRAMEWORK_REVISION:
                     raise AssertionError("Rejected downgrade changed the revision")
                 assert_history(connection, history)
                 if connection.execute(sa.text("SELECT COUNT(*) FROM agencies WHERE id=906")).scalar_one() != 1:
                     raise AssertionError("Rejected downgrade removed partner history")
             report["checks"].extend(["runtime_schema_gates_enforced", "repeat_upgrade_and_destructive_downgrade_guard_verified"])
+            run([sys.executable, "-m", "alembic", "upgrade", "head"], ROOT / "backend", current_env)
+            with engine.connect() as connection:
+                assert revision(connection) == NEW_REVISION
+                assert_framework_contract(connection)
+                assert_history(connection, history)
+            schema_gate(ROOT, current_env, succeeds=True)
+            report["checks"].append("framework_history_guard_empty_downgrade_and_reupgrade_verified")
         report["status"] = "passed"
     except Exception as error:
         report["status"] = "failed"

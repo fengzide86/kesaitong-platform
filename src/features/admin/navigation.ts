@@ -18,10 +18,12 @@ const areas: readonly AdminNavigationArea[] = [
   { id: 'action', label: '行动中心', items: [item('dashboard', '行动中心', '/admin/dashboard')] },
   { id: 'customers', label: '客户与授权', items: [
     item('users', '用户管理', '/admin/users'),
+    item('local-runtime', '本机多账号现场', '/admin/local-runtime'),
     item('authcodes', '授权码管理', '/admin/authcodes'),
   ] },
   { id: 'orders', label: '订单与代理', items: [
     item('orders', '订单管理', '/admin/orders'),
+    item('commercial', '商品与项目权益', '/admin/commercial', 'settings.manage'),
     item('agency', '代理与交付', '/admin/agency', 'agency.manage'),
   ] },
   { id: 'support', label: '售后支持', items: [
@@ -32,12 +34,14 @@ const areas: readonly AdminNavigationArea[] = [
   ] },
   { id: 'finance', label: '经营财务', items: [
     item('profit', '分润管理', '/admin/profit', 'profit.read'),
+    item('team-ledger', '成员结算台账', '/admin/team-ledger', 'settings.manage'),
     item('expenses', '公账支出', '/admin/expenses', 'expenses.read'),
     { ...item('agency-commission', '代理返佣', '/admin/agency', 'agency.manage'), to: '/admin/agency?section=commission', section: 'commission' },
   ] },
   { id: 'system', label: '产品与系统', items: [
     item('settings', '套餐与设置', '/admin/settings', 'settings.manage'),
     item('business-access', '工作台开放', '/admin/business-access', 'business_access.write'),
+    item('scenarios', '场景与运行权限', '/admin/scenarios', 'settings.manage'),
     item('announcements', '公告管理', '/admin/announcements'),
     item('target-reviews', '平台入口审核', '/admin/target-reviews', 'updates.manage'),
     item('updates', '应用更新', '/admin/updates', 'updates.manage'),

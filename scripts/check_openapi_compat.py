@@ -47,6 +47,7 @@ TARGET_OPTIONAL_BINDINGS = {
     "target_profile_id": nullable({"type": "string", "minLength": 1, "maxLength": 64}),
     "target_profile_revision": nullable({"type": "integer", "minimum": 1}),
     "client_runner_api_version": {"type": "integer", "minimum": 1, "maximum": 2, "default": 1},
+    "course_ref": nullable({"type": "string", "pattern": "^[a-f0-9]{64}$"}),
 }
 REVIEWED_OPTIONAL_PARAMETERS = {
     **ADMIN_OPTIONAL_FILTERS,
@@ -225,6 +226,8 @@ def is_compatible_launch_transport(
 
 
 def is_reviewed_extension_operation(key: tuple[str, str], operation: dict[str, Any], schema: dict[str, Any]) -> bool:
+    if is_reviewed_framework_operation(key, operation, schema):
+        return True
     if key in TARGET_EXTENSION_OPERATIONS:
         request_model, response_model = TARGET_EXTENSION_OPERATIONS[key]
         expected_body = None if request_model is None else {"required": True, "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{request_model}"}}}}
@@ -254,6 +257,46 @@ def is_reviewed_extension_operation(key: tuple[str, str], operation: dict[str, A
         and same_contract({code: schema_without_documentation(value) for code, value in responses.items()}, expected_responses)
         and operation.get("security") == [{"HTTPBearer": []}]
         and same_contract(schema_without_documentation(model), EXTEND_REQUEST_MODEL)
+    )
+
+
+def framework_operation_contract(operation: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    """Freeze parameters, auth and the complete transitive body/response schema."""
+    contract = {name: schema_without_documentation(operation.get(name))
+                for name in ("parameters", "requestBody", "responses", "security")}
+    models: dict[str, Any] = {}
+
+    def collect(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                collect(item)
+        elif isinstance(value, dict):
+            ref = value.get("$ref", "")
+            if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+                name = ref.rsplit("/", 1)[-1]
+                if name not in models:
+                    model = schema.get("components", {}).get("schemas", {}).get(name)
+                    models[name] = schema_without_documentation(model)
+                    collect(model)
+            for item in value.values():
+                collect(item)
+
+    collect(contract)
+    contract["models"] = models
+    return contract
+
+
+def is_reviewed_framework_operation(key: tuple[str, str], operation: dict[str, Any], schema: dict[str, Any]) -> bool:
+    # Separate reviewed additive v1 surface; never regenerate the legacy
+    # baseline or allow arbitrary paths under a domain prefix.
+    contract_path = ROOT / "backend/openapi-framework-v1.json"
+    if not contract_path.exists():
+        return False
+    document = load(contract_path)
+    reviewed = document.get("operations", {}).get(f"{key[1].upper()} {key[0]}")
+    reviewed_schema = {"components": {"schemas": document.get("models", {})}}
+    return reviewed is not None and same_contract(
+        framework_operation_contract(operation, schema), framework_operation_contract(reviewed, reviewed_schema),
     )
 
 

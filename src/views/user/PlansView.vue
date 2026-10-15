@@ -10,8 +10,8 @@
       <div><small>授权期限</small><strong>{{ licenseExpiry }}</strong></div>
       <div><small>可用平台</small><strong>{{ licensePlatforms }}</strong></div>
       <div><small>设备上限</small><strong>{{ userInfo.max_devices ? `${userInfo.max_devices} 台` : '以授权信息为准' }}</strong></div>
-      <p>以上为最近一次授权校验信息；续期不会自动扣款，由工作人员确认后处理。</p>
-      <button type="button" class="btn btn-secondary" @click="renewCurrent">咨询原授权续期</button>
+      <p>以上为最近一次授权校验信息；项目授权以约定结束时间为准，不自动续费或改动旧权益。</p>
+      <button type="button" class="btn btn-secondary" @click="renewCurrent">咨询项目与授权</button>
     </section>
 
     <div v-if="route.query?.tool" class="upgrade-notice">
@@ -20,7 +20,10 @@
 
     <AsyncStateNotice :state="loadState" :message="loadError" loading-text="正在加载套餐..." @retry="loadPlans" />
 
-    <div v-if="(loadState === 'data' || loadState === 'stale') && plans.length" :class="['plans-grid', `plans-grid--count-${plans.length}`]">
+    <CommercialPricingPanel v-if="(loadState === 'data' || loadState === 'stale') && commercialPlans.length"
+                            :plans="commercialPlans" :current-plan-code="currentPlanCode" @consult="contactService" />
+
+    <div v-else-if="(loadState === 'data' || loadState === 'stale') && plans.length" :class="['plans-grid', `plans-grid--count-${plans.length}`]">
       <article
         v-for="plan in plans"
         :key="plan.id"
@@ -43,7 +46,7 @@
 
     <div v-else-if="loadState === 'empty'" class="empty-state">暂无套餐信息</div>
     <el-dialog v-model="contactVisible" :title="selectedPlan && isCurrent(selectedPlan) ? '原套餐续期咨询' : '套餐购买咨询'" width="min(460px, 92vw)" destroy-on-close>
-      <div class="purchase-summary"><small>意向套餐</small><h3>{{ selectedPlan ? cleanPlanName(selectedPlan.name) : '' }}</h3><p>确认工具范围、授权期限和可用设备后，再由工作人员开通授权。</p></div>
+      <div class="purchase-summary"><small>咨询项目</small><h3>{{ selectedPlan ? cleanPlanName(selectedPlan.name) : '' }}</h3><p>{{ selectedPlan?.business_line === 'service' ? '先确认服务内容、已有套餐包含额度与预约安排，不重复购买已包含的服务。' : '先确认约定项目、适用平台、工具范围与结束日期，再由工作人员开通授权。' }}</p></div>
       <p v-if="contactLoading">正在读取官方联系方式…</p>
       <p v-else-if="contactId">客服微信：<strong>{{ contactId }}</strong></p>
       <p v-else>暂未提供外部联系方式，你可以直接在系统内提交购买咨询。</p>
@@ -62,6 +65,7 @@ import { ElButton, ElDialog } from 'element-plus'
 import { Check, LockKeyhole, ShieldCheck } from '@lucide/vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import CommercialPricingPanel from '@/components/user/CommercialPricingPanel.vue'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 import { getPlans, getPublicSettings } from '@/utils/api'
 import { prepareSupportDraft } from '@/features/ai/supportHandoff'
@@ -69,6 +73,7 @@ import { usePlatformStore } from '@/stores/platform'
 import { publicSettingsSchema } from '@/features/auth/model'
 import { showToast } from '@/utils'
 import { customerPlanListSchema, licensePlanCode, readStoredLicense, type CustomerPlan } from '@/features/user/model'
+import { loadCommercialPlans, type CommercialPlan } from '@/features/user/commercialCatalog'
 
 const route = useRoute() || { query: {} as LocationQuery }
 const router = useRouter()
@@ -78,6 +83,7 @@ const selectedPlan = ref<CustomerPlan | null>(null)
 const contactId = ref('')
 const contactLoading = ref(false)
 const plans = ref<CustomerPlan[]>([])
+const commercialPlans = ref<CommercialPlan[]>([])
 const loadState = ref<AsyncDataState>('loading')
 const loadError = ref('')
 const userInfo = ref(readStoredLicense())
@@ -145,7 +151,9 @@ function openPurchaseInquiry() {
   if (!selectedPlan.value) return
   prepareSupportDraft(isCurrent(selectedPlan.value)
     ? `我想咨询当前「${cleanPlanName(selectedPlan.value.name)}」套餐续期，${licenseExpiry.value}。请先核对原授权、续期期限和费用，不要另建重复授权。`
-    : `我想咨询「${cleanPlanName(selectedPlan.value.name)}」套餐，请帮我确认工具权限、授权期限和购买方式。`, platformStore.currentPlatform)
+    : selectedPlan.value.business_line === 'service'
+      ? `我想咨询「${cleanPlanName(selectedPlan.value.name)}」，请先核对我的套餐已含服务额度，再确认服务范围与预约安排，避免重复购买。`
+      : `我想咨询「${cleanPlanName(selectedPlan.value.name)}」，请帮我确认约定项目、适用平台、当前可开通工具和结束日期。`, platformStore.currentPlatform)
   contactVisible.value = false
   void router.push('/user/ai-chat')
 }
@@ -154,7 +162,11 @@ async function loadPlans() {
   loadState.value = plans.value.length ? 'data' : 'loading'
   loadError.value = ''
   try {
-    plans.value = customerPlanListSchema.parse(await getPlans()).filter(plan => plan.status === 'active')
+    const nextCommercialPlans = await loadCommercialPlans()
+    // Draft-only commercial setup changes nothing for existing legacy customers.
+    const nextPlans = nextCommercialPlans.length ? nextCommercialPlans : customerPlanListSchema.parse(await getPlans()).filter(plan => plan.status === 'active')
+    commercialPlans.value = nextCommercialPlans
+    plans.value = nextPlans
     loadState.value = settledDataState(plans.value.length)
   } catch (error) {
     loadError.value = error instanceof Error && error.message ? error.message : '套餐加载失败'

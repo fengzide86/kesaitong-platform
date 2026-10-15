@@ -73,7 +73,18 @@ export function isToolPublished(tool: ToolPresentationInput): boolean {
   return status === 'available' || status === 'beta' || status === 'online'
 }
 
-export function isToolIncluded(tool: ToolPresentationInput, planCode = ''): boolean {
+const CAPABILITY_ALIASES: Readonly<Record<string, string>> = {
+  company: 'company.register', register_company: 'company.register',
+  listing_script: 'product.create', ali_listing: 'product.create',
+  logistics_standard: 'template.create', logistics_cost: 'freight.quote', ali_ship: 'ship_script',
+}
+
+export function isToolIncluded(tool: ToolPresentationInput, planCode = '', allowedCapabilities?: unknown): boolean {
+  if (allowedCapabilities !== undefined) {
+    const capability = String(tool.capability_key || '')
+    const canonical = CAPABILITY_ALIASES[capability] || capability
+    return Boolean(canonical) && Array.isArray(allowedCapabilities) && allowedCapabilities.includes(canonical)
+  }
   const plans = Array.isArray(tool.available_plans) ? tool.available_plans.map(plan => String(plan).toUpperCase()) : []
   return !plans.length || plans.includes(planCode.toUpperCase())
 }
@@ -99,6 +110,7 @@ export function getToolPresentation(tool: ToolPresentationInput): ToolPresentati
 
 export interface ToolUsabilityContext {
   planCode?: string
+  allowedCapabilities?: unknown
   runtimeAvailable?: boolean
   mode?: 'single' | 'batch'
   platformScope?: unknown
@@ -114,7 +126,7 @@ export function isToolInPlatformScope(tool: ToolPresentationInput, context: Pick
   return Boolean(platform) && scopes.some(scope => scope.trim().toLowerCase() === platform)
 }
 export function isToolCurrentlyUsable(tool: ToolPresentationInput, context: ToolUsabilityContext = {}): boolean {
-  if (!isCustomerTool(tool) || !isToolPublished(tool) || !isToolIncluded(tool, context.planCode) || !isToolInPlatformScope(tool, context) || !context.runtimeAvailable) return false
+  if (!isCustomerTool(tool) || !isToolPublished(tool) || !isToolIncluded(tool, context.planCode, context.allowedCapabilities) || !isToolInPlatformScope(tool, context) || !context.runtimeAvailable) return false
   const batch = context.mode === 'batch'
   if ((batch ? tool.supports_live_batch : tool.supports_live_single) !== true) return false
   const presentation = getToolPresentation(tool)

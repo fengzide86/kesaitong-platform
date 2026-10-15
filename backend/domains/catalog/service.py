@@ -53,7 +53,7 @@ async def list_categories(db: AsyncSession) -> list[Any]:
     setting = await _get_setting(db, "tool_categories")
     if setting and setting.value:
         loaded = json.loads(setting.value)
-        return loaded if isinstance(loaded, list) else loaded
+        return loaded
     return DEFAULT_CATEGORIES
 
 

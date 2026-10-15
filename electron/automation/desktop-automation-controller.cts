@@ -32,6 +32,8 @@ import { LocalArtifactService } from './local-artifact-service.cjs'
 import { FileInputController, type LocalFileSnapshot } from './file-input-controller.cjs'
 import { ExecutionLease, type ExecutionPermit } from './execution-lease.cjs'
 import { WorkspaceBrowserSessions } from './workspace-browser-sessions.cjs'
+import { ScenarioPolicyClient } from './scenario-policy-client.cjs'
+import { LocalScenesController } from './local-scenes-controller.cjs'
 import { TargetExecutionController } from './targets/target-controller.cjs'
 import type { LocalArtifactReadRequest, LocalArtifactReadResult } from '../../src/shared/ipc/artifact-contract.js'
 
@@ -68,6 +70,7 @@ interface DesktopAutomationControllerOptions {
   automationEnabled: boolean
   controlApiBase: string
   runtimeRoot: string
+  deviceId?: string
   getWindow: () => BrowserWindow | null | undefined
   getDefaultFreightWorkbookPath: () => string
   registerTrustedHandle: TrustedHandleRegistrar
@@ -110,6 +113,7 @@ export class DesktopAutomationController {
   private singleRunActive = false
   private singleStartInFlight = false
   private readonly reportOutbox: ExecutionReportOutbox
+  private readonly staffReportOutbox: ExecutionReportOutbox
   private readonly artifacts: LocalArtifactService
   private readonly recovery: RecoveryStore
   private singleRecovery: { owner: string; id: string; sender: WebContents; files: LocalFileSnapshot } | null = null
@@ -123,9 +127,26 @@ export class DesktopAutomationController {
   private runnerSerial = 0
   private sessionRevocation: Promise<void> | null = null
   private readonly targets: TargetExecutionController
+  private readonly scenarioPolicy: ScenarioPolicyClient
+  private readonly localScenes: LocalScenesController
 
   constructor(options: DesktopAutomationControllerOptions) {
     this.options = options
+    this.scenarioPolicy = new ScenarioPolicyClient(async token => {
+      const response = await net.fetch(`${options.controlApiBase}/api/scenarios/me`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Toolbox-Version': app.getVersion() }, signal: AbortSignal.timeout(15_000),
+      })
+      const envelope = asRecord(await response.json())
+      if (!response.ok || envelope.success !== true) throw new Error('SCENARIO_POLICY_UNAVAILABLE: 无法验证管理员场景指派，未开放运行')
+      return envelope.data
+    }, () => {
+      this.targets?.close()
+      this.browserSessions.revoke()
+      void this.batchController?.cancelActiveForWindowClose().catch(() => undefined)
+      void this.cancelSingle().catch(() => undefined)
+    })
+    this.localScenes = new LocalScenesController({ register: options.registerAutomationHandle, getWindow: options.getWindow,
+      apiBase: options.controlApiBase, deviceId: () => options.deviceId || '', hasActiveWork: () => this.hasActiveWork() })
     this.executionLease = new ExecutionLease(options.onActivityChanged)
     this.recovery = new RecoveryStore(join(app.getPath('userData'), 'recovery-metadata'))
     this.fileInputs = new FileInputController(options.getWindow)
@@ -136,9 +157,28 @@ export class DesktopAutomationController {
       version: app.getVersion(),
       codec: safeStorage,
     })
+    this.staffReportOutbox = new ExecutionReportOutbox({ directory: join(app.getPath('userData'), 'pending-staff-records'),
+      apiBase: options.controlApiBase, version: app.getVersion(), codec: safeStorage, reportPath: '/api/scenarios/staff/reports' })
     this.targets = new TargetExecutionController({
       register: options.registerAutomationHandle, lease: this.executionLease, reports: this.reportOutbox,
-      resolveSession: sender => this.resolveRecoverySession(sender),
+      staffReports: this.staffReportOutbox,
+      resolveSession: sender => this.resolveRecoverySession(sender, true),
+      borrowedWindow: owner => {
+        if (owner.kind !== 'staff') return undefined
+        const scene = this.localScenes.selectedScene()
+        if (scene.accountSlot !== owner.accountSlot) throw new Error('管理员账号现场已经切换')
+        return this.localScenes.targetWindow(scene.accountSlot)
+      },
+      createBorrowedWindow: owner => {
+        if (owner.kind !== 'staff' || !owner.accountSlot) throw new Error('独立管理员现场缺失')
+        return this.localScenes.targetWindow(owner.accountSlot, true)
+      },
+      beforeCustomerOpen: () => { this.embeddedBrowserHost.release(); this.browserSessions.revoke() },
+      assertScenario: (url, mode) => {
+        this.scenarioPolicy.assertAllowed(url)
+        if (mode && mode !== this.scenarioPolicy.current().mode) throw new Error('SCENARIO_MODE_ASSIGNED: 场景由管理员指定，不能自行切换')
+      },
+      scenarioAllows: url => this.scenarioPolicy.allows(url),
       directory: join(app.getPath('userData'), 'target-operations'), apiBase: options.controlApiBase,
       publicKeyB64: toolSigningConfig.publicKeyB64, signingKeyId: toolSigningConfig.keyId,
     })
@@ -149,7 +189,11 @@ export class DesktopAutomationController {
       onActivityChanged: options.onActivityChanged,
       showNotification: options.showNotification,
       recoveryStore: this.recovery,
-      resolveOwner: (sender: WebContents) => this.resolveRecoveryOwner(sender),
+      resolveOwner: async (sender: WebContents) => {
+        const owner = await this.resolveRecoveryOwner(sender)
+        if (this.scenarioPolicy.current().mode === 'competition') throw new Error('SCENARIO_LEGACY_BLOCKED: 比赛模式不能使用旧批量入口')
+        return owner
+      },
       validateUpload: (sender: WebContents, filePath: unknown) => this.fileInputs.validateUpload(sender, filePath),
       executionLease: this.executionLease,
       reportOutbox: this.reportOutbox,
@@ -157,11 +201,12 @@ export class DesktopAutomationController {
   }
 
   registerIpc(): void {
-    if (this.options.automationEnabled) this.reportOutbox.start()
+    if (this.options.automationEnabled) { this.reportOutbox.start(); this.staffReportOutbox.start() }
     this.registerToolLaunchIpc()
     this.registerSingleRunIpc()
     this.registerRecoveryIpc()
     this.targets.register()
+    this.localScenes.register()
     this.fileInputs.register(this.options.registerAutomationHandle)
     this.options.registerAutomationHandle('artifacts:read', (event: IpcMainInvokeEvent, request: LocalArtifactReadRequest): LocalArtifactReadResult | Promise<LocalArtifactReadResult> => {
       if (this.pendingArtifactOwner?.owner === event.sender) {
@@ -176,6 +221,27 @@ export class DesktopAutomationController {
 
   selectedItemId(): string | null {
     return this.batchController.selectedItemId()
+  }
+
+  mayNavigateRuntime(url: string): boolean {
+    return url === 'about:blank' || this.scenarioPolicy.allows(url)
+  }
+  toolExecutionLease(): ExecutionLease { return this.executionLease }
+
+  async checkExternalNavigation(sender: WebContents, url: string, expectedSession?: { owner: string; token: string }): Promise<boolean> {
+    const token = await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) as unknown
+    if (expectedSession && token !== expectedSession.token) throw new Error('场景身份已变化')
+    if (typeof token !== 'string' || !token) return true // Public help before login.
+    const policy = await this.scenarioPolicy.refresh(token)
+    if (await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== token) throw new Error('场景身份已变化')
+    if (policy.status !== 'unassigned') this.scenarioPolicy.assertAllowed(url)
+    if (policy.mode === 'competition') {
+      // Keep subsequent redirects inside the same guarded Electron surface;
+      // opening the OS browser would lose the approved-origin boundary.
+      await this.targets.openAssignedUrl(sender, url, expectedSession?.owner)
+      return false
+    }
+    return true
   }
 
   activityState(): DesktopActivityState {
@@ -210,6 +276,8 @@ export class DesktopAutomationController {
 
   async cleanup(): Promise<void> {
     this.closing = true
+    this.scenarioPolicy.reset()
+    this.localScenes.dispose()
     this.targets.dispose()
     this.runnerEpoch += 1
     this.executionLease.close()
@@ -222,9 +290,10 @@ export class DesktopAutomationController {
     this.artifacts.clear()
     this.pendingArtifactOwner = null
     this.reportOutbox.dispose()
+    this.staffReportOutbox.dispose()
     this.embeddedBrowserHost.release()
     this.browserSessions.revoke()
-    const cleanupTasks: Promise<unknown>[] = [(async () => { await this.batchController.cleanup(); await this.reportOutbox.drain?.() })()]
+    const cleanupTasks: Promise<unknown>[] = [(async () => { await this.batchController.cleanup(); await this.reportOutbox.drain?.(); await this.staffReportOutbox.drain() })()]
     if (this.runner) cleanupTasks.push(this.runner.stop())
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -388,7 +457,10 @@ export class DesktopAutomationController {
 
       if (!launchData.token && typeof data.launchUrl === 'string') {
         if (this.options.mayOpenExternalUrl(data.launchUrl)) {
-          await shell.openExternal(data.launchUrl)
+          let external: boolean
+          try { external = await this.checkExternalNavigation(event.sender, data.launchUrl) }
+          catch { event.sender.send('launch-tool-error', { message: '当前场景不允许打开此链接' }); return }
+          if (external) await shell.openExternal(data.launchUrl)
           event.sender.send('launch-tool-success', { toolName })
           return
         }
@@ -471,6 +543,10 @@ export class DesktopAutomationController {
         // Renderer keys are display hints only. The verified control catalog is
         // authoritative, including when the renderer omits or empties its list.
         const session = tool.executionMode === 'live' ? await this.resolveRecoverySession(event.sender) : null
+        if (session) {
+          if (this.scenarioPolicy.current().mode === 'competition') throw new Error('SCENARIO_LEGACY_BLOCKED: 比赛动作尚未验收，不能通过旧入口执行')
+          this.scenarioPolicy.assertAllowed(String(tool.targetUrl || ''))
+        }
         this.assertEpoch(epoch)
         if (session && this.embeddedBrowserHost.isReady() && !this.browserSessions.matches(session.owner, tool.platformKey === 'aliexpress' ? 'aliexpress' : 'amazon')) {
           throw new Error('BROWSER_OWNER_CHANGED: 请重新打开工具，以隔离当前平台账号。')
@@ -521,6 +597,9 @@ export class DesktopAutomationController {
       if (this.sessionRevocation) await this.sessionRevocation
       const tool = asRecord(rawTool)
       if (!tool.id) throw new Error('工具启动数据不完整')
+      await this.resolveRecoverySession(event.sender)
+      if (this.scenarioPolicy.current().mode === 'competition') throw new Error('SCENARIO_LEGACY_BLOCKED: 请使用指定的受控比赛入口')
+      this.scenarioPolicy.assertAllowed(String(tool.targetUrl || ''))
       this.assertEpoch(this.runnerEpoch)
       if (this.singleRunActive) throw new Error('RUN_ALREADY_ACTIVE: 请先结束当前任务')
       const permit = this.executionLease.acquire()
@@ -555,6 +634,7 @@ export class DesktopAutomationController {
       let epoch = this.runnerEpoch
       this.assertEpoch(epoch)
       const owner = await this.resolveRecoveryOwner(event.sender)
+      if (this.scenarioPolicy.current().mode === 'competition') throw new Error('SCENARIO_LEGACY_BLOCKED: 请使用指定的受控比赛入口')
       this.assertEpoch(epoch)
       if (!this.browserSessions.matches(owner, platform)) {
         // Changing a verified owner retires old browser scenes. Opening another
@@ -569,6 +649,8 @@ export class DesktopAutomationController {
       this.assertEpoch(epoch)
       if (await this.resolveRecoveryOwner(event.sender) !== owner) throw new Error('授权已变化，请重新打开工具')
       this.assertEpoch(epoch)
+      if (this.executionLease.busy) throw new Error('RUN_ALREADY_ACTIVE: 请先结束当前任务再切换工具现场')
+      this.targets.close()
       return this.browserSessions.prepare(owner, platform)
     })
     register('automation:register-browser', async (event: IpcMainInvokeEvent, webContentsId: unknown) => {
@@ -587,7 +669,7 @@ export class DesktopAutomationController {
     register('automation:unregister-browser', () => this.embeddedBrowserHost.release())
   }
 
-  private async resolveRecoverySession(sender: WebContents): Promise<{ owner: string; token: string }> {
+  private async resolveRecoverySession(sender: WebContents, allowStaff = false): Promise<import('./targets/target-controller.cjs').TargetSessionOwner> {
     const token: unknown = await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false)
     if (typeof token !== 'string' || !token) throw new Error('请先登录有效授权后查看本机恢复记录。')
     const response = await net.fetch(`${this.options.controlApiBase}/api/auth/me`, {
@@ -595,11 +677,20 @@ export class DesktopAutomationController {
     })
     const envelope = asRecord(await response.json())
     const user = asRecord(envelope.data)
-    if (!response.ok || envelope.success !== true || user.role !== 'user' || !user.user_id) throw new Error('恢复权限验证失败，请重新登录。')
+    const staff = allowStaff && ['super_admin', 'operator', 'support'].includes(String(user.role)) && Boolean(user.staff_id)
+    if (!response.ok || envelope.success !== true || (user.role !== 'user' && !staff) || !user.user_id) throw new Error('恢复权限验证失败，请重新登录。')
+    const policy = await this.scenarioPolicy.refresh(token)
+    if (policy.principal.kind !== (staff ? 'staff' : 'customer') || policy.principal.id !== String(user.user_id)) throw new Error('场景身份不匹配')
     if (await sender.executeJavaScript('sessionStorage.getItem("toolbox_token")', false) !== token) throw new Error('授权在验证期间已变化，请重新打开工具。')
     // Read claims only after this exact token was accepted by the control API.
     let claims: UnknownRecord = {}
     try { claims = asRecord(JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'))) } catch { /* opaque tokens use verified profile */ }
+    if (staff) {
+      const scene = this.localScenes.selectedScene()
+      if (scene.owner !== `staff:${user.user_id}`) throw new Error('账号现场不属于当前管理员')
+      return { owner: recoveryOwnerHash([this.options.controlApiBase, 'staff', user.user_id, this.options.deviceId, scene.accountSlot]),
+        token, kind: 'staff', deviceId: this.options.deviceId, accountSlot: scene.accountSlot }
+    }
     return { owner: recoveryOwnerHash([this.options.controlApiBase, user.user_id, claims.auth_code_id || null, claims.device_id || user.device_id || null]), token }
   }
 
@@ -631,6 +722,8 @@ export class DesktopAutomationController {
   }
 
   private async revokeSession(): Promise<void> {
+      this.scenarioPolicy.reset()
+      this.localScenes.dispose()
       this.targets.close()
       this.runnerEpoch += 1
       // Revokes the old owner's permit but preserves target host-drain fences;
@@ -677,9 +770,11 @@ export class DesktopAutomationController {
       })
     })
     register('recovery:open-platform', async (event: IpcMainInvokeEvent, id: string) => {
-      const origin = this.recovery.origin(await this.resolveRecoveryOwner(event.sender), id)
+      const owner = await this.resolveRecoverySession(event.sender)
+      const origin = this.recovery.origin(owner.owner, id)
       if (!origin || !this.options.mayOpenExternalUrl(origin)) throw new Error('记录未保存可安全打开的平台入口，请自行打开平台核对。')
-      await shell.openExternal(origin)
+      this.scenarioPolicy.assertAllowed(origin)
+      if (await this.checkExternalNavigation(event.sender, origin, owner)) await shell.openExternal(origin)
     })
     register('recovery:export', async (event: IpcMainInvokeEvent, query: RecoveryQuery) => {
       const owner = await this.resolveRecoveryOwner(event.sender)

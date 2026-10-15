@@ -5,7 +5,7 @@ import AdminSectionNav from '@/components/AdminSectionNav.vue'
 
 let router: Router
 const wrappers: VueWrapper[] = []
-const paths = ['dashboard', 'authcodes', 'business-access', 'orders', 'profit', 'expenses', 'users', 'feedback', 'knowledge', 'ai-chat', 'announcements', 'target-reviews', 'updates', 'freight-rates', 'settings', 'staff-accounts', 'agency']
+const paths = ['dashboard', 'authcodes', 'business-access', 'orders', 'profit', 'expenses', 'users', 'feedback', 'knowledge', 'ai-chat', 'announcements', 'target-reviews', 'updates', 'freight-rates', 'settings', 'staff-accounts', 'agency', 'commercial', 'team-ledger', 'scenarios', 'local-runtime']
 async function render(path: string, role = 'super_admin') {
   sessionStorage.setItem('toolbox_role', role)
   await router.push(path)
@@ -25,7 +25,7 @@ describe('AdminSectionNav', () => {
   it('only displays the current area and preserves direct link context on the active item', async () => {
     const wrapper = await render('/admin/authcodes?status=expired&auth_code_id=20')
     expect(wrapper.get('nav').attributes('aria-label')).toBe('客户与授权页面')
-    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['用户管理', '授权码管理'])
+    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['用户管理', '本机多账号现场', '授权码管理'])
     await wrapper.get('[aria-current="page"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ status: 'expired', auth_code_id: '20' })
@@ -40,7 +40,7 @@ describe('AdminSectionNav', () => {
   })
   it('places agency commission in finance while keeping the original permissions', async () => {
     const wrapper = await render('/admin/agency?section=commission')
-    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['分润管理', '公账支出', '代理返佣'])
+    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['分润管理', '成员结算台账', '公账支出', '代理返佣'])
     expect(wrapper.get('[aria-current="page"]').text()).toBe('代理返佣')
   })
   it.each(['operator', 'support'])('hides owner-only agency support from %s', async role => {
@@ -58,6 +58,6 @@ describe('AdminSectionNav', () => {
   it('uses native links in a focusable narrow-window scroll region', async () => {
     const wrapper = await render('/admin/settings')
     expect(wrapper.get('nav').attributes('tabindex')).toBe('0')
-    expect(wrapper.findAll('a')).toHaveLength(7)
+    expect(wrapper.findAll('a')).toHaveLength(8)
   })
 })

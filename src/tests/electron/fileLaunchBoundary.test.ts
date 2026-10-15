@@ -4,7 +4,6 @@ import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import { runInNewContext } from 'node:vm'
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent, WebContents } from 'electron'
 import type { DesktopAutomationController as ControllerType } from '../../../electron/automation/desktop-automation-controller.cjs'
 import type { FileInputController as FilesType } from '../../../electron/automation/file-input-controller.cjs'
@@ -12,18 +11,25 @@ import type { FileInputController as FilesType } from '../../../electron/automat
 type RecordValue = Record<string, unknown>
 type RunnerCallbacks = { onEvent: (event: RecordValue) => void; onHostRequest: (action: string, payload: RecordValue) => Promise<unknown> }
 const roots: string[] = []
+const controllers: ControllerType[] = []
 const localRequire = createRequire(import.meta.url)
 const { createTrustedIpcRegistrar } = localRequire(resolve('dist-electron/electron/ipc/trusted-ipc.cjs')) as typeof import('../../../electron/ipc/trusted-ipc.cjs')
 
 function load<T>(file: string, mocks: RecordValue): T {
-  const path = resolve('dist-electron/electron/automation', file)
-  const require = createRequire(path)
-  const module = { exports: {} }
-  runInNewContext(readFileSync(path, 'utf8'), {
-    require: (name: string) => Object.hasOwn(mocks, name) ? mocks[name] : require(name),
-    module, exports: module.exports, __dirname: resolve(path, '..'), Buffer, process, console, setTimeout, clearTimeout, AbortSignal,
-  })
-  return module.exports as T
+  const modules = new Map<string, { exports: unknown }>()
+  const loadModule = (path: string): unknown => {
+    if (modules.has(path)) return modules.get(path)!.exports
+    const require = createRequire(path)
+    const module = { exports: {} }; modules.set(path, module)
+    const resolver = (name: string): unknown => Object.hasOwn(mocks, name) ? mocks[name]
+      : name.startsWith('.') && name.endsWith('.cjs') ? loadModule(require.resolve(name)) : require(name)
+    // Real policy/session dependencies share the mock Electron API without
+    // creating cross-realm records for the production schemas.
+    new Function('require', 'module', 'exports', '__dirname', readFileSync(path, 'utf8'))(
+      resolver, module, module.exports, resolve(path, '..'))
+    return module.exports
+  }
+  return loadModule(resolve('dist-electron/electron/automation', file)) as T
 }
 
 function setup(schema: RecordValue[] = [{ key: 'document', type: 'file', required: true }]) {
@@ -42,10 +48,22 @@ function setup(schema: RecordValue[] = [{ key: 'document', type: 'file', require
     getWindow: () => window, automationEnabled: true, allowDevelopmentOrigin: false, errorMessage: () => 'safe error',
   })
   const dialog = vi.fn(async () => ({ canceled: false, filePaths: [file] }))
-  const fetch = vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith('/api/auth/me')
-    ? { success: true, data: { role: 'user', user_id: 1, device_id: 'device' } }
-    : [{ id: 'file_tool', single_input_schema: schema }] }))
-  const electron = { app: { isPackaged: true, getPath: () => root, getVersion: () => 'test' }, dialog: { showOpenDialog: dialog }, net: { fetch }, safeStorage: {}, shell: {}, webContents: {} }
+  const fetch = vi.fn(async (url: string) => {
+    if (url.endsWith('/api/auth/me')) return { ok: true, json: async () => ({ success: true, data: { role: 'user', user_id: 1, device_id: 'device' } }) }
+    if (url.endsWith('/api/scenarios/me')) return { ok: true, json: async () => ({ success: true, data: {
+      schemaVersion: 1, principal: { kind: 'customer', id: '1' }, revision: 'fixture-unassigned', status: 'unassigned', mode: 'training',
+      entryUrl: null, allowedOrigins: [], maxScenes: 1, checkedAt: new Date().toISOString(), expiresAt: null, refreshAfterSeconds: 30,
+    } }) }
+    if (url.endsWith('/api/tools')) return { ok: true, json: async () => [{ id: 'file_tool', single_input_schema: schema }] }
+    throw new Error(`Unexpected fixture request: ${url}`)
+  })
+  const sessions = new Map<string, { clearStorageData: () => Promise<void> }>()
+  const electron = { app: { isPackaged: true, getPath: () => root, getVersion: () => 'test' }, dialog: { showOpenDialog: dialog }, net: { fetch }, safeStorage: {}, shell: {}, webContents: {},
+    session: { fromPartition: (partition: string) => {
+      if (!sessions.has(partition)) sessions.set(partition, { clearStorageData: vi.fn(async () => {}) })
+      return sessions.get(partition)!
+    } },
+  }
   const fs = localRequire('node:fs/promises') as typeof import('node:fs/promises')
   const { FileInputController } = load<{ FileInputController: typeof FilesType }>('file-input-controller.cjs', { electron,
     'node:fs/promises': { ...fs, open: (...args: Parameters<typeof fs.open>) => unreadable ? Promise.reject(new Error('EACCES')) : fs.open(...args) } })
@@ -55,25 +73,27 @@ function setup(schema: RecordValue[] = [{ key: 'document', type: 'file', require
   const { DesktopAutomationController } = load<{ DesktopAutomationController: typeof ControllerType }>('desktop-automation-controller.cjs', {
     electron, './file-input-controller.cjs': { FileInputController },
     './embedded-browser-host.cjs': { EmbeddedBrowserHost: class { isReady() { return true } request = hostAction; release() {} } },
-    './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} } },
-    './local-artifact-service.cjs': { LocalArtifactService: class { begin() { return 1 } registerRun() {} observe() {} } },
-    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
-    './runner-client.cjs': { RunnerClient: class { constructor(value: RunnerCallbacks) { callbacks = value } start = start } },
+    './desktop-batch-controller.cjs': { DesktopBatchController: class { registerIpc() {} isActive() { return false } async cleanup() {} async revokeSession() {} async cancelActiveForWindowClose() {} } },
+    './local-artifact-service.cjs': { LocalArtifactService: class { begin() { return 1 } registerRun() {} observe() {} clear() {} } },
+    './execution-report-outbox.cjs': { ExecutionReportOutbox: class { start() {} dispose() {} async drain() {} async reserve() { return 'fixture-reservation' } async releaseReservation() {} } },
+    './runner-client.cjs': { RunnerClient: class { constructor(value: RunnerCallbacks) { callbacks = value } start = start; async stop() {} } },
   })
   const controller = new DesktopAutomationController({ automationEnabled: true, controlApiBase: 'https://control.invalid', runtimeRoot: root,
     getWindow: () => window, getDefaultFreightWorkbookPath: () => 'unused', registerTrustedHandle: registrar.handle,
     registerAutomationHandle: registrar.automationHandle, registerTrustedOn: registrar.on, mayOpenExternalUrl: () => false, onActivityChanged: vi.fn(), showNotification: vi.fn() })
+  controllers.push(controller)
   const { recoveryOwnerHash } = localRequire(resolve('dist-electron/electron/automation/recovery-store.cjs'))
   controller.browserSessions.prepare(recoveryOwnerHash(['https://control.invalid', 1, null, 'device']), 'amazon')
   controller.registerIpc()
   const event = { sender, senderFrame: { url: sender.getURL() } } as IpcMainInvokeEvent
   const invoke = async (channel: string, request?: unknown) => handlers.get(channel)!(event, ...(request === undefined ? [] : [request]))
-  const launch = (context: RecordValue = {}) => invoke('automation:start', { id: 'file_tool', executionMode: 'live', executionContext: { input: { document: file }, ...context } })
+  const launch = (context: RecordValue = {}) => invoke('automation:start', { id: 'file_tool', executionMode: 'live', targetUrl: 'https://fixture.test/tool', executionContext: { input: { document: file }, ...context } })
   return { file, start, fetch, hostAction, invoke, launch, setUnreadable: (value: boolean) => { unreadable = value },
     changeToken: () => { token = 'another-token' }, runner: () => callbacks! }
 }
 
-afterEach(() => {
+afterEach(async () => {
+  for (const controller of controllers.splice(0)) await controller.cleanup()
   for (const root of roots.splice(0)) {
     const suffix = relative(resolve(tmpdir()), resolve(root))
     if (!suffix.startsWith('kst-file-launch-') || suffix.startsWith('..') || isAbsolute(suffix)) throw new Error('Unsafe test cleanup')
@@ -86,7 +106,7 @@ describe('authoritative native file launch boundary', () => {
     const test = setup()
     await expect(test.launch(context)).rejects.toThrow('LOCAL_FILE_UNREADABLE')
     expect(test.start).not.toHaveBeenCalled()
-    expect(test.fetch.mock.calls.map(call => call[0])).toEqual(['https://control.invalid/api/auth/me', 'https://control.invalid/api/tools'])
+    expect(test.fetch.mock.calls.map(call => call[0])).toEqual(['https://control.invalid/api/auth/me', 'https://control.invalid/api/scenarios/me', 'https://control.invalid/api/tools'])
   })
   it('only a native selected file can start, even when keys were omitted', async () => {
     const test = setup()
@@ -105,7 +125,7 @@ describe('authoritative native file launch boundary', () => {
   it('rejects missing required values and unavailable/unknown catalog definitions', async () => {
     const test = setup()
     await expect(test.launch({ input: {} })).rejects.toThrow('LOCAL_FILE_REQUIRED')
-    await expect(test.invoke('automation:start', { id: 'unknown', executionMode: 'live' })).rejects.toThrow('TOOL_SCHEMA_UNAVAILABLE')
+    await expect(test.invoke('automation:start', { id: 'unknown', executionMode: 'live', targetUrl: 'https://fixture.test/tool' })).rejects.toThrow('TOOL_SCHEMA_UNAVAILABLE')
     expect(test.start).not.toHaveBeenCalled()
   })
   it('revalidates native selection on both standalone and embedded upload host actions', async () => {

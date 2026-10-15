@@ -30,22 +30,28 @@ interface MainWindowOptions {
   cancelActiveWork: () => Promise<void>
   approveWebview?: (partition: string | undefined, preferences: WebPreferences) => boolean
   webviewAttached?: (guest: WebContents) => void
+  mayNavigateRuntime?: (url: string) => boolean
+  checkExternalNavigation?: (url: string) => Promise<boolean>
   onClosed: () => void
 }
 
 /** Applies the same navigation policy to every webview created by Electron. */
 export function installWebContentsNavigationPolicy(
   mayOpenExternalUrl: (url: string) => boolean,
+  mayNavigateRuntime: (url: string) => boolean = () => true,
 ): void {
   app.on('web-contents-created', (_event: Event, contents: WebContents) => {
     if (contents.getType() !== 'webview') return
     const keepWebviewOnHttps = (event: Event, url: string): void => {
-      if (!isAllowedWebviewUrl(url)) event.preventDefault()
+      if (!isAllowedWebviewUrl(url) || !mayNavigateRuntime(url)) event.preventDefault()
     }
     contents.on('will-navigate', keepWebviewOnHttps)
     contents.on('will-redirect', keepWebviewOnHttps)
+    contents.on('will-frame-navigate', event => {
+      if (!isAllowedWebviewUrl(event.url) || !mayNavigateRuntime(event.url)) event.preventDefault()
+    })
     contents.setWindowOpenHandler(({ url }) => {
-      if (mayOpenExternalUrl(url)) void shell.openExternal(url)
+      if (mayOpenExternalUrl(url) && mayNavigateRuntime(url)) void contents.loadURL(url).catch(() => undefined)
       return { action: 'deny' }
     })
   })
@@ -103,13 +109,17 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
   window.webContents.on('will-navigate', keepMainWindowOnApp)
   window.webContents.on('will-redirect', keepMainWindowOnApp)
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (options.mayOpenExternalUrl(url)) void shell.openExternal(url)
+    if (options.mayOpenExternalUrl(url)) {
+      void (options.checkExternalNavigation?.(url) ?? Promise.resolve(true))
+        .then(allowed => { if (allowed) return shell.openExternal(url) }).catch(() => undefined)
+    }
     return { action: 'deny' }
   })
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (
       !options.automationEnabled
       || !isAllowedWebviewUrl(params.src || 'about:blank')
+      || !(options.mayNavigateRuntime?.(params.src || 'about:blank') ?? true)
       || Boolean(params.preload)
       || !(options.approveWebview ? options.approveWebview(params.partition, webPreferences) : isAllowedWebviewPartition(params.partition))
     ) {

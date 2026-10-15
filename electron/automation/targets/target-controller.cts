@@ -19,14 +19,24 @@ import { TargetRunnerClient } from './target-runner-client.cjs'
 import type { TargetBrowserPort, BrowserSnapshot } from './contracts.cjs'
 
 const { verifyToolManifest } = require('../manifest-verifier.cjs') as { verifyToolManifest(tool: unknown, key: string): { verified: boolean } }
-type SessionOwner = { owner: string; token: string }
+export type TargetSessionOwner = { owner: string; token: string; kind?: 'customer' | 'staff'; deviceId?: string; accountSlot?: string }
+type SessionOwner = TargetSessionOwner
+export type TargetWindow = Pick<BrowserWindow, 'webContents' | 'isDestroyed' | 'show' | 'focus' | 'destroy' | 'loadURL'> & {
+  on(event: 'focus' | 'closed', listener: () => void): unknown
+}
 interface Options {
   register: TrustedHandleRegistrar; lease: ExecutionLease; reports: ExecutionReportOutbox
   resolveSession(sender: WebContents): Promise<SessionOwner>
   directory: string; apiBase: string; publicKeyB64: string; signingKeyId: string
+  assertScenario?(url: string, mode?: 'training' | 'competition'): void
+  scenarioAllows?(url: string): boolean
+  borrowedWindow?(owner: SessionOwner): TargetWindow | undefined
+  createBorrowedWindow?(owner: SessionOwner): TargetWindow
+  beforeCustomerOpen?(): void
+  staffReports?: ExecutionReportOutbox
 }
 interface Site {
-  owner: string; key: string; epoch: number; active: BrowserWindow; windows: Set<BrowserWindow>
+  owner: string; key: string; epoch: number; active: TargetWindow; windows: Set<TargetWindow>
   signed: SignedTargetProfile | null; initialOrigin: string; port?: TargetBrowserPort; portOrigin?: string
   entryUrl: string; profileId?: string
   navigation: OwnedNavigationScope; navigationBusy: boolean
@@ -34,6 +44,7 @@ interface Site {
   courseContext?: { courseId: string; companyId: string; shopId: string; userId: string }
   verifiedRole?: string
   loginFailure?: string
+  clearSession?: () => Promise<void>
 }
 interface PendingPlan { owner: string; siteEpoch: number; plan: RunPlan; expected: ProbeObservation; toolId: string | number; enabled: boolean }
 interface OperationScope { permit: ExecutionPermit; epoch: number; drain?: Promise<void> }
@@ -56,9 +67,15 @@ export class TargetExecutionController {
   private runner: TargetRunnerClient | null = null
   private readonly operations = new AsyncLocalStorage<OperationScope>()
   private readonly configuredSessions = new WeakSet<Electron.Session>()
-  private readonly windowLoads = new WeakMap<BrowserWindow, Promise<void>>()
+  private readonly windowLoads = new WeakMap<TargetWindow, Promise<void>>()
   constructor(private readonly options: Options) {}
   private journal(): TargetOperationJournal { return this.store ??= new TargetOperationJournal(this.options.directory) }
+  openAssignedUrl(sender: WebContents, entryUrl: string, expectedOwner?: string): Promise<void> {
+    return this.exclusive(sender, owner => {
+      if (expectedOwner && owner.owner !== expectedOwner) throw targetError('TARGET_SESSION_REVOKED', '恢复记录所属账号已经变化')
+      return this.open(owner, { entryUrl })
+    })
+  }
   register(): void {
     const on = this.options.register
     on('targets:open', (event, request: TargetOpenRequest) => this.exclusive(event.sender, owner => this.open(owner, request)))
@@ -133,6 +150,7 @@ export class TargetExecutionController {
     return signed
   }
   private async open(owner: SessionOwner, request: TargetOpenRequest, forceRefresh = false): Promise<void> {
+    this.options.assertScenario?.(request.entryUrl)
     const url = checkedUrl(request.entryUrl)
     const metadata = request.profileId ? await this.profile(owner.token, request.profileId, true) : null
     if (metadata?.profile.reviewStatus === 'pending' && redactedUrl(request.entryUrl) !== metadata.profile.entryUrl) throw targetError('TARGET_ROUTE_BLOCKED', '待审核入口与输入网址不一致')
@@ -152,12 +170,13 @@ export class TargetExecutionController {
     }
     const operation = this.assertOperation()
     this.close()
+    if (owner.kind !== 'staff') this.options.beforeCustomerOpen?.()
     const epoch = ++this.epoch
     operation.epoch = epoch // This replacement was initiated by this owned open operation.
     // Approval changes the page policy, not the user's platform account. Keep
     // the same in-memory login when discovery becomes an approved profile,
     // while different control accounts and exact entry origins stay isolated.
-    const partition = `kst-target-${targetHash([owner.owner, url.origin])}`
+    const partition = `kst-target-${targetHash([owner.owner, url.origin, randomUUID()])}`
     const browserSession = session.fromPartition(partition)
     if (!this.configuredSessions.has(browserSession)) {
       browserSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
@@ -165,12 +184,27 @@ export class TargetExecutionController {
       browserSession.on('will-download', event => event.preventDefault())
       this.configuredSessions.add(browserSession)
     }
-    const createWindow = (target: string): BrowserWindow => {
-      const win = new BrowserWindow({ title: '课赛通 · 受控平台现场', width: 1280, height: 860, minWidth: 800, minHeight: 600, autoHideMenuBar: true,
-        webPreferences: { partition, sandbox: true, nodeIntegration: false, contextIsolation: true, webSecurity: true, devTools: false, navigateOnDragDrop: false } })
-      const mayNavigate = (raw: string): boolean => {
-        try { checkedUrl(raw); return !signed || routeAllowed(raw, signed.profile) } catch { return false }
+    const mayNavigate = (raw: string): boolean => {
+      try { checkedUrl(raw); return (this.options.scenarioAllows?.(raw) ?? true) && (!signed || routeAllowed(raw, signed.profile)) } catch { return false }
+    }
+    const handlePopup = (win: TargetWindow, details: Electron.HandlerDetails): Electron.WindowOpenHandlerResponse => {
+      if (!mayNavigate(details.url) || this.site?.epoch !== epoch) return { action: 'deny' }
+      const site = this.site
+      if (site.navigation.active) {
+        site.navigation.offer({ openerWebContentsId: win.webContents.id, referrerUrl: details.referrer?.url || '', url: details.url }, () => {
+          const child = createWindow(details.url); site.windows.add(child)
+          return { webContentsId: child.webContents.id, value: child, ready: this.windowLoads.get(child)!, currentUrl: () => child.webContents.getURL(), dispose: () => { if (!child.isDestroyed()) child.destroy() } }
+        })
+      } else if (!site.navigationBusy && !this.runner) {
+        const child = createWindow(details.url); this.site.windows.add(child)
+        this.site.port?.dispose(); this.site.port = undefined; this.site.active = child
+        void this.watchLogin(site, child).catch(() => { site.loginFailure = 'TARGET_LOGIN_OBSERVER_UNAVAILABLE' })
       }
+      return { action: 'deny' }
+    }
+    const createWindow = (target: string): TargetWindow => {
+      const win = owner.kind === 'staff' && this.options.createBorrowedWindow ? this.options.createBorrowedWindow(owner) : new BrowserWindow({ title: '课赛通 · 受控平台现场', width: 1280, height: 860, minWidth: 800, minHeight: 600, autoHideMenuBar: true,
+        webPreferences: { partition, sandbox: true, nodeIntegration: false, contextIsolation: true, webSecurity: true, devTools: false, navigateOnDragDrop: false } })
       // Before review this is a user-operated, isolated discovery window. No
       // business executor can run here. Approved windows enforce exact routes.
       win.webContents.on('will-navigate', (event, targetUrl) => {
@@ -180,22 +214,9 @@ export class TargetExecutionController {
         }
       })
       win.webContents.on('will-redirect', (event, targetUrl) => { if (!mayNavigate(targetUrl)) event.preventDefault() })
+      win.webContents.on('will-frame-navigate', event => { if (!mayNavigate(event.url)) event.preventDefault() })
       win.webContents.on('will-attach-webview', event => event.preventDefault())
-      win.webContents.setWindowOpenHandler(details => {
-        if (!mayNavigate(details.url) || this.site?.epoch !== epoch) return { action: 'deny' }
-        const site = this.site
-        if (site.navigation.active) {
-          site.navigation.offer({ openerWebContentsId: win.webContents.id, referrerUrl: details.referrer?.url || '', url: details.url }, () => {
-            const child = createWindow(details.url); site.windows.add(child)
-            return { webContentsId: child.webContents.id, value: child, ready: this.windowLoads.get(child)!, currentUrl: () => child.webContents.getURL(), dispose: () => { if (!child.isDestroyed()) child.destroy() } }
-          })
-        } else if (!site.navigationBusy && !this.runner) {
-          const child = createWindow(details.url); this.site.windows.add(child)
-          this.site.port?.dispose(); this.site.port = undefined; this.site.active = child
-          void this.watchLogin(site, child).catch(() => { site.loginFailure = 'TARGET_LOGIN_OBSERVER_UNAVAILABLE' })
-        }
-        return { action: 'deny' }
-      })
+      win.webContents.setWindowOpenHandler(details => handlePopup(win, details))
       win.on('focus', () => { if (this.site?.epoch === epoch && this.site.active !== win && !this.runner && !this.site.navigationBusy) {
         this.site.port?.dispose(); this.site.port = undefined; this.site.active = win
         const site = this.site; void this.watchLogin(site, win).catch(() => { site.loginFailure = 'TARGET_LOGIN_OBSERVER_UNAVAILABLE' })
@@ -211,16 +232,28 @@ export class TargetExecutionController {
       void loaded.catch(() => undefined)
       return win
     }
-    const active = createWindow(url.href)
+    const borrowed = this.options.borrowedWindow?.(owner)
+    if (borrowed && (signed ? !routeAllowed(borrowed.webContents.getURL(), signed.profile) : checkedUrl(borrowed.webContents.getURL()).origin !== url.origin)) throw targetError('TARGET_SCENE_MISMATCH', '当前账号现场与选中工具入口不属于同一审核范围')
+    const active = borrowed || createWindow(url.href)
+    if (borrowed) {
+      if (forceRefresh) {
+        await borrowed.webContents.session.clearStorageData()
+        this.assertOperation()
+        await borrowed.loadURL(url.href)
+      }
+      this.windowLoads.set(borrowed, Promise.resolve())
+      borrowed.webContents.setWindowOpenHandler(details => handlePopup(borrowed, details))
+    }
     this.site = { owner: owner.owner, key, epoch, active, windows: new Set([active]), signed, initialOrigin: url.origin, entryUrl: signed?.profile.entryUrl || url.href, profileId: request.profileId,
-      navigation: new OwnedNavigationScope(() => { this.assertOperation(); if (this.site?.epoch !== epoch) throw targetError('TARGET_CONTEXT_CHANGED', '窗口切换期间现场已变更') }), navigationBusy: false }
+      navigation: new OwnedNavigationScope(() => { this.assertOperation(); if (this.site?.epoch !== epoch) throw targetError('TARGET_CONTEXT_CHANGED', '窗口切换期间现场已变更') }), navigationBusy: false,
+      ...(!borrowed ? { clearSession: () => browserSession.clearStorageData() } : {}) }
     const site = this.site
     await this.windowLoads.get(active)
     this.assertOperation()
     await this.watchLogin(site, active)
     this.assertOperation()
   }
-  private async watchLogin(site: Site, active: BrowserWindow): Promise<void> {
+  private async watchLogin(site: Site, active: TargetWindow): Promise<void> {
     await this.windowLoads.get(active)
     if (this.site !== site || site.active !== active || active.isDestroyed()) return
     const observerPort = this.port(site.owner, true) as OwnedWebContentsPort
@@ -258,6 +291,7 @@ export class TargetExecutionController {
         allowedOrigins: site.signed ? site.signed.profile.allowedRoutes.map(r => r.origin) : [current.origin],
         assertOwnedSession: () => {
           this.assertOperation()
+          this.options.assertScenario?.(active.webContents.getURL())
           if (this.site !== site || site.active !== active || active.isDestroyed()) throw targetError('TARGET_CONTEXT_CHANGED', '平台会话已变化')
           if (site.signed && !routeAllowed(active.webContents.getURL(), site.signed.profile)) throw targetError('TARGET_ROUTE_BLOCKED', '页面已离开审核范围')
         },
@@ -333,7 +367,7 @@ export class TargetExecutionController {
         const seller = { frameCss: 'iframe[src*="CompanySellerAmazonIndex"]', css: 'div.divbtn03.AmazonCon', exactText: '亚马逊卖家后台' }
         await page().waitForControl(seller)
         const oldPort = page(); const source = await oldPort.resolveNavigationSource(seller)
-        const handoff = await site.navigation.run<BrowserWindow>(source, { origin, path: '/ECrossAmazon/SellerIndex' }, () => oldPort.click(seller), async child => {
+        const handoff = await site.navigation.run<TargetWindow>(source, { origin, path: '/ECrossAmazon/SellerIndex' }, () => oldPort.click(seller), async child => {
           const probePort = createOwnedWebContentsPort(child.webContents, { allowedOrigins: [origin], assertOwnedSession: () => {
             this.assertOperation()
             if (this.site !== site || !site.windows.has(child) || child.isDestroyed()) throw targetError('TARGET_CONTEXT_CHANGED', '关联窗口已失效')
@@ -363,6 +397,7 @@ export class TargetExecutionController {
     } finally { site.navigation.cancel(); site.navigationBusy = false }
   }
   private async preflight(owner: SessionOwner, request: TargetPreflightRequest): Promise<RunPlanPreview> {
+    this.options.assertScenario?.(this.requireSite(owner.owner).active.webContents.getURL(), request.scenario)
     const profile = await this.profile(owner.token, request.profileId)
     const site = this.requireSite(owner.owner)
     if (site.signed?.profile.id !== profile.profile.id || site.signed.profile.revision !== profile.profile.revision) throw targetError('TARGET_SESSION_PROFILE_MISMATCH', '请从已审核入口重新打开受控现场，再预检')
@@ -403,14 +438,20 @@ export class TargetExecutionController {
     const signed = await this.profile(owner.token, plan.context.profileId)
     assertPlanContext(plan, signed.profile, await probeContext(this.port(owner.owner)))
     const params = new URLSearchParams({ platform_key: 'amazon', execution_mode: 'single', idempotency_key: randomUUID(),
-      target_profile_id: signed.profile.id, target_profile_revision: String(signed.profile.revision), client_runner_api_version: String(TARGET_RUNNER_API_VERSION) })
-    const grant = grantSchema.parse(await this.api(owner.token, `/api/tools/${encodeURIComponent(String(toolId))}/launch-grant?${params}`, {})).launch_data
+      target_profile_id: signed.profile.id, target_profile_revision: String(signed.profile.revision), client_runner_api_version: String(TARGET_RUNNER_API_VERSION), course_ref: plan.context.courseRef })
+    const staff = owner.kind === 'staff'
+    const grantPath = staff ? '/api/scenarios/staff/tool-grants' : `/api/tools/${encodeURIComponent(String(toolId))}/launch-grant?${params}`
+    const grantRequest = staff ? { tool_id: String(toolId), target_profile_id: signed.profile.id, target_profile_revision: signed.profile.revision,
+      device_id: owner.deviceId, account_slot: owner.accountSlot, attempt_id: plan.id, context_hash: plan.contextHash, input_hash: plan.inputHash } : {}
+    const grant = grantSchema.parse(await this.api(owner.token, grantPath, grantRequest)).launch_data
     const grantProfile = verifyTargetProfile(grant.target_profile, this.options.publicKeyB64)
     const manifest = grant.tool_manifest
     if (String(grant.tool_id) !== String(toolId) || grant.signing_key_id !== this.options.signingKeyId || targetHash(grantProfile.profile) !== targetHash(signed.profile)
       || manifest.targetProfileId !== plan.context.profileId || manifest.targetProfileRevision !== plan.context.profileRevision || manifest.requiredCapability !== plan.capability) throw targetError('TARGET_GRANT_MISMATCH', '启动授权与本次入口、能力或版本不匹配')
     if (!verifyToolManifest({ id: grant.tool_id, launchGrant: { signatureRequired: true, toolManifest: manifest, toolSignature: grant.tool_signature, scriptKey: grant.script_key, toolVersion: grant.tool_version, runnerApiVersion: 2, signingKeyId: grant.signing_key_id } }, this.options.publicKeyB64).verified) throw targetError('TARGET_SIGNATURE_INVALID', '工具清单签名未通过')
-    const reservation = await this.options.reports.reserve(grant.token)
+    const reports = staff ? this.options.staffReports : this.options.reports
+    if (!reports) throw targetError('TARGET_STAFF_REPORTS_REQUIRED', '管理员执行回执通道尚未配置')
+    const reservation = await reports.reserve(grant.token)
     let receipt: OperationReceipt | null = null
     let outcome: OperationReceipt | null = null
     let runner: TargetRunnerClient | null = null
@@ -422,9 +463,12 @@ export class TargetExecutionController {
       if (executionFinished || runner?.isDraining) throw targetError('TARGET_RUNNER_CANCELLED', '本次执行已停止，迟到的页面回调不能再改写操作状态')
     }
     try {
-      const consumed = z.object({ valid: z.literal(true), tool_id: z.union([z.string(), z.number()]), platform_key: z.literal('amazon'), target_profile_id: z.string(), target_profile_revision: z.number(), required_capability: z.string() }).parse(await this.api(owner.token, '/api/tools/launch-grant/verify', { token: grant.token }))
+      const consumed = z.object({ valid: z.literal(true), tool_id: z.union([z.string(), z.number()]), platform_key: z.literal('amazon'), target_profile_id: z.string(), target_profile_revision: z.number(), required_capability: z.string(),
+        principal_kind: z.string().optional(), device_id: z.string().optional(), account_slot: z.string().optional(), context_hash: z.string().optional(), input_hash: z.string().optional(),
+      }).parse(await this.api(owner.token, staff ? '/api/scenarios/staff/tool-grants/verify' : '/api/tools/launch-grant/verify', { token: grant.token }))
       grantConsumed = true
       if (String(consumed.tool_id) !== String(toolId) || consumed.target_profile_id !== plan.context.profileId || consumed.target_profile_revision !== plan.context.profileRevision || consumed.required_capability !== plan.capability) throw targetError('TARGET_GRANT_MISMATCH', '已消费授权与当前任务不一致')
+      if (staff && (consumed.principal_kind !== 'staff' || consumed.device_id !== owner.deviceId || consumed.account_slot !== owner.accountSlot || consumed.context_hash !== plan.contextHash || consumed.input_hash !== plan.inputHash)) throw targetError('TARGET_GRANT_MISMATCH', '管理员授权与当前设备、账号槽位或计划不一致')
       assertPlanContext(plan, signed.profile, await probeContext(this.port(owner.owner)))
       receipt = this.journal().begin(owner.owner, plan)
       const id = receipt.id
@@ -482,7 +526,7 @@ export class TargetExecutionController {
       // storage failures retain the reservation, not an imaginary queued report.
       try {
         if (grantConsumed) {
-          const reported = await this.options.reports.submit({ token: grant.token, run_id: receipt?.id || plan.id, status: receipt?.status === 'verified' ? 'succeeded' : 'failed',
+          const reported = await reports.submit({ token: grant.token, run_id: receipt?.id || plan.id, status: receipt?.status === 'verified' ? 'succeeded' : 'failed',
             error_code: receipt?.errorCode || (receipt?.status === 'verified' ? null : 'TARGET_ATTEMPT_NOT_COMPLETED'), adapter_version: plan.adapterVersion,
             page_fingerprint: expected.pageFingerprint, page_changed: false, completed_steps: receipt?.status === 'verified' ? TEMPLATE_RECIPE.steps.length : 0 }, reservation)
           if (reported?.warning && outcome) outcome.checks.push('pending-control-report')
@@ -521,10 +565,12 @@ export class TargetExecutionController {
     // The original grant token is intentionally not persisted in the journal.
     // Reconciliation uses the current authenticated user session instead, so
     // recovery after restart can repair the control-plane result safely.
-    await this.api(owner.token, '/api/executions/reconcile', {
+    await this.api(owner.token, owner.kind === 'staff' ? '/api/scenarios/staff/reconcile' : '/api/executions/reconcile', {
       run_id: entry.receipt.id, status: 'succeeded', verification: proof.verification,
       object_ref: String(proof.templateId), adapter_version: entry.plan.adapterVersion,
       page_fingerprint: expected.pageFingerprint, completed_steps: TEMPLATE_RECIPE.steps.length,
+      ...(owner.kind === 'staff' ? { device_id: owner.deviceId, account_slot: owner.accountSlot,
+        context_hash: entry.plan.contextHash, input_hash: entry.plan.inputHash } : {}),
     })
     return this.journal().transition(owner.owner, id, { status: 'verified', objectRef: String(proof.templateId), errorCode: null, checks: ['read-only-reconciliation', proof.verification, `rules:${proof.ruleCount}`, 'control-report-reconciled'] })
   }
@@ -535,6 +581,7 @@ export class TargetExecutionController {
     site?.navigation.cancel()
     site?.port?.dispose()
     for (const win of site?.windows || []) if (!win.isDestroyed()) win.destroy()
+    void site?.clearSession?.().catch(() => undefined)
   }
   dispose(): void { this.close(); this.runner?.dispose(); this.runner = null }
 }

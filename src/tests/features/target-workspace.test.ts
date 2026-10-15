@@ -4,8 +4,19 @@ import TargetWorkspace from '@/features/targets/TargetWorkspace.vue'
 import { targetObservation, targetPreview, targetProfile, targetReceipt } from './target-fixtures'
 import { V2_MAINLAND_COUNTRIES, V2_ISLAND_COUNTRIES } from '@/shared/ipc/target-template-options'
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), submit: vi.fn() }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), submit: vi.fn(), policy: vi.fn() }))
 vi.mock('@/utils/api/target-profiles', () => ({ listTargetProfiles: mocks.list, submitTargetProfile: mocks.submit }))
+vi.mock('@/utils/api/index', () => ({ api: { get: mocks.policy } }))
+function assignedPolicy(mode: 'training' | 'competition' = 'training') {
+  return {
+    schemaVersion: 1, principal: { kind: 'customer', id: 'customer-a' }, revision: `policy-${mode}`,
+    status: mode === 'training' ? 'unassigned' : 'active', mode,
+    entryUrl: mode === 'competition' ? 'https://www.idtrade.cn/User/Contest' : null,
+    allowedOrigins: mode === 'competition' ? ['https://www.idtrade.cn'] : [], maxScenes: 1,
+    checkedAt: new Date().toISOString(), expiresAt: mode === 'competition' ? new Date(Date.now() + 86_400_000).toISOString() : null,
+    refreshAfterSeconds: 30,
+  }
+}
 function desktop() {
   const bridge = { open: vi.fn().mockResolvedValue(undefined), refresh: vi.fn().mockResolvedValue(undefined), detect: vi.fn().mockResolvedValue(targetObservation()), preflight: vi.fn().mockResolvedValue(targetPreview()), execute: vi.fn().mockResolvedValue(targetReceipt()), reconcile: vi.fn().mockResolvedValue(targetReceipt()), listReceipts: vi.fn().mockResolvedValue([]), close: vi.fn().mockResolvedValue(undefined) }
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: { targets: bridge } })
@@ -20,7 +31,7 @@ async function ready(wrapper: VueWrapper) {
   await wrapper.get('.template-form').trigger('submit'); await flushPromises()
 }
 describe('target workspace', () => {
-  beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue([targetProfile()]); mocks.submit.mockResolvedValue(targetProfile('pending')); Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined }) })
+  beforeEach(() => { vi.clearAllMocks(); mocks.policy.mockResolvedValue(assignedPolicy()); mocks.list.mockResolvedValue([targetProfile()]); mocks.submit.mockResolvedValue(targetProfile('pending')); Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined }) })
   it('ordinary browser cannot detect or execute and does not fetch profiles', async () => {
     const wrapper = mount(TargetWorkspace); await open(wrapper)
     expect(wrapper.text()).toContain('普通浏览器不会打开平台账号'); expect(mocks.list).not.toHaveBeenCalled()
@@ -116,13 +127,34 @@ describe('target workspace', () => {
     expect(wrapper.get('[data-testid="training-scope"]').text()).toContain('本课程尚未列入团队审核的实训范围')
     expect(wrapper.get('[data-testid="training-scope"]').text()).toContain('首期不开放比赛执行')
   })
-  it('changing stage invalidates plan and displays formal competition warning', async () => {
-    desktop(); const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
-    await wrapper.get('[data-testid="context-choice"]').setValue('practice'); await flushPromises()
+  it('admin-assigned scene is read only and refreshing changed policy invalidates the training plan', async () => {
+    const bridge = desktop(); const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
+    expect(wrapper.find('[data-testid="context-choice"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="assigned-context"]').attributes('readonly')).toBeDefined()
+    expect(wrapper.get('[data-testid="assigned-context"]').element).toHaveProperty('value', '课程实训')
+    mocks.policy.mockResolvedValue(assignedPolicy('competition'))
+    await wrapper.get('.target-saved-entry button').trigger('click'); await flushPromises()
+    expect(mocks.policy).toHaveBeenCalledWith('/api/scenarios/me', {}, { cache: false })
     expect(wrapper.find('.target-preview').exists()).toBe(false)
-    await wrapper.get('[data-testid="context-choice"]').setValue('formal')
-    expect(wrapper.get('.formal-warning').text()).toContain('正式比赛'); expect(wrapper.get('.formal-warning').text()).toContain('单独核验')
-    expect(wrapper.text()).toContain('场景和阶段只是本次执行的选择')
+    expect(wrapper.get('[data-testid="target-entry-url"]').element).toHaveProperty('value', 'https://www.idtrade.cn/User/Contest')
+    // Detection may reveal a different account/course; the former preview must
+    // never be resurrected merely by refreshing the administrator assignment.
+    expect(wrapper.find('.target-confirm').exists()).toBe(false)
+    expect(bridge.execute).not.toHaveBeenCalled()
+  })
+  it('assigned competition warns that training execution is not opened and sends the assigned context to preflight', async () => {
+    const bridge = desktop(); mocks.policy.mockResolvedValue(assignedPolicy('competition'))
+    bridge.preflight.mockResolvedValue({ ...targetPreview(), canExecute: false, blockers: ['比赛写入尚未验收'] })
+    const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await open(wrapper)
+    expect(wrapper.get('[data-testid="target-entry-url"]').element).toHaveProperty('value', 'https://www.idtrade.cn/User/Contest')
+    expect(wrapper.get('[data-testid="target-profile-select"]').element).toHaveProperty('value', '')
+    await ready(wrapper)
+    expect(wrapper.get('[data-testid="assigned-context"]').element).toHaveProperty('value', '指定比赛')
+    expect(wrapper.get('[data-testid="assigned-context"]').attributes('readonly')).toBeDefined()
+    expect(wrapper.get('.formal-warning').text()).toContain('比赛写入动作尚未验收')
+    expect(bridge.preflight).toHaveBeenCalledWith(expect.objectContaining({ scenario: 'competition', stage: 'formal' }))
+    expect(wrapper.find('.target-confirm').exists()).toBe(false)
+    expect(bridge.execute).not.toHaveBeenCalled()
   })
   it('result unknown cannot be clicked again and reconcile does not execute', async () => {
     const bridge = desktop(); bridge.execute.mockResolvedValue(targetReceipt('needs_review'))

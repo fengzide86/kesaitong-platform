@@ -38,4 +38,12 @@ describe('shared customer tool presentation', () => {
     expect(isToolCurrentlyUsable(tool, { ...context, platformScope: [] })).toBe(false)
     expect(isToolCurrentlyUsable(tool, { ...context, platformScope: null })).toBe(false)
   })
+  it('uses immutable capability snapshots without promoting unready tools or shop registration', () => {
+    const context = { planCode: 'competition-guided', allowedCapabilities: ['product.create', 'company.register'], runtimeAvailable: true }
+    expect(isToolCurrentlyUsable(tool, context)).toBe(true)
+    expect(isToolCurrentlyUsable(tool, { ...context, allowedCapabilities: [] })).toBe(false)
+    expect(isToolCurrentlyUsable(tool, { ...context, allowedCapabilities: null })).toBe(false)
+    expect(isToolCurrentlyUsable({ ...tool, availability: 'demo_only' }, context)).toBe(false)
+    expect(isToolCurrentlyUsable({ ...tool, capability_key: 'register' }, context)).toBe(false)
+  })
 })

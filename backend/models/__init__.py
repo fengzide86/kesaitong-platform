@@ -27,6 +27,16 @@ from models.ai_chat import (
 from models.auth import AuthCode, AuthCodeStatus, AuthSeat, Device, LaunchToken, LaunchTokenStatus
 from models.automation import AutomationBatch, AutomationBatchItem
 from models.base import Base
+from models.commercial import (
+    CommercialGrant,
+    CommercialOfferVersion,
+    CommercialOrderSnapshot,
+    CommercialRefundEntitlementReview,
+    ServiceFulfillment,
+    ServiceFulfillmentEvent,
+    TrialQuota,
+    TrialReservation,
+)
 from models.demo import DemoBatch, DemoBatchItem, DemoRun
 from models.expense import (
     ExpenseAttachment,
@@ -46,12 +56,23 @@ from models.feedback import ExecutionVerification, Feedback, FeedbackStatus, Log
 
 # 订单相关模型
 from models.order import Order, OrderStatus, Plan, PlanStatus, ProfitRecord, ProfitStatus
+from models.scenario import ProjectRuntimeScope, ScenarioAssignment, StaffRuntimePermission, StaffToolGrant
 
 # 后台员工账号（与客户 User 完全分离）
 from models.staff import StaffRole, StaffStatus, StaffUser
 
 # 系统相关模型
 from models.system import Announcement, AnnouncementReceipt, AnnouncementStatus, AuditLog, Setting
+from models.team_ledger import (
+    TeamLedgerEntry,
+    TeamMember,
+    TeamOrderAllocation,
+    TeamOwnership,
+    TeamPolicy,
+    TeamRefundReview,
+    TeamServiceDelivery,
+    TeamSettlement,
+)
 
 # 用户模型
 from models.user import User
@@ -59,6 +80,11 @@ from models.user import User
 __all__ = [
     # Base
     "Base",
+    "CommercialGrant", "CommercialOfferVersion", "CommercialOrderSnapshot", "CommercialRefundEntitlementReview",
+    "ServiceFulfillment", "ServiceFulfillmentEvent", "TrialQuota", "TrialReservation",
+    "ScenarioAssignment", "StaffRuntimePermission", "StaffToolGrant", "ProjectRuntimeScope",
+    "TeamLedgerEntry", "TeamMember", "TeamOrderAllocation", "TeamOwnership",
+    "TeamPolicy", "TeamRefundReview", "TeamServiceDelivery", "TeamSettlement",
     "Agency",
     "AgencyCustomer",
     "AgencyRequest",

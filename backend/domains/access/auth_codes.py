@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -15,10 +16,11 @@ from sqlalchemy.orm import selectinload
 from core.audit import log_admin_action
 from core.exceptions import NotFoundException
 from models import AuthCode, AuthSeat, Device, LaunchToken, Plan
+from models.commercial import CommercialGrant
 from schemas import AuthCodeGenerate, AuthCodeResponse, AuthCodeUpdate
 from schemas.auth_code import AuthCodeExtend
 
-from .entitlements import normalize_entitlements
+from .entitlements import normalize_entitlements, resolve_product_access
 from .license_state import effective_license_status, effective_license_status_sql
 from .locking import lock_auth_code
 
@@ -52,7 +54,8 @@ async def build_response(db: AsyncSession, code: AuthCode) -> AuthCodeResponse:
     ).first()
     plan_name = plan_row[0] if plan_row else "未关联套餐"
     product_type = (plan_row[1] if plan_row else None) or "consumer"
-    plan_entitlements = plan_row[2] if plan_row else None
+    access = await resolve_product_access(db, code.id)
+    plan_name = access.get("plan_name", plan_name)
     return AuthCodeResponse(
         id=code.id,
         code=code.code,
@@ -72,7 +75,7 @@ async def build_response(db: AsyncSession, code: AuthCode) -> AuthCodeResponse:
         device_used=await _device_used(db, code.id),
         plan_name=plan_name,
         product_type=product_type,
-        entitlements=normalize_entitlements(plan_entitlements, product_type),
+        entitlements=access["entitlements"],
     )
 
 
@@ -144,8 +147,17 @@ async def list_codes(
             .limit(page_size)
         )
     ).all()
+    commercial_rows = (await db.scalars(select(CommercialGrant).where(
+        CommercialGrant.auth_code_id.in_([row[0].id for row in rows]),
+    ))).all() if rows else []
+    commercial_by_code = {grant.auth_code_id: json.loads(grant.snapshot) for grant in commercial_rows}
     data = []
     for code, seat_used, device_used, plan_name, product_type, plan_entitlements in rows:
+        if code.id in commercial_by_code:
+            snapshot = commercial_by_code[code.id]
+            plan_name = snapshot["definition"]["name"]
+            product_type = "consumer"
+            plan_entitlements = {"allowed_capabilities": snapshot["definition"]["allowed_capabilities"], "plan_code": snapshot["sku"]}
         resolved_product_type = product_type or "consumer"
         data.append(
             AuthCodeResponse(
@@ -282,6 +294,9 @@ async def update_code(
         "seat_limit": code.seat_limit,
     }
     changes = request_data.model_dump(exclude_none=True)
+    commercial_id = await db.scalar(select(CommercialGrant.id).where(CommercialGrant.auth_code_id == code_id))
+    if commercial_id and any(key in changes for key in ("expires_at", "max_devices")):
+        raise HTTPException(status_code=409, detail="项目授权的期限和席位属于购买快照，不能从旧授权编辑入口改写")
     for key, value in changes.items():
         if key == "expires_at" and isinstance(value, str):
             value = datetime.fromisoformat(value)
@@ -317,6 +332,8 @@ async def extend_code(
         raise NotFoundException("授权码不存在")
     if code.status == "deleted":
         raise HTTPException(status_code=409, detail="已删除的授权不能延期")
+    if await db.scalar(select(CommercialGrant.id).where(CommercialGrant.auth_code_id == code_id)):
+        raise HTTPException(status_code=409, detail="项目授权不能按固定天数续期，请确认新项目商品订单")
     before = {"status": code.status, "expires_at": code.expires_at}
     try:
         expiry = max(code.expires_at or datetime.now(), datetime.now()) + timedelta(days=data.days)

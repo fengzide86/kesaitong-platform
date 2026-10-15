@@ -8,6 +8,7 @@ import { localArtifactReadRequestSchema } from './artifact-contract.js'
 import { recoveryQuerySchema, recoveryReviewSchema, recoveryPrepareSchema } from './recovery-contract.js'
 import { fileInputSelectionRequestSchema, fileInputValidationRequestSchema } from './file-input-contract.js'
 import { targetOpenRequestSchema, targetPreflightRequestSchema, targetExecuteRequestSchema, targetReconcileRequestSchema } from './target-contract.js'
+import { sceneOpenSchema, sceneBoundsSchema, sceneIdSchema } from './scenario-contract.js'
 
 export const DESKTOP_IPC_PROTOCOL_VERSION = 1 as const
 export const DESKTOP_IPC_PAYLOAD_ERROR_CODE = 'IPC_PAYLOAD_INVALID' as const
@@ -153,6 +154,13 @@ export const desktopIpcInvocationSchemas = {
   'targets:reconcile': z.tuple([targetReconcileRequestSchema]),
   'targets:list-receipts': z.tuple([]),
   'targets:close': z.tuple([]),
+  'scenes:policy': z.tuple([]),
+  'scenes:list': z.tuple([]),
+  'scenes:open': z.tuple([sceneOpenSchema]),
+  'scenes:select': z.tuple([sceneIdSchema]),
+  'scenes:close': z.tuple([sceneIdSchema]),
+  'scenes:bounds': z.tuple([sceneBoundsSchema]),
+  'scenes:hide': z.tuple([]),
   'recovery:list': z.tuple([recoveryQuerySchema]),
   'recovery:review': z.tuple([recoveryReviewSchema]),
   'recovery:prepare': z.tuple([recoveryPrepareSchema]),
