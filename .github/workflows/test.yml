@@ -2,9 +2,13 @@ name: Continuous verification
 
 on:
   push:
-    branches: [main, develop, 'codex/**']
+    branches: [main, develop]
   pull_request:
     branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   dependency-security:
@@ -373,6 +377,14 @@ jobs:
         with:
           path: D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.8.exe
           key: windows-nsis-baseline-1.8.8-${{ hashFiles('scripts/nsis-upgrade-fixture-1.8.8.json') }}
+      - name: Restore pinned 1.8.15 installer and blockmap (always recheck SHA512)
+        id: pinned-production-installer
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.15.exe
+            D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.15.exe.blockmap
+          key: windows-nsis-baseline-1.8.15-${{ hashFiles('scripts/nsis-upgrade-fixture-1.8.15.json') }}
       - name: Fetch immutable 1.8.5 release for upgrade acceptance
         run: node scripts/prepare-nsis-upgrade.mjs
         env:
@@ -408,6 +420,14 @@ jobs:
         with:
           path: D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.8.exe
           key: windows-nsis-baseline-1.8.8-${{ hashFiles('scripts/nsis-upgrade-fixture-1.8.8.json') }}
+      - name: Save only byte-verified 1.8.15 installer and blockmap
+        if: steps.pinned-production-installer.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.15.exe
+            D:/AmazonToolboxData/installer-fixtures/KST Setup 1.8.15.exe.blockmap
+          key: windows-nsis-baseline-1.8.15-${{ hashFiles('scripts/nsis-upgrade-fixture-1.8.15.json') }}
       - name: Verify existing-location 1.8.5 baseline and real upgrade, runtime and uninstall
         shell: pwsh
         run: ./scripts/nsis-install-smoke.ps1 -PreviousVersion '1.8.5' -PreviousInstaller 'D:\AmazonToolboxData\installer-fixtures\KST Setup 1.8.5.exe' -LegacyInstallLocationHint -DiagnosticAttempts 1
