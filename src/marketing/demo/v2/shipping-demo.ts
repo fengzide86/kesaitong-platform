@@ -1,6 +1,6 @@
 import type { Product } from './model'
-import { quoteFreight } from '../../../shared/freight/rate-engine'
-import type { FreightQuoteCandidate, FreightRatePack, FreightRateRule } from '../../../shared/freight/types'
+import { quoteFreight } from './freight/rate-engine'
+import type { FreightQuoteCandidate, FreightRatePack, FreightRateRule } from './freight/types'
 
 export type SampleCarrier = '中邮' | 'E 邮宝' | '燕文' | 'UPS'
 export type SampleShippingCountry = '美国' | '英国'
