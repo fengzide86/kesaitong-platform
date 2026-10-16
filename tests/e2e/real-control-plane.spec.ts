@@ -157,7 +157,7 @@ test('新框架商品与成员分配使用真实隔离后端，默认不激活�
   await page.getByRole('button', { name: '登录并进入工作台' }).click()
   await expect(page).toHaveURL(/#\/admin\/dashboard/)
   await page.goto('/#/admin/commercial')
-  await expect(page.getByRole('heading', { name: '商品版本与项目权益' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '管理可售套餐与服务' })).toBeVisible()
   await expect(page.getByText('尚无新商品。可先导入草稿，旧套餐不受影响。')).toBeVisible()
   await page.getByRole('button', { name: '导入标准商品草稿' }).click()
   await expect(page.getByText('标准商品已保存为草稿，尚未启用')).toBeVisible()

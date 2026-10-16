@@ -462,7 +462,7 @@ const roleExpectations: Array<{
     areas: ['行动中心', '客户与授权', '订单与代理', '售后支持', '经营财务', '产品与系统'],
     sections: [
       { area: '经营财务', visible: ['分润管理', '公账支出', '代理返佣'], hidden: [] },
-      { area: '产品与系统', visible: ['套餐与设置', '工作台开放', '公告管理', '平台入口审核', '应用更新', '物流费率', '后台账号'], hidden: [] },
+      { area: '产品与系统', visible: ['系统设置', '工作台开放', '公告管理', '平台入口审核', '应用更新', '物流费率', '后台账号'], hidden: [] },
     ],
     forbiddenPaths: [],
   },
@@ -472,7 +472,7 @@ const roleExpectations: Array<{
     sections: [
       { area: '经营财务', visible: ['分润管理', '公账支出'], hidden: ['代理返佣'] },
       { area: '售后支持', visible: ['工单管理', '知识库管理', '客服规则'], hidden: ['代理售后'] },
-      { area: '产品与系统', visible: ['工作台开放', '公告管理'], hidden: ['套餐与设置', '平台入口审核', '应用更新', '物流费率', '后台账号'] },
+      { area: '产品与系统', visible: ['工作台开放', '公告管理'], hidden: ['系统设置', '平台入口审核', '应用更新', '物流费率', '后台账号'] },
     ],
     forbiddenPaths: ['/admin/settings', '/admin/updates', '/admin/staff-accounts', '/admin/freight-rates', '/admin/agency'],
   },
@@ -701,7 +701,7 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
   await expect(page.getByRole('row', { name: /INTERNAL-ORDER-001.*已收款/ })).toBeVisible()
 
   await page.goto('/#/admin/profit')
-  await expect(page.getByText('¥100.00', { exact: true })).toBeVisible()
+  await expect(page.getByText('¥100', { exact: true })).toBeVisible()
   await expect(page.locator('.profit-summary')).toBeVisible()
   await expect(page.locator('.distribution-item')).toHaveCount(6)
   await expect(page.locator('.stat-icon')).toHaveCount(0)
