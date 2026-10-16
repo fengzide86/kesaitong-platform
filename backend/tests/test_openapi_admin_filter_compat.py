@@ -106,6 +106,26 @@ def test_filter_validation_constraints_are_part_of_the_reviewed_contract(path, f
     assert module.compare(before, after)
 
 
+@pytest.mark.parametrize("path", ["/api/orders", "/api/feedback"])
+@pytest.mark.parametrize("mutation", ["required", "limit", "default", "type", "nonnullable", "removed"])
+def test_order_and_feedback_keyword_contract_is_exact(path, mutation):
+    before, after, operation = contracts(path)
+    keyword = next(parameter for parameter in operation["parameters"] if parameter["name"] == "keyword")
+    if mutation == "required":
+        keyword["required"] = True
+    elif mutation == "limit":
+        keyword["schema"]["anyOf"][0]["maxLength"] = 201
+    elif mutation == "default":
+        keyword["schema"]["default"] = "sample"
+    elif mutation == "type":
+        keyword["schema"]["anyOf"][0]["type"] = "integer"
+    elif mutation == "nonnullable":
+        keyword["schema"]["anyOf"].pop()
+    else:
+        operation["parameters"].remove(keyword)
+    assert module.compare(before, after)
+
+
 def test_only_nonsemantic_documentation_annotations_may_differ():
     before, after, operation = contracts("/api/users")
     for parameter in operation["parameters"]:

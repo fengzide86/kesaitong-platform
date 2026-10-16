@@ -33,6 +33,7 @@ class OrderService:
         plan_id: int | None = None,
         platform_key: str | None = None,
         source: str | None = None,
+        keyword: str | None = None,
     ) -> dict:
         filters = []
         if source == "direct":
@@ -47,6 +48,14 @@ class OrderService:
             filters.append(Order.plan_id == plan_id)
         if platform_key:
             filters.append(or_(Order.platform_key == platform_key, Order.platform_key.is_(None)))
+        if keyword and keyword.strip():
+            value = keyword.strip()
+            filters.append(or_(
+                Order.order_no.contains(value, autoescape=True),
+                Order.responsible.contains(value, autoescape=True),
+                select(AgencyCustomer.id).where(AgencyCustomer.id == Order.customer_id,
+                    AgencyCustomer.name.contains(value, autoescape=True)).exists(),
+            ))
         base = select(Order).where(*filters)
         count_result = await self.db.execute(
             select(func.count()).select_from(base.order_by(None).subquery())
@@ -56,10 +65,19 @@ class OrderService:
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
+        orders = result.scalars().all()
+        customers = dict((await self.db.execute(select(AgencyCustomer.id, AgencyCustomer.name).where(
+            AgencyCustomer.id.in_([order.customer_id for order in orders if order.customer_id]),
+        ))).all()) if orders else {}
+        codes = (await self.db.scalars(select(AuthCode).where(AuthCode.order_id.in_([order.id for order in orders])))).all() if orders else []
+        codes_by_order = {code.order_id: code for code in codes}
         return {
             "success": True,
             "message": "ok",
-            "data": [self.serialize(item) for item in result.scalars().all()],
+            "data": [{**self.serialize(item), "customer_name": customers.get(item.customer_id),
+                      "auth_code_id": codes_by_order[item.id].id if item.id in codes_by_order else None,
+                      "auth_code_status": effective_license_status(codes_by_order[item.id]) if item.id in codes_by_order else None}
+                     for item in orders],
             "page": page,
             "page_size": page_size,
             "total": int(count_result.scalar() or 0),

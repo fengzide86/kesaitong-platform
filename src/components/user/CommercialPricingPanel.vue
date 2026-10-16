@@ -132,6 +132,7 @@ async function onTabKeydown(event: KeyboardEvent, id: Scene): Promise<void> {
 
     <section v-if="singleTools.length" class="pricing-single-tools" aria-label="单独选择工具">
       <h2>只需要一个工具？也可单独选择。</h2>
+      <p class="pricing-single-note">只需要一项功能时可单独选择；需要多项功能，可对比上方套餐包含的内容。</p>
       <article v-for="plan in singleTools" :key="plan.id" class="pricing-single-tool" :data-plan="plan.plan_code">
         <div><h3>{{ plan.name }}</h3><p>{{ plan.description }}</p></div>
         <p class="pricing-single-price"><strong>{{ price(plan) }}</strong><span>元 / 个工具</span></p>
@@ -205,6 +206,7 @@ async function onTabKeydown(event: KeyboardEvent, id: Scene): Promise<void> {
 .pricing-availability p { margin: 6px 0 0; color: var(--color-text-secondary); }
 .pricing-single-tools { margin-top: 28px; }
 .pricing-single-tools h2 { margin: 0 0 12px; font-size: var(--type-section); line-height: 1.5; }
+.pricing-single-note { margin: -2px 0 14px; color: var(--color-text-secondary); font-size: var(--type-control); line-height: 1.7; }
 .pricing-single-tool { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; padding: 16px 0; border-top: 1px solid var(--color-border); }
 .pricing-single-tool > div { flex: 1 1 320px; min-width: 0; }
 .pricing-single-tool h3 { margin: 0; font-size: 16px; line-height: 1.5; }

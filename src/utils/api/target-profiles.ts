@@ -26,7 +26,13 @@ export interface TargetProfileStatusDecision {
   reviewStatus: 'rejected' | 'disabled'
 }
 
-export type TargetProfileReview = TargetProfileApproval | TargetProfileStatusDecision
+/** A URL-only approval records an administrator's review without enabling tools. */
+export interface TargetProfileEntryApproval {
+  revision: number
+  reviewStatus: 'approved'
+}
+
+export type TargetProfileReview = TargetProfileApproval | TargetProfileStatusDecision | TargetProfileEntryApproval
 
 export const listTargetProfiles = async (): Promise<SignedTargetProfile[]> =>
   signedTargetProfileSchema.array().parse(await api.get('/api/tools/target-profiles', {}, { cache: false }))

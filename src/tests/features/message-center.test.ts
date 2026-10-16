@@ -24,6 +24,7 @@ describe('MessageCenter', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     mocks.getAnnouncementFeed.mockResolvedValue([])
+    mocks.markAnnouncementRead.mockImplementation(async (id, revision) => ({ success: true, data: { announcement_id: id, revision, action: 'read' } }))
   })
 
   afterEach(() => {
@@ -73,7 +74,7 @@ describe('MessageCenter', () => {
     const expand = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.message-list button')).find(item => item.textContent === '阅读全文')!
     expand.click(); await flushPromises()
     expect(document.body.querySelector('.expanded p')?.textContent).toHaveLength(10000)
-    expect(mocks.markAnnouncementRead).toHaveBeenCalledWith(1)
+    expect(mocks.markAnnouncementRead).toHaveBeenCalledWith(1, 1)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await flushPromises()
     expect(document.body.querySelector('.message-drawer')).toBeNull()

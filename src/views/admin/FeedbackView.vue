@@ -27,6 +27,17 @@
         <el-option label="处理中" value="processing" />
         <el-option label="已解决" value="resolved" />
       </el-select>
+      <el-input
+        v-model="searchText"
+        clearable
+        placeholder="搜索标题、内容或工单号"
+        aria-label="搜索标题、内容或工单号"
+        :maxlength="200"
+        style="width: 240px"
+        @keyup.enter="applySearch"
+        @clear="applySearch"
+      />
+      <el-button @click="applySearch">查询</el-button>
       <template #summary>共 {{ total }} 个工单 · 本页 {{ feedbacks.length }} 个</template>
     </DataToolbar>
 
@@ -67,7 +78,10 @@
           </template>
         </el-table-column>
         <template #empty>
-          <div class="empty-state">暂无工单数据</div>
+          <div class="empty-state">
+            <p>{{ hasListFilters ? '没有找到符合当前条件的工单，试试其他关键词或筛选条件。' : '还没有工单，客户提交问题后会显示在这里。' }}</p>
+            <el-button v-if="searchText.trim()" @click="clearSearch">清除搜索</el-button>
+          </div>
         </template>
       </el-table>
       <div class="feedback-pagination">
@@ -207,12 +221,15 @@ const feedbacks = ref<AdminFeedback[]>([]);
 const query = () => router?.currentRoute.value.query || {};
 const initialStatus = contextText(query().status);
 const filterStatus = ref(["pending", "processing", "resolved"].includes(initialStatus) ? initialStatus : "");
+const searchText = ref(contextText(query().keyword));
 const page = ref(contextId(query().page) || 1);
 const relatedUserId = ref(contextId(query().user_id));
+const hasListFilters = computed(() => !!searchText.value.trim() || !!filterStatus.value || !!relatedUserId.value || platformStore.adminPlatform !== 'all');
 let restoringQuery = false;
 const pageSize = 20;
 const total = ref(0);
 let loadSequence = 0;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
 const showDetailModal = ref(false);
 const currentFeedback = ref<AdminFeedback | null>(null);
 const linkedUser = ref<AdminUser | null>(null);
@@ -260,8 +277,11 @@ function scopeParams() {
 
 function syncListQuery(extra: Record<string, string | undefined> = {}) {
   if (!router) return;
-  void router.replace({ path: '/admin/feedback', query: { ...query(), status: filterStatus.value || undefined, page: String(page.value), user_id: relatedUserId.value ? String(relatedUserId.value) : undefined, ...extra } });
+  void router.replace({ path: '/admin/feedback', query: { ...query(), status: filterStatus.value || undefined, keyword: searchText.value.trim() || undefined, page: String(page.value), user_id: relatedUserId.value ? String(relatedUserId.value) : undefined, ...extra } });
 }
+
+function applySearch() { if (searchTimer) clearTimeout(searchTimer); page.value = 1; syncListQuery(); void loadData(); }
+function clearSearch() { searchText.value = ''; applySearch(); }
 
 function viewDetail(fb: unknown) {
   const id = Number(adminFeedbackSchema.parse(fb).id);
@@ -383,7 +403,7 @@ async function loadData() {
       platformStore.adminPlatform !== "all"
         ? platformStore.adminPlatform
         : undefined;
-    const result = await getFeedbacksPage({ platform_key: platformKey, status: filterStatus.value || undefined, ...(relatedUserId.value ? { user_id: relatedUserId.value } : {}), page: page.value, page_size: pageSize });
+    const result = await getFeedbacksPage({ platform_key: platformKey, status: filterStatus.value || undefined, ...(searchText.value.trim() ? { keyword: searchText.value.trim() } : {}), ...(relatedUserId.value ? { user_id: relatedUserId.value } : {}), page: page.value, page_size: pageSize });
     if (sequence !== loadSequence) return;
     total.value = result.total;
     if (page.value > 1 && (page.value - 1) * pageSize >= total.value) {
@@ -427,23 +447,26 @@ watch(
   },
 );
 
+watch(searchText, () => { if (restoringQuery) return; loadSequence++; if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(applySearch, 250); }, { flush: 'sync' });
 watch(filterStatus, () => { if (restoringQuery) return; page.value = 1; syncListQuery(); void loadData(); }, { flush: 'sync' });
 watch(() => query().ticket_id, value => { const id = contextId(value); if (id && id !== selectedTicketId.value) void openTicket(id); else if (!id && showDetailModal.value) { detailSequence += 1; showDetailModal.value = false; currentFeedback.value = null; selectedTicketId.value = undefined; } });
-watch(() => [query().user_id, query().status, query().page], () => {
+watch(() => [query().user_id, query().status, query().page, query().keyword], () => {
   const id = contextId(query().user_id);
   const value = contextText(query().status);
   const status = ['pending', 'processing', 'resolved'].includes(value) ? value : '';
   const nextPage = contextId(query().page) || 1;
-  if (id === relatedUserId.value && status === filterStatus.value && nextPage === page.value) return;
+  const nextKeyword = contextText(query().keyword);
+  if (id === relatedUserId.value && status === filterStatus.value && nextPage === page.value && nextKeyword === searchText.value) return;
   restoringQuery = true;
   relatedUserId.value = id;
   filterStatus.value = status;
   page.value = nextPage;
+  searchText.value = nextKeyword;
   restoringQuery = false;
   void loadData();
 });
 onMounted(() => { void loadData(); const id = contextId(query().ticket_id); if (id) void openTicket(id); });
-onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; });
+onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; if (searchTimer) clearTimeout(searchTimer); });
 </script>
 
 <style scoped>

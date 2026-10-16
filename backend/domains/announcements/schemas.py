@@ -59,6 +59,8 @@ class AnnouncementUpdate(AnnouncementWriteBase):
 class ReceiptAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    revision: int | None = Field(default=None, ge=1, strict=True)
+
 
 class AnnouncementResponse(BaseModel):
     """Read-only announcement contract shared by admin and user feeds."""

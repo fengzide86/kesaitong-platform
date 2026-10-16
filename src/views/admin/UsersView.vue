@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="用户管理" description="维护用户资料与设备席位信息" />
+    <PageHeader title="用户管理" description="找到用户，核对项目和授权状态；需要调整资料或设备时再打开详情。" />
     <AsyncStateNotice
       :state="loadState"
       :message="loadError"
@@ -14,7 +14,9 @@
     >
       <el-input
         v-model="searchText"
-        placeholder="搜索用户/设备..."
+        placeholder="搜索用户名、手机号或电脑"
+        aria-label="搜索用户名、手机号或电脑"
+        :maxlength="200"
         clearable
         style="min-width: 240px"
       >
@@ -30,106 +32,53 @@
       class="table-card"
       shadow="never"
     >
-      <el-table :data="filteredUsers" stripe style="width: 100%">
-        <el-table-column v-if="!isCompact" prop="id" label="ID" width="80" />
-        <el-table-column label="用户名" min-width="140">
+      <el-table :data="users" stripe style="width: 100%">
+        <el-table-column label="用户 / 联系方式" min-width="150">
           <template #default="{ row }">
-            <el-input
-              v-if="!isCompact && editingUser?.id === row.id"
-              v-model="editingUser!.name"
-              size="small"
-              style="width: 120px"
-            />
-            <span v-else>{{ row.name || "-" }}</span>
+            <div class="user-context-cell">
+              <strong :title="row.name || `用户 #${row.id}`">{{ row.name || `用户 #${row.id}` }}</strong>
+              <small>{{ row.phone || '未填写手机号' }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="手机号" width="140">
+        <el-table-column label="客户 / 项目" min-width="160">
           <template #default="{ row }">
-            <el-input
-              v-if="editingUser?.id === row.id"
-              v-model="editingUser!.phone"
-              size="small"
-              style="width: 120px"
-            />
-            <span v-else>{{ row.phone || "-" }}</span>
+            <div class="user-context-cell">
+              <strong :title="row.customer_name || row.name || ''">{{ row.customer_name || row.name || '未登记客户' }}</strong>
+              <small :title="row.project_id || row.plan_name || ''">{{ row.project_id || row.plan_name || '未关联项目' }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column
-          prop="device_name"
-          label="设备名"
-          min-width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column v-if="!isCompact" label="设备ID" min-width="160">
+        <el-table-column label="授权状态 / 到期" min-width="145">
           <template #default="{ row }">
-            <span class="mono-text">{{ row.device_id || "-" }}</span>
+            <div class="user-context-cell">
+              <el-tag size="small" :type="row.status === 'active' ? 'success' : row.status === 'expired' ? 'danger' : 'info'">{{ statusText(row.status) }}</el-tag>
+              <small :title="formatTime(row.expires_at)">{{ row.expires_at ? formatTime(row.expires_at).slice(0, 10) : '未设置到期日' }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="席位数" width="100">
+        <el-table-column label="使用电脑" min-width="145">
           <template #default="{ row }">
-            <el-input-number
-              v-if="editingUser?.id === row.id"
-              v-model="editingUser!.total_seats"
-              size="small"
-              :min="1"
-              style="width: 80px"
-            />
-            <span v-else>{{ row.total_seats }}</span>
+            <div class="user-context-cell">
+              <strong :title="row.device_name || ''">{{ row.device_name || '未登记电脑' }}</strong>
+              <small>{{ row.total_seats }} 个席位 · 额外设备 {{ row.extra_devices }} 台</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="额外设备" width="100">
+        <el-table-column label="操作" width="152" fixed="right">
           <template #default="{ row }">
-            <el-input-number
-              v-if="editingUser?.id === row.id"
-              v-model="editingUser!.extra_devices"
-              size="small"
-              :min="0"
-              style="width: 80px"
-            />
-            <span v-else>{{ row.extra_devices }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="!isCompact" label="注册时间" width="160">
-          <template #default="{ row }">
-            <span class="time-text">{{ formatTime(row.created_at) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="操作"
-          :width="isCompact ? 136 : 160"
-          fixed="right"
-        >
-          <template #default="{ row }">
-            <template v-if="isCompact">
-              <el-button size="small" @click="openUserDrawer(row, false)"
-                >详情</el-button
-              >
-              <el-button
-                v-if="canWrite"
-                size="small"
-                @click="openUserDrawer(row, true)"
-                >编辑</el-button
-              >
-            </template>
-            <template v-else-if="editingUser?.id === row.id">
-              <el-button type="primary" size="small" @click="saveUser(row)"
-                >保存</el-button
-              >
-              <el-button size="small" @click="editingUser = null"
-                >取消</el-button
-              >
-            </template>
-            <template v-else>
+            <div class="user-row-actions">
               <el-button size="small" @click="openUserDrawer(row, false)">详情</el-button>
-              <el-button v-if="canWrite" size="small" @click="startEdit(row)"
-                >编辑</el-button
-              >
+              <el-button v-if="canWrite" size="small" @click="openUserDrawer(row, true)">编辑</el-button>
               <span v-else class="readonly-label">只读</span>
-            </template>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
-          <div class="empty-state">暂无用户数据</div>
+          <div class="empty-state">
+            <p>{{ searchText ? '没有找到匹配的用户，试试姓名、手机号或电脑名称。' : '暂无用户，客户激活授权并登录后会显示在这里。' }}</p>
+            <el-button v-if="searchText" @click="searchText = ''">清除搜索</el-button>
+          </div>
         </template>
       </el-table>
       <div class="user-pagination"><el-pagination :current-page="page" :page-size="pageSize" :total="total" :pager-count="5" layout="prev, pager, next" @current-change="changePage" /></div>
@@ -137,62 +86,57 @@
 
     <AdminDetailDrawer
       v-model="showUserDrawer"
+      class="user-profile-drawer"
+      size="min(520px, 94vw)"
       :title="drawerEditing ? '编辑用户' : '用户详情'"
       @update:model-value="onDrawerVisibility"
     >
       <div v-if="detailLoading" class="empty-state">正在读取用户…</div>
       <div v-else-if="detailError" class="detail-error" role="alert">{{ detailError }}</div>
       <div v-if="detailUser" class="user-detail-list">
-        <div class="context-actions">
-          <span>用户 #{{ detailUser.id }}</span>
-          <el-button v-if="detailUser.auth_code_id" size="small" @click="openAuthorization">授权与设备</el-button>
-          <el-button size="small" @click="openFeedback">关联工单</el-button>
-          <span v-if="!detailUser.auth_code_id" class="readonly-label">未关联授权</span>
+        <div class="user-profile-summary">
+          <div><span class="user-profile-id">用户 #{{ detailUser.id }}</span><h2>{{ detailUser.name || '未填写姓名' }}</h2></div>
+          <el-tag :type="detailUser.status === 'active' ? 'success' : detailUser.status === 'expired' ? 'danger' : 'info'">{{ statusText(detailUser.status) }}</el-tag>
         </div>
-        <label
-          ><span>用户名</span
-          ><el-input v-if="drawerEditing" v-model="detailUser.name" /><strong
-            v-else
-            >{{ detailUser.name || "-" }}</strong
-          ></label
-        >
-        <label
-          ><span>手机号</span
-          ><el-input v-if="drawerEditing" v-model="detailUser.phone" /><strong
-            v-else
-            >{{ detailUser.phone || "-" }}</strong
-          ></label
-        >
-        <label
-          ><span>设备名</span
-          ><strong>{{ detailUser.device_name || "-" }}</strong></label
-        >
-        <label
-          ><span>设备 ID</span
-          ><strong class="mono-text">{{
-            detailUser.device_id || "-"
-          }}</strong></label
-        >
-        <label
-          ><span>席位数</span
-          ><el-input-number
-            v-if="drawerEditing"
-            v-model="detailUser.total_seats"
-            :min="1"
-          /><strong v-else>{{ detailUser.total_seats }}</strong></label
-        >
-        <label
-          ><span>额外设备</span
-          ><el-input-number
-            v-if="drawerEditing"
-            v-model="detailUser.extra_devices"
-            :min="0"
-          /><strong v-else>{{ detailUser.extra_devices }}</strong></label
-        >
-        <label
-          ><span>注册时间</span
-          ><strong>{{ formatTime(detailUser.created_at) }}</strong></label
-        >
+
+        <section class="user-profile-section" aria-label="基本资料">
+          <h3>基本资料</h3>
+          <div class="user-field-grid">
+            <label><span>用户名</span><el-input v-if="drawerEditing" v-model="detailUser.name" /><span v-else class="user-field-value">{{ detailUser.name || '未填写' }}</span></label>
+            <label><span>手机号</span><el-input v-if="drawerEditing" v-model="detailUser.phone" /><span v-else class="user-field-value">{{ detailUser.phone || '未填写' }}</span></label>
+          </div>
+        </section>
+
+        <section class="user-profile-section" aria-label="使用额度">
+          <h3>使用额度</h3>
+          <div class="user-field-grid">
+            <label><span>席位数</span><el-input-number v-if="drawerEditing" v-model="detailUser.total_seats" :min="1" /><span v-else class="user-field-value">{{ detailUser.total_seats }} 个</span></label>
+            <label><span>额外设备</span><el-input-number v-if="drawerEditing" v-model="detailUser.extra_devices" :min="0" /><span v-else class="user-field-value">{{ detailUser.extra_devices }} 台</span></label>
+          </div>
+        </section>
+
+        <section class="user-profile-section user-related-section" aria-label="关联信息">
+          <header><h3>关联信息</h3><span>仅供核对</span></header>
+          <dl class="user-info-list">
+            <div><dt>客户</dt><dd>{{ detailUser.customer_name || detailUser.name || '未登记' }}</dd></div>
+            <div><dt>项目</dt><dd>{{ detailUser.project_id || detailUser.plan_name || '未关联项目' }}</dd></div>
+            <div><dt>授权到期</dt><dd>{{ detailUser.expires_at ? formatTime(detailUser.expires_at) : '未设置到期日' }}</dd></div>
+            <div><dt>使用电脑</dt><dd>{{ detailUser.device_name || '未登记电脑' }}</dd></div>
+          </dl>
+          <div class="context-actions">
+            <el-button v-if="detailUser.auth_code_id" link type="primary" @click="openAuthorization">授权与设备</el-button>
+            <el-button link type="primary" @click="openFeedback">关联工单</el-button>
+            <span v-if="!detailUser.auth_code_id" class="readonly-label">未关联授权</span>
+          </div>
+        </section>
+
+        <details class="user-technical-details">
+          <summary>设备编号与注册信息</summary>
+          <dl class="user-info-list">
+            <div><dt>设备编号</dt><dd class="user-device-id">{{ detailUser.device_id || '未登记' }}</dd></div>
+            <div><dt>注册时间</dt><dd>{{ formatTime(detailUser.created_at) }}</dd></div>
+          </dl>
+        </details>
       </div>
       <template #footer>
         <el-button v-if="returnPath" @click="router.push(returnPath)">返回来源</el-button>
@@ -224,7 +168,6 @@ import DataToolbar from "@/components/DataToolbar.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import AdminDetailDrawer from "@/components/AdminDetailDrawer.vue";
 import AsyncStateNotice from "@/components/AsyncStateNotice.vue";
-import { useCompactLayout } from "@/composables/useCompactLayout";
 import {
   adminUserSchema,
   adminUsersSchema,
@@ -255,8 +198,6 @@ const detailLoading = ref(false);
 const detailError = ref('');
 const isSaving = ref(false);
 const returnPath = computed(() => supportReturnPath(query().return_to, authService.getRole()));
-const editingUser = ref<AdminUser | null>(null);
-const isCompact = useCompactLayout();
 const showUserDrawer = ref(false);
 const drawerEditing = ref(false);
 const detailUser = ref<AdminUser | null>(null);
@@ -266,7 +207,6 @@ const canWrite = computed(() =>
 const loadState = ref<AsyncDataState>("loading");
 const loadError = ref("");
 
-const filteredUsers = computed(() => users.value);
 function scopeParams() { return platformStore.adminPlatform === 'all' ? {} : { platform_key: platformStore.adminPlatform }; }
 function syncQuery(extra: Record<string, string | undefined> = {}) { if (router) void router.replace({ path: '/admin/users', query: { ...query(), page: String(page.value), keyword: searchText.value || undefined, ...extra } }); }
 function changePage(value: number) { page.value = value; syncQuery(); void loadData(); }
@@ -277,27 +217,9 @@ function formatTime(timeStr?: string | null) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function startEdit(user: unknown) {
-  if (!canWrite.value) return;
-  openUserDrawer(user, true);
-}
-
-async function saveUser(user: unknown) {
-  if (!canWrite.value || !editingUser.value) return;
-  const selectedUser = adminUserSchema.parse(user);
-  try {
-    await updateUser(selectedUser.id, {
-      name: editingUser.value.name,
-      phone: editingUser.value.phone,
-      total_seats: editingUser.value.total_seats,
-      extra_devices: editingUser.value.extra_devices,
-    });
-    showToast("用户信息已更新", "success");
-    editingUser.value = null;
-    await loadData();
-  } catch {
-    showToast("更新失败", "error");
-  }
+function statusText(status?: string | null) {
+  const labels: Record<string, string> = { active: '使用中', expired: '已到期', frozen: '已冻结', unused: '未使用', deleted: '已删除', disabled: '已停用', inactive: '未启用' };
+  return status ? labels[status] || '待核对' : '待核对';
 }
 
 function openUserDrawer(user: unknown, editing: boolean) {
@@ -394,7 +316,7 @@ watch(() => [query().page, query().keyword], () => {
   restoringQuery = false;
   void loadData();
 });
-watch(() => platformStore.adminPlatform, () => { loadSequence += 1; detailSequence += 1; users.value = []; detailUser.value = null; showUserDrawer.value = false; selectedUserId.value = undefined; editingUser.value = null; page.value = 1; syncQuery({ user_id: undefined, return_to: undefined }); void loadData(); });
+watch(() => platformStore.adminPlatform, () => { loadSequence += 1; detailSequence += 1; users.value = []; detailUser.value = null; showUserDrawer.value = false; selectedUserId.value = undefined; page.value = 1; syncQuery({ user_id: undefined, return_to: undefined }); void loadData(); });
 watch(() => query().user_id, value => { const id = contextId(value); if (id && id !== selectedUserId.value) void openUser(id); else if (!id && showUserDrawer.value) { detailSequence += 1; showUserDrawer.value = false; detailUser.value = null; selectedUserId.value = undefined; } });
 onMounted(() => { void loadData(); const id = contextId(query().user_id); if (id) void openUser(id); });
 onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; if (searchTimer) clearTimeout(searchTimer); });
@@ -405,23 +327,14 @@ onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; if (searchTimer)
   margin-bottom: 1rem;
 }
 .user-pagination { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }
-.context-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.context-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 16px; }
+.context-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.context-actions :deep(.el-button.is-link) { padding: 0; min-height: 26px; background: transparent; border: 0; box-shadow: none; }
 .detail-error { color: var(--color-danger, #b42318); line-height: 1.6; }
 
 .table-card {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-}
-
-.mono-text {
-  font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-}
-
-.time-text {
-  font-size: 0.85rem;
-  color: var(--color-text-secondary);
 }
 
 .empty-state {
@@ -447,23 +360,42 @@ onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; if (searchTimer)
 
 .user-detail-list {
   display: grid;
-  gap: 14px;
-}
-.user-detail-list label {
-  display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border);
-}
-.user-detail-list label > span {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-.user-detail-list strong {
-  min-width: 0;
+  gap: 26px;
   color: var(--color-text);
-  overflow-wrap: anywhere;
 }
+.user-profile-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid var(--color-border); }
+.user-profile-summary > div { min-width: 0; }
+.user-profile-summary h2 { margin: 6px 0 0; font-size: 20px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.user-profile-id { font-size: 12px; color: var(--color-text-secondary); }
+.user-profile-summary :deep(.el-tag) { flex-shrink: 0; margin-top: 2px; }
+.user-profile-section h3 { margin: 0 0 14px; font-size: 14px; font-weight: 650; line-height: 1.5; }
+.user-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.user-field-grid label { display: grid; min-width: 0; gap: 8px; align-content: start; }
+.user-field-grid label > span:first-child { color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; }
+.user-field-value { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.user-detail-list :deep(.el-input), .user-detail-list :deep(.el-input-number) { min-width: 0; width: 100%; height: 40px; }
+.user-related-section { padding: 18px; background: var(--color-canvas, #f7f8fb); border: 1px solid var(--color-border); border-radius: 10px; }
+.user-related-section header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.user-related-section header > span { font-size: 12px; color: var(--color-text-tertiary); }
+.user-info-list { display: grid; gap: 12px; margin: 0; font-size: 13px; line-height: 1.65; }
+.user-info-list > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 14px; }
+.user-info-list dt { color: var(--color-text-secondary); }
+.user-info-list dd { min-width: 0; margin: 0; font-weight: 400; color: var(--color-text); overflow-wrap: anywhere; }
+.user-technical-details { color: var(--color-text-secondary); font-size: 13px; }
+.user-technical-details summary { cursor: pointer; line-height: 1.6; }
+.user-technical-details[open] summary { margin-bottom: 16px; }
+.user-technical-details .user-device-id { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12px; color: var(--color-text-secondary); }
+.user-technical-details summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }
+:global(.user-profile-drawer .el-drawer__header) { padding: 22px 26px 18px; margin-bottom: 0; }
+:global(.user-profile-drawer .el-drawer__title) { font-size: 17px; font-weight: 650; }
+:global(.user-profile-drawer .el-drawer__body) { padding: 24px 26px; }
+:global(.user-profile-drawer .el-drawer__footer) { padding: 16px 26px; border-top: 1px solid var(--color-border); }
+:global(.user-profile-drawer .el-drawer__footer .el-button) { min-width: 80px; }
+.user-context-cell { display: grid; gap: 4px; min-width: 0; }
+.user-row-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.user-row-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.user-context-cell :deep(.el-tag) { justify-self: start; }
+.user-context-cell strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-context-cell small { color: var(--color-text-secondary); font-size: var(--type-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 480px) { .user-field-grid { grid-template-columns: 1fr; } }
 </style>

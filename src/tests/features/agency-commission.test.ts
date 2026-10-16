@@ -6,6 +6,7 @@ import AgencyCommissionPanel from '@/features/agency/AgencyCommissionPanel.vue'
 const mocks = vi.hoisted(() => ({
   agencies: vi.fn(), commissionPolicy: vi.fn(), commissionSummary: vi.fn(), commissionPreview: vi.fn(),
   updateCommissionPolicy: vi.fn(), confirmCommissionSettlement: vi.fn(), toast: vi.fn(),
+  commissionEntries: vi.fn(), commissionSettlements: vi.fn(),
 }))
 vi.mock('@/features/agency/api', () => ({ agencyApi: mocks }))
 vi.mock('@/utils', () => ({ showToast: mocks.toast }))
@@ -20,6 +21,8 @@ beforeEach(() => {
   mocks.agencies.mockResolvedValue({ data: [agency(1), agency(2)], total: 2, page: 1, page_size: 100 })
   mocks.commissionPolicy.mockImplementation(async (id: number) => ({ agency_id: id, rate: id === 1 ? 0.1 : 0.2 }))
   mocks.commissionSummary.mockResolvedValue(summary)
+  mocks.commissionEntries.mockResolvedValue({ data: [], total: 0, page: 1, page_size: 20 })
+  mocks.commissionSettlements.mockResolvedValue({ data: [], total: 0, page: 1, page_size: 20 })
   mocks.commissionPreview.mockResolvedValue(preview)
   mocks.updateCommissionPolicy.mockImplementation(async (id: number, rate: number | null) => ({ agency_id: id, rate }))
   mocks.confirmCommissionSettlement.mockResolvedValue(settlement)

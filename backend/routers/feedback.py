@@ -27,6 +27,7 @@ router = APIRouter()
 @router.get("", response_model=FeedbackListEnvelope, response_model_exclude_unset=True)
 async def get_feedback_list(
     status: str | None = Query(None, description="状态过滤"),
+    keyword: str | None = Query(None, max_length=200, description="搜索标题、内容或工单号"),
     user_id: int | None = Query(None, ge=1),
     platform_key: str | None = Query(None, description="平台标识 (amazon/aliexpress)"),
     page: int = Query(1, ge=1),
@@ -37,7 +38,7 @@ async def get_feedback_list(
     """获取工单列表（管理员，带分页）"""
     service = FeedbackService(db)
     pagination = PaginationParams(page=page, page_size=page_size)
-    return await service.get_feedback_list(status=status, user_id=user_id, platform_key=platform_key, pagination=pagination)
+    return await service.get_feedback_list(status=status, user_id=user_id, platform_key=platform_key, pagination=pagination, keyword=keyword)
 
 
 @router.get("/stats", response_model=FeedbackStatsEnvelope, response_model_exclude_unset=True)

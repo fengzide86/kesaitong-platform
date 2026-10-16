@@ -6,6 +6,7 @@
       description="为普通工具箱和专业工作台生成独立授权"
     >
       <template #actions>
+        <el-button v-if="canWrite" type="primary" @click="openCreate">新建授权码</el-button>
         <router-link v-if="canWrite" class="business-center-link" to="/admin/business-access">工作台开放</router-link>
       </template>
     </PageHeader>
@@ -14,7 +15,7 @@
 
     <p v-if="!canWrite" class="role-boundary-note" role="note">当前为客服只读视图：授权码仅显示脱敏尾号，可核对状态与关联用户，不能生成、修改或删除授权。</p>
 
-    <el-card v-if="canWrite" :class="['table-card', 'generator-card', { 'is-business': generatorProductType === 'business' }]">
+    <el-card v-if="canWrite && createOpen" id="authorization-create" :class="['table-card', 'generator-card', 'kst-reveal', { 'is-business': generatorProductType === 'business' }]">
       <template #header>
         <div class="card-header">
           <div>
@@ -94,6 +95,7 @@
           <el-button type="primary" @click="handleGenerate" :loading="isLoading">
             {{ isLoading ? '生成中...' : '生成授权码' }}
           </el-button>
+          <el-button :disabled="isLoading" @click="closeCreate">收起</el-button>
         </div>
       </div>
     </el-card>
@@ -105,7 +107,7 @@
         </div>
       </template>
       <DataToolbar label="授权码筛选">
-        <el-input v-model="searchText" :placeholder="canWrite ? '搜索全部授权码/设备...' : '搜索授权码尾号/设备...'" :maxlength="200" style="width: 220px;" clearable @keyup.enter="applyKeyword" />
+        <el-input v-model="searchText" :placeholder="canWrite ? '搜索客户、项目、订单、授权码或设备' : '搜索客户、项目、授权尾号或设备'" :maxlength="200" style="width: 280px;" clearable @keyup.enter="applyKeyword" />
         <el-select v-model="filterProductType" placeholder="全部产品" clearable style="width: 150px;">
           <el-option label="普通 C 端" value="consumer" />
           <el-option label="专业 B 端" value="business" />
@@ -119,9 +121,12 @@
         <template #summary>共 {{ total }} 个授权 · 本页 {{ authCodes.length }} 个</template>
       </DataToolbar>
       <el-table :data="filteredCodes" style="width: 100%" v-loading="isLoading">
-        <el-table-column label="授权码" min-width="180">
+        <el-table-column label="客户 / 授权码" min-width="220">
           <template #default="{ row }">
-            <a href="#" @click.prevent="openDetail(row)" class="code-link">{{ displayCode(row.code) }}</a>
+            <div class="auth-identity-cell" :data-testid="`auth-code-identity-${row.id}`">
+              <strong class="auth-customer-name" :title="customerLabel(row)">{{ customerLabel(row) }}</strong>
+              <a href="#" @click.prevent="openDetail(row)" class="code-link" :title="displayCode(row.code)">{{ displayCode(row.code) }}</a>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="产品类型" width="120">
@@ -134,6 +139,11 @@
         <el-table-column v-if="!isCompact" label="套餐" min-width="120">
           <template #default="{ row }">
             {{ row.plan_name || getPlanName(row.plan_id) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="项目 / 跟进" min-width="180">
+          <template #default="{ row }">
+            <div class="auth-context-cell" :data-testid="`auth-code-context-${row.id}`"><small v-if="row.project_id" :title="row.project_id">项目：{{ row.project_id }}</small><small v-if="row.order_no" :title="row.order_no">订单：{{ row.order_no }}</small><small :title="row.responsible || '未登记'">负责人：{{ row.responsible || '未登记' }}</small></div>
           </template>
         </el-table-column>
         <el-table-column v-if="!isCompact" label="平台权限" min-width="140">
@@ -172,10 +182,11 @@
             <span class="text-small">{{ formatDate(row.expires_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="isCompact ? 136 : 280" fixed="right">
+        <el-table-column label="操作" :width="canWrite ? 136 : 80" fixed="right">
           <template #default="{ row }">
+            <div class="auth-row-actions" :data-testid="`auth-code-actions-${row.id}`">
             <el-button size="small" @click="openDetail(row)">详情</el-button>
-            <el-dropdown v-if="isCompact && canWrite" trigger="click" @command="command => handleCodeCommand(command, row)">
+            <el-dropdown v-if="canWrite" trigger="click" @command="command => handleCodeCommand(command, row)">
               <el-button size="small">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -185,11 +196,7 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <template v-else-if="canWrite">
-              <el-button size="small" @click="toggleFreeze(row)" :disabled="row.status === 'expired'">{{ row.status === 'frozen' ? '解冻' : '冻结' }}</el-button>
-              <el-button size="small" @click="openExtend(row)" :disabled="row.status === 'deleted'">延期</el-button>
-              <el-button v-if="canDelete" size="small" type="danger" @click="deleteCode(row.id)" :disabled="row.status === 'deleted'">删除</el-button>
-            </template>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -355,7 +362,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, Copy } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
@@ -373,6 +380,7 @@ import AdminDetailDrawer from '@/components/AdminDetailDrawer.vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import { confirmAction } from '@/shared/ui/confirm'
 import { normalizeDeviceUnbindReason } from '@/features/admin/deviceUnbind'
+import { scrollToWorkflowTarget } from '@/shared/ui/workflowMotion'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 import {
   adminAuthCodeSchema,
@@ -418,6 +426,17 @@ const isCompact = useCompactLayout()
 const canWrite = computed(() => hasStaffPermission(authService.getRole(), 'auth_codes.write'))
 const canDelete = computed(() => hasStaffPermission(authService.getRole(), 'auth_codes.delete'))
 const canUnbindDevice = computed(() => hasStaffPermission(authService.getRole(), 'devices.unbind'))
+const createOpen = ref(false)
+function openCreate() {
+  if (!canWrite.value) return
+  createOpen.value = true
+  void nextTick(() => {
+    const form = document.getElementById('authorization-create')
+    scrollToWorkflowTarget(form, { block: 'start', focusSelector: 'input' })
+  })
+}
+function closeCreate() { createOpen.value = false; if (query().action === 'create') void router.replace({ query: { ...query(), action: undefined } }) }
+watch(() => query().action, value => { if (value === 'create') openCreate() }, { immediate: true })
 const showGeneratedDrawer = ref(false)
 
 // 设备数弹窗
@@ -480,6 +499,11 @@ function displayCode(value?: string | null) {
   if (canWrite.value) return value
   const normalized = String(value)
   return `••••${normalized.slice(-4)}`
+}
+
+function customerLabel(rawCode: unknown): string {
+  const code = adminAuthCodeSchema.parse(rawCode)
+  return code.customer_name || code.user_name || (code.user_id ? `用户 #${code.user_id}` : '尚未分配')
 }
 
 function getDeviceCount(rawCode: unknown) {
@@ -1193,6 +1217,12 @@ onBeforeUnmount(() => { loadSequence += 1; detailSequence += 1; relatedSequence 
   font-size: 0.85rem;
 }
 .device-item-info { display: flex; min-width: 0; flex-direction: column; gap: .2rem; }
+.auth-identity-cell { display: grid; gap: 5px; min-width: 0; }
+.auth-customer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-control); color: var(--color-text); }
+.auth-identity-cell .code-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-micro); line-height: 1.5; }
+.auth-context-cell { display: grid; gap: 4px; min-width: 0; }
+.auth-context-cell small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: var(--type-micro); }
+.auth-row-actions { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 
 :deep(.el-table) {
   --el-table-border-color: var(--color-border);

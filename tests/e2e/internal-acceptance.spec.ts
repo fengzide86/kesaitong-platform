@@ -224,7 +224,7 @@ test('C 端目录隐藏内部 Demo，网页版已开放工具只引导下载桌�
   await expect(page.getByTestId('tools-page')).toBeVisible()
   await expect(page.getByTestId('tool-card-注册流程演示')).toHaveCount(0)
   const liveCard = page.getByTestId('tool-card-公司登记工具')
-  await expect(liveCard).toContainText('下载桌面端')
+  await expect(liveCard).toContainText('查看准备项')
   await liveCard.click()
   await expect(page.locator('.drawer-assurance')).toContainText('本网页不会启动外部平台操作')
   await page.getByRole('button', { name: '下载桌面端', exact: true }).click()
@@ -720,7 +720,8 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
   await page.setViewportSize({ width: 1365, height: 800 })
 
   await page.goto('/#/admin/orders')
-  await page.getByRole('button', { name: '退款' }).click()
+  await page.getByRole('row', { name: /INTERNAL-ORDER-001/ }).getByRole('button', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '登记退款', exact: true }).click()
   const dialog = page.locator('.el-message-box')
   await expect(dialog.getByText('确认退款', { exact: true })).toBeVisible()
   await dialog.getByPlaceholder('请填写至少 2 个字的原因').fill('内部验收退款')

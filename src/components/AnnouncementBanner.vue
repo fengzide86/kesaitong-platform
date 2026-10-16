@@ -5,7 +5,7 @@
       <strong>{{ store.banner.title }}</strong>
       <span>{{ store.banner.content }}</span>
     </div>
-    <button type="button" aria-label="不再显示这条公告" @click="store.dismiss(store.banner)"><X :size="15" /></button>
+    <button type="button" aria-label="不再显示这条公告" :disabled="dismissing" @click="dismissBanner"><X :size="15" /></button>
   </div>
 
   <Teleport to="body">
@@ -56,6 +56,14 @@ async function dismissCritical() {
   finally { dismissing.value = false }
 }
 useModalFocus(computed(() => Boolean(store.critical)), criticalModal, () => { void dismissCritical() })
+
+async function dismissBanner() {
+  if (!store.banner || dismissing.value) return
+  dismissing.value = true
+  try { await store.dismiss(store.banner) }
+  catch { showToast('公告状态未保存，请检查网络后重试', 'error') }
+  finally { dismissing.value = false }
+}
 
 function typeText(category: Announcement['category']): string {
   return category === 'maintenance' ? '维护通知' : '重要通知'

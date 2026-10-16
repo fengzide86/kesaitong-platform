@@ -3,6 +3,15 @@ import router from '@/router'
 import { getAdminNavigation, getAdminNavigationSelection } from '@/features/admin/navigation'
 
 describe('Admin navigation permission and legacy route compatibility', () => {
+  it('keeps current commercial configuration distinct from legacy system settings', () => {
+    const entries = getAdminNavigation('super_admin').flatMap(area => area.items)
+    expect(entries.find(entry => entry.path === '/admin/commercial')?.label).toBe('套餐与服务')
+    expect(entries.find(entry => entry.path === '/admin/settings')?.label).toBe('系统设置')
+    expect(router.resolve('/admin/commercial').meta.title).toBe('套餐与服务')
+    expect(router.resolve('/admin/settings').meta.title).toBe('系统设置')
+    expect(router.resolve('/admin/commercial').meta.roles).toEqual(['super_admin'])
+    expect(router.resolve('/admin/settings').meta.roles).toEqual(['super_admin'])
+  })
   it.each(['super_admin', 'operator', 'support', 'agent', 'user'] as const)('only points %s to routes it may visit', role => {
     for (const area of getAdminNavigation(role)) {
       for (const entry of area.items) {

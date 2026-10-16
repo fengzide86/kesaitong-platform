@@ -1,29 +1,45 @@
 <template>
   <section class="target-workspace" data-testid="target-workspace">
-    <button class="target-toggle" type="button" :aria-expanded="expanded" @click="toggle"><Globe2 :size="19" /><span><strong>连接你的平台</strong><small>{{ selected ? `${selected.profile.name} · ${reviewLabels[selected.profile.reviewStatus]}` : '先输入网址，登录后即可识别现场' }}</small></span><ChevronDown :size="17" :class="{ rotated: expanded }" /></button>
+    <button class="target-toggle" type="button" :aria-expanded="expanded" @click="toggle"><Globe2 :size="19" /><span><strong>{{ toolId ? '进入平台并核对现场' : '先申请平台接入' }}</strong><small>{{ selected ? `${selected.profile.name} · ${reviewLabels[selected.profile.reviewStatus]}` : toolId ? '平台审核通过后，才会打开登录窗口' : '先选工具并申请授权，不会自动打开平台登录' }}</small></span><ChevronDown :size="17" :class="{ rotated: expanded }" /></button>
     <div v-if="expanded" class="target-body">
       <p v-if="!bridge" class="target-notice" role="status">请使用支持多网址接入的 Windows 客户端。普通浏览器不会打开平台账号、探测页面或执行业务。</p>
       <template v-else>
         <div class="target-flow-intro">
-          <div class="target-section-heading target-flow-heading"><div><span class="target-kicker">真实平台接入</span><h2>输入网址，登录后开始</h2><p>首次只需完成一次识别；审核通过后，下次选择已登记入口即可直接继续。</p></div><span class="target-flow-scope">不上传账号信息</span></div>
-          <ol class="target-step-nav" aria-label="接入步骤"><li :class="{ active: !observation && !receiptBlocksCurrent }">1 选择网址与登录</li><li :class="{ active: observation && !preview && !receiptBlocksCurrent }">2 核对现场与参数</li><li :class="{ active: preview && !receiptBlocksCurrent }">3 预检与确认</li><li :class="{ active: receiptBlocksCurrent || (!preview && Boolean(receipt)) }">4 真实结果</li></ol>
+          <div class="target-section-heading target-flow-heading"><div><h2>{{ connectionHeading.title }}</h2><p>{{ connectionHeading.description }}</p></div><span class="target-flow-scope">不上传账号密码</span></div>
+          <ol class="target-step-nav" aria-label="接入步骤"><li :class="{ active: !approved && !observation && !receiptBlocksCurrent }">1 申请接入</li><li :class="{ active: approved && !observation && !receiptBlocksCurrent }">2 审核通过后登录</li><li :class="{ active: observation && !preview && !receiptBlocksCurrent }">3 核对现场与任务</li><li :class="{ active: receiptBlocksCurrent || (!preview && Boolean(receipt)) || Boolean(preview) }">4 查看结果</li></ol>
         </div>
         <p v-if="error" class="target-error" role="alert">{{ error }}</p><p v-if="notice" class="target-notice" role="status">{{ notice }}</p>
         <section class="target-connect-section" aria-labelledby="target-connect-title">
-          <div class="target-section-heading"><div><span class="target-kicker">第一步 · 接入现场</span><h2 id="target-connect-title">连接平台并确认课程</h2><p>打开后请在平台窗口手动登录，再选择本次要操作的课程。</p></div><span class="target-section-index">01</span></div>
-          <form class="target-entry-form" @submit.prevent="openPlatform"><label>平台网址<input data-testid="target-entry-url" v-model.trim="entryUrl" type="url" required :maxlength="TARGET_PROFILE_LIMITS.rawOpenUrl" :disabled="busy" placeholder="https://你的学校或比赛入口" autocomplete="url" aria-label="平台入口网址" /><small>可直接右键粘贴；网址只用于打开并识别当前平台。</small></label><button class="target-primary" data-testid="target-open" type="submit" :disabled="busy || !entryUrl">{{ phase === 'open' ? '正在打开…' : '打开并登录' }}</button></form>
-          <div v-if="profiles.length" class="target-saved-entry"><label>已审核或已登记入口<select data-testid="target-profile-select" :value="selectedId" :disabled="busy" @change="selectProfile(($event.target as HTMLSelectElement).value)"><option value="">使用新网址</option><option v-for="item in profiles" :key="item.profile.id" :value="item.profile.id">{{ item.profile.name }} · {{ editionLabels[item.profile.edition] }} · {{ reviewLabels[item.profile.reviewStatus] }}</option></select></label><button type="button" :disabled="busy" @click="load">刷新状态</button></div>
-          <div v-if="opened" class="target-after-open"><button type="button" :disabled="busy" data-testid="target-detect" @click="detect">{{ phase === 'detect' ? '正在识别…' : '我已登录并进入课程，识别现场' }}</button><button type="button" :disabled="busy" data-testid="target-refresh" @click="refreshPlatform">{{ phase === 'refresh' ? '正在刷新…' : '卡住了？刷新并重新登录' }}</button></div>
-          <p class="target-notice" role="note">打开后只做三件事：在平台窗口登录 → 进入本次课程首页 → 回到这里点击“识别现场”。工具不会替你选课程，也不会在审核前提交业务。</p>
+          <div class="target-section-heading"><div><h2 id="target-connect-title">{{ connectionHeading.title }}</h2><p>{{ connectionHeading.description }}</p></div><span class="target-section-index">01</span></div>
+          <form v-if="!selected || approved" class="target-entry-form" @submit.prevent="selected && approved ? openPlatform() : submit()">
+            <label v-if="!selected" for="target-entry-name">平台名称（可选）<input id="target-entry-name" data-testid="target-entry-name" v-model.trim="entryName" :disabled="busy" :maxlength="TARGET_PROFILE_LIMITS.name" placeholder="例如：本学期跨境电商课程" /></label>
+            <label for="target-entry-url">平台网址</label>
+            <div class="target-entry-controls">
+              <input id="target-entry-url" data-testid="target-entry-url" v-model.trim="entryUrl" type="url" required :maxlength="TARGET_PROFILE_LIMITS.rawOpenUrl" :disabled="busy" placeholder="粘贴学校或比赛的网址，例如 https://…" autocomplete="url" aria-label="平台入口网址" aria-describedby="target-entry-help" />
+              <button v-if="selected && approved" class="target-primary" data-testid="target-open" type="submit" :disabled="busy || !entryUrl">{{ phase === 'open' ? '正在打开…' : '打开并登录' }}</button>
+              <button v-else class="target-primary" data-testid="target-apply" type="submit" :disabled="busy || !entryUrl">{{ phase === 'submit' ? '正在提交…' : '提交接入申请' }}</button>
+            </div>
+            <small id="target-entry-help">{{ selected && approved ? '账号和密码请在平台窗口填写；课赛通不会代填。' : '只登记入口地址，不会保存账号密码，也不会打开平台窗口。' }}</small>
+          </form>
+          <div v-else class="target-review-state" data-testid="target-review-state" role="status"><strong>{{ selected.profile.reviewStatus === 'pending' ? '已提交，等待团队审核' : selected.profile.reviewStatus === 'rejected' ? '这个平台暂未通过审核' : selected.profile.reviewStatus === 'disabled' ? '这个平台已暂停使用' : '入口已审核，但当前工具还未开放' }}</strong><p>{{ selected.profile.reviewStatus === 'pending' ? '审核通过后，再选择这个入口打开平台登录。现在不用登录，也不用重复申请。' : '如需继续使用，请联系团队核对入口和工具权限。' }}</p></div>
+          <div v-if="profiles.length" class="target-saved-entry"><label>或选择已保存的平台<select data-testid="target-profile-select" :value="selectedId" :disabled="busy" @change="selectProfile(($event.target as HTMLSelectElement).value)"><option value="">使用新网址</option><option v-for="item in profiles" :key="item.profile.id" :value="item.profile.id">{{ item.profile.name }} · {{ reviewLabels[item.profile.reviewStatus] }}</option></select></label><button type="button" :disabled="busy" @click="load">刷新状态</button></div>
+          <div v-if="opened" class="target-after-open"><button class="target-primary" type="button" :disabled="busy" data-testid="target-detect" @click="detect">{{ phase === 'detect' ? '正在确认…' : '我已进入课程，继续' }}</button><button type="button" :disabled="busy" data-testid="target-refresh" @click="refreshPlatform">{{ phase === 'refresh' ? '正在刷新…' : '重新打开平台' }}</button></div>
+          <p v-if="opened" class="target-muted" role="note">进入正确的课程或店铺后，再回到这里继续。未经你的确认，工具不会提交操作。</p>
         </section>
 
-        <section v-if="observation" class="target-context" aria-label="当前平台识别结果"><div class="target-section-heading"><div><span class="target-kicker">第二步 · 现场核对</span><h2>当前平台现场</h2><p>识别结果只作为本次预检输入，不代表已经授权执行。</p></div><span :class="['context-badge', { warn: observation.kind !== 'matched' || observation.missing.length > 0 }]">{{ probeLabel }}</span></div><dl><div><dt>页面入口</dt><dd>{{ displayEntry(`${observation.origin}${observation.path}`) }}</dd></div><div><dt>平台版本</dt><dd>{{ editionLabels[observation.version || 'unknown'] }}</dd></div><div><dt>课程 / 赛事</dt><dd>{{ contextRef(observation.courseRef) }}</dd></div><div><dt>店铺</dt><dd>{{ contextRef(observation.shopRef) }}</dd></div><div><dt>账号 / 角色</dt><dd>{{ observation.localAccountRef ? '本机已识别' : observation.missing.includes('account-identity-unverified') ? '账号身份待验收' : '待登录确认' }} · {{ observation.role || '待识别' }}</dd></div><div><dt>入口审核</dt><dd>{{ selected ? reviewLabels[selected.profile.reviewStatus] : '尚未登记' }}</dd></div></dl><ul v-if="observation.missing.length"><li v-for="missing in observation.missing" :key="missing">{{ missingEvidenceLabel(missing) }}</li></ul><p v-if="observation.version === 'v3'">V3 仅记录识别结果，当前没有已验收的 V3 执行能力，不套用 V2 写入。</p></section>
-        <form v-if="observation && !selected" class="target-submit" @submit.prevent="submit"><label>入口备注（可选）<input v-model.trim="entryName" :disabled="busy" :maxlength="TARGET_PROFILE_LIMITS.name" placeholder="不填则使用网址主机名" /></label><button type="submit" :disabled="busy">{{ phase === 'submit' ? '正在提交…' : '提交识别结果，等待团队审核' }}</button><small>你不需要填写“实训 / 比赛”等内部术语；系统会从现场识别版本，团队审核后再开放能力。</small></form>
+        <section v-if="observation" class="target-context kst-reveal" aria-label="当前平台识别结果">
+          <div class="target-section-heading"><div><h2>确认你要操作的平台</h2><p>请确认打开的是本次课程和店铺，填写任务后还会再检查一次。</p></div><span :class="['context-badge', { warn: observation.kind !== 'matched' || observation.missing.length > 0 }]">{{ probeLabel }}</span></div>
+          <dl><div><dt>课程 / 赛事</dt><dd>{{ observation.courseRef ? '已找到，请在平台窗口确认名称' : '尚未找到，请先进入课程' }}</dd></div><div><dt>店铺</dt><dd>{{ observation.shopRef ? '已找到，请在平台窗口确认名称' : '尚未找到，请先进入店铺' }}</dd></div><div><dt>平台是否可用</dt><dd>{{ selected ? reviewLabels[selected.profile.reviewStatus] : '首次使用，需团队确认' }}</dd></div></dl>
+          <ul v-if="observation.missing.length"><li v-for="missing in observation.missing" :key="missing">{{ missingEvidenceLabel(missing) }}</li></ul>
+          <p v-if="observation.version === 'v3'">已识别为 V3 平台，目前还不能使用工具操作。请联系团队确认后续支持情况。</p>
+          <details class="target-technical-details"><summary>连接详情（联系客服时可查看）</summary><dl><div><dt>页面入口</dt><dd>{{ displayEntry(`${observation.origin}${observation.path}`) }}</dd></div><div><dt>平台版本</dt><dd>{{ editionLabels[observation.version || 'unknown'] }}</dd></div><div><dt>课程记录</dt><dd>{{ contextRef(observation.courseRef) }}</dd></div><div><dt>店铺记录</dt><dd>{{ contextRef(observation.shopRef) }}</dd></div><div><dt>账号 / 角色</dt><dd>{{ observation.localAccountRef ? '本机已识别' : '待登录确认' }} · {{ observation.role || '待识别' }}</dd></div></dl></details>
+        </section>
+        <form v-if="observation && !selected" class="target-submit" @submit.prevent="submit"><label>给这个平台起个名字（可选）<input v-model.trim="entryName" :disabled="busy" :maxlength="TARGET_PROFILE_LIMITS.name" placeholder="例如：本学期跨境电商课程" /></label><button type="submit" :disabled="busy">{{ phase === 'submit' ? '正在提交…' : '请团队确认这个平台' }}</button><small>只发送必要的平台识别信息，不发送账号密码。确认支持后即可继续。</small></form>
         <p v-if="observation?.courseRef && selected && approved" class="target-notice" role="note" data-testid="training-scope">{{ reviewedTrainingScope ? '本课程已列入团队审核的实训范围；仍需核对本次身份、页面结构和工具授权。' : '本课程尚未列入团队审核的实训范围，不能仅凭选择“实训”开始执行。' }} 首期不开放比赛执行。</p>
 
-        <section v-if="selected || observation" class="target-tool-section" aria-label="配送模板真实工具"><div class="target-section-heading"><div><span class="target-kicker">下一步 · 真实工具</span><h2>配送模板</h2><p>只有入口审核通过且现场识别成功后，这里才会出现可填写的工具参数。</p></div><span class="target-tool-status">受控写入</span></div><p v-if="selected && selected.profile.reviewStatus === 'pending'" class="target-notice"><strong>正在等待团队审核。</strong>你无需填写技术版本、页面指纹或课程术语。审核员会依据脱敏识别证据确认范围；审核完成后刷新状态即可继续。</p><p v-else-if="selected && selected.profile.reviewStatus === 'rejected'" class="target-notice"><strong>入口暂未通过审核。</strong>请联系团队说明现场变化；不要重复提交同一个网址。</p><p v-else-if="selected && selected.profile.reviewStatus === 'disabled'" class="target-notice"><strong>此入口已停用新的执行。</strong>历史记录仍保留，需团队重新核验后恢复。</p><p v-else-if="!toolId && hasOpenTools === false" class="target-notice">当前目录尚无开放与已审核入口绑定的配送模板工具。请先联系团队，不会用模拟执行替代真实工具。</p><p v-else-if="!toolId" class="target-notice">请先在工具目录选择配送模板工具，再开始本次真实操作。</p><p v-else-if="!approved" class="target-notice">此入口还没有可执行的签名配置。刷新入口状态或联系管理员审核。</p>
+        <section v-if="selected || observation" class="target-tool-section" aria-label="配送模板真实工具"><div class="target-section-heading"><div><h2>设置这次的配送模板</h2><p>平台确认可用后，填写模板名称和运费规则，再检查并提交。</p></div><span class="target-tool-status">确认后才会保存</span></div><p v-if="selected && selected.profile.reviewStatus === 'pending'" class="target-notice"><strong>正在等待团队确认平台。</strong>你已完成申请，无需重复提交。确认后点击“刷新状态”继续。</p><p v-else-if="selected && selected.profile.reviewStatus === 'rejected'" class="target-notice"><strong>暂时还不能使用这个平台。</strong>请联系客服了解原因，无需重复提交同一个网址。</p><p v-else-if="selected && selected.profile.reviewStatus === 'disabled'" class="target-notice"><strong>这个平台已暂停使用。</strong>此前的操作记录仍保留，请联系客服确认恢复时间。</p><p v-else-if="!toolId && hasOpenTools === false" class="target-notice">配送模板工具暂未对你开放。请联系客服确认适用平台和开通情况。</p><p v-else-if="!toolId" class="target-notice">请先在工具目录选择配送模板工具，再开始本次操作。</p><p v-else-if="!approved" class="target-notice">团队还需要确认这个平台的使用范围。请刷新状态，或联系客服帮你处理。</p>
           <form v-if="toolId" class="template-form" @submit.prevent="preflight">
-            <fieldset :disabled="busy || !approved"><legend>这次要做什么</legend><div class="target-fields"><label>管理员分配的场景<input data-testid="assigned-context" :value="scenario === 'competition' ? '指定比赛' : '课程实训'" readonly><small>场景由管理端统一分配，不能在工具内自行切换。执行前仍由主进程重新验证。</small></label><label>模板名称<input v-model.trim="input.name" maxlength="100" required placeholder="输入本次要创建的模板名称" /></label></div><p v-if="scenario === 'competition'" class="formal-warning" role="note"><ShieldAlert :size="18" />比赛页面可以正常浏览；比赛写入动作尚未验收，不开放此实训执行器。</p><p class="target-muted">平台现场、项目期限与管理员审核范围会再次核对。规则来源：本次模板配置；USD · 按重量 / 件数计费。</p></fieldset>
+            <fieldset :disabled="busy || !approved"><legend>这次要做什么</legend><div class="target-fields"><label>本次用途<input data-testid="assigned-context" :value="scenario === 'competition' ? '指定比赛' : '课程实训'" readonly><small>由团队开通时指定。如需更改，请联系客服。</small></label><label>模板名称<input v-model.trim="input.name" maxlength="100" required placeholder="输入本次要创建的模板名称" /></label></div><p v-if="scenario === 'competition'" class="formal-warning" role="note"><ShieldAlert :size="18" />可以浏览比赛平台；当前工具尚不支持在比赛中保存模板。</p><p class="target-muted">运费使用美元（USD），按重量或件数计费。保存前会再次确认账号、课程与使用期限。</p></fieldset>
             <fieldset :disabled="busy || !approved">
               <legend>运费规则</legend>
               <p class="target-muted">标准国内配送必须保留完整大陆地区，已为你预填。零运费只是可修改的初始值；未添加的可选配送服务将关闭。国际规则每行选一个实际可用国家，保存前还会核对平台控件。</p>
@@ -42,12 +58,13 @@
               </div>
               <button type="button" :disabled="input.rules.length >= 12" data-testid="add-rule" @click="input.rules.push(newRule('20001'))">添加运费规则</button>
             </fieldset>
-            <button class="target-primary" type="submit" :disabled="busy || !approved || observation?.kind !== 'matched'">{{ phase === 'preflight' ? '正在读取与核对…' : '只读预检并生成执行预览' }}</button>
+            <p class="target-muted">下一步只检查信息，不会提交。检查通过后，你还可以查看并确认要保存的内容。</p>
+            <button class="target-primary" type="submit" :disabled="busy || !approved || observation?.kind !== 'matched'">{{ phase === 'preflight' ? '正在检查…' : '检查并预览' }}</button>
           </form>
         </section>
 
-        <section v-if="preview" class="target-preview" aria-label="执行预览"><header><h3>本次执行预览</h3><span>{{ preview.canExecute ? '预检通过，等待确认' : '尚不可执行' }}</span></header><p>{{ preview.plan.input.name }} · {{ preview.plan.input.rules.length }} 条运费规则 · {{ scenarioLabels[preview.plan.context.scenario] }} / {{ stageLabels[preview.plan.context.stage] }}</p><p class="target-muted">仅新增一份模板；不设默认、不删除、不分配 SKU。版本组合已锁定，参数或入口变化需重新预检。</p><ol><li v-for="step in preview.steps" :key="step">{{ step }}</li></ol><ul v-if="preview.blockers.length" class="target-error"><li v-for="blocker in preview.blockers" :key="blocker">{{ blocker }}</li></ul><p v-if="receiptBlocksCurrent" class="target-notice" role="alert">当前模板和原现场已有待核对结果，不能重复提交。可改用不同模板或入口；原记录仍保留供核对。</p><label v-if="preview.canExecute && !receiptBlocksCurrent && !submissionAttempted" class="target-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我已核对当前账号、课程、店铺和{{ stage === 'formal' ? '正式比赛' : '执行' }}范围，同意保存这份模板。</label><button v-if="!receiptBlocksCurrent && !submissionAttempted" class="target-primary" type="button" :disabled="busy || !preview.canExecute || !confirmed" @click="execute">确认范围，创建并核验模板</button><p v-if="submissionAttempted && !receipt" role="status">{{ phase === 'execute' ? '正在执行并读取平台结果…' : '本次已经发起，结果尚未返回。请查看本机执行记录核对，不要重复创建。' }}</p></section>
-        <section v-if="receipt" class="target-result" :class="{ verified: receipt.status === 'verified' }" aria-label="真实执行结果" aria-live="polite"><header><h3>{{ !preview || receipt.planId !== preview.plan.id ? '保留记录 · ' : '' }}{{ receiptLabel(receipt.status) }}</h3><span>{{ stageLabels[receipt.stage] }}</span></header><p v-if="!preview || receipt.planId !== preview.plan.id" class="target-muted">这是先前执行的结果，不代表当前网址、参数或重新登录后的现场已通过预检。</p><p v-if="receipt.status === 'verified'">平台同一模板的保存结果已通过回读核验。</p><p v-else-if="receipt.status === 'not_submitted'">本次没有确认到已提交操作。重新预检后才可建立新尝试。</p><p v-else>提交结果尚不确定，不能直接重复创建。请先核对原现场或读取平台状态。</p><dl><div><dt>记录</dt><dd>{{ receipt.id }}</dd></div><div><dt>模板标识</dt><dd>{{ receipt.objectRef || '尚未确认' }}</dd></div><div v-if="receipt.errorCode"><dt>问题编号</dt><dd>{{ receipt.errorCode }}</dd></div></dl><ul><li v-for="check in receipt.checks" :key="check">{{ check }}</li></ul><button v-if="receipt.status !== 'verified' && receipt.status !== 'not_submitted'" type="button" :disabled="busy" @click="reconcile(receipt)">{{ phase === 'reconcile' ? '正在核对…' : '读取原对象状态，不重新提交' }}</button></section>
+        <section v-if="preview" class="target-preview kst-reveal" aria-label="执行预览"><header><h3>本次执行预览</h3><span>{{ preview.canExecute ? '预检通过，等待确认' : '尚不可执行' }}</span></header><p>{{ preview.plan.input.name }} · {{ preview.plan.input.rules.length }} 条运费规则 · {{ scenarioLabels[preview.plan.context.scenario] }} / {{ stageLabels[preview.plan.context.stage] }}</p><p class="target-muted">仅新增一份模板；不设默认、不删除、不分配 SKU。版本组合已锁定，参数或入口变化需重新预检。</p><ol><li v-for="step in preview.steps" :key="step">{{ step }}</li></ol><ul v-if="preview.blockers.length" class="target-error"><li v-for="blocker in preview.blockers" :key="blocker">{{ blocker }}</li></ul><p v-if="receiptBlocksCurrent" class="target-notice" role="alert">当前模板和原现场已有待核对结果，不能重复提交。可改用不同模板或入口；原记录仍保留供核对。</p><label v-if="preview.canExecute && !receiptBlocksCurrent && !submissionAttempted" class="target-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我已核对当前账号、课程、店铺和{{ stage === 'formal' ? '正式比赛' : '执行' }}范围，同意保存这份模板。</label><button v-if="!receiptBlocksCurrent && !submissionAttempted" class="target-primary" type="button" :disabled="busy || !preview.canExecute || !confirmed" @click="execute">确认范围，创建并核验模板</button><p v-if="submissionAttempted && !receipt" role="status">{{ phase === 'execute' ? '正在执行并读取平台结果…' : '本次已经发起，结果尚未返回。请查看本机执行记录核对，不要重复创建。' }}</p></section>
+        <section v-if="receipt" class="target-result kst-reveal" :class="{ verified: receipt.status === 'verified' }" aria-label="真实执行结果" aria-live="polite"><header><h3>{{ !preview || receipt.planId !== preview.plan.id ? '保留记录 · ' : '' }}{{ receiptLabel(receipt.status) }}</h3><span>{{ stageLabels[receipt.stage] }}</span></header><p v-if="!preview || receipt.planId !== preview.plan.id" class="target-muted">这是先前执行的结果，不代表当前网址、参数或重新登录后的现场已通过预检。</p><p v-if="receipt.status === 'verified'">平台同一模板的保存结果已通过回读核验。</p><p v-else-if="receipt.status === 'not_submitted'">本次没有确认到已提交操作。重新预检后才可建立新尝试。</p><p v-else>提交结果尚不确定，不能直接重复创建。请先核对原现场或读取平台状态。</p><dl><div><dt>记录</dt><dd>{{ receipt.id }}</dd></div><div><dt>模板标识</dt><dd>{{ receipt.objectRef || '尚未确认' }}</dd></div><div v-if="receipt.errorCode"><dt>问题编号</dt><dd>{{ receipt.errorCode }}</dd></div></dl><ul><li v-for="check in receipt.checks" :key="check">{{ check }}</li></ul><button v-if="receipt.status !== 'verified' && receipt.status !== 'not_submitted'" type="button" :disabled="busy" @click="reconcile(receipt)">{{ phase === 'reconcile' ? '正在核对…' : '读取原对象状态，不重新提交' }}</button></section>
         <details class="target-history" @toggle="loadHistory"><summary>查看本机执行记录</summary><p>记录只显示脱敏入口和指纹摘要；核对时仍需重新登录原入口并由主进程验证课程、店铺和账号，不会自动重试提交。</p><p v-if="!receipts.length">暂无本机记录。</p><article v-for="item in receipts" :key="item.id"><div><strong>{{ receiptLabel(item.status) }}</strong><small>{{ historySummary(item) }}</small><small>模板输入指纹 {{ item.inputHash.slice(0, 8) }} · 现场指纹 {{ item.contextHash.slice(0, 8) }} · {{ formatReceiptTime(item.updatedAt) }}</small></div><button v-if="item.status === 'needs_review' || item.status === 'submitting'" type="button" :disabled="busy" @click="prepareReconcile(item)">选择原入口核对</button></article></details>
       </template>
     </div>
@@ -66,11 +83,14 @@ import { displayEntry, editionLabels, reviewLabels, scenarioLabels, stageLabels,
 
 // `unknown` avoids Vue's absent Boolean-prop coercion to false: an omitted
 // value means the workspace is used standalone and must not claim an empty catalog.
-const props = defineProps<{ toolId?: string | number; open?: boolean; openRequest?: number; hasOpenTools?: unknown }>()
+const props = defineProps<{ toolId?: string | number; open?: unknown; openRequest?: number; hasOpenTools?: unknown }>()
 const bridge = window.electronAPI?.targets
-// The first action is the URL field, so a fresh Windows workspace opens on
-// that field instead of hiding the entry point behind a second click.
-const expanded = ref(true)
+// The directory should not look like a ready-to-use login screen.  When the
+// component is embedded in the user toolbox, it starts collapsed until a
+// concrete target tool is selected.  Standalone mounts keep the historical
+// expanded state for compatibility with the desktop workspace.
+const embeddedInToolbox = props.toolId !== undefined || props.open !== undefined || props.openRequest !== undefined
+const expanded = ref(embeddedInToolbox ? Boolean(props.toolId || props.open || props.openRequest) : true)
 const profiles = ref<SignedTargetProfile[]>([])
 const selectedId = ref('')
 const selected = computed(() => profiles.value.find(item => item.profile.id === selectedId.value))
@@ -102,6 +122,14 @@ function changeService(rule: TemplateCreateInput['rules'][number], serviceCode: 
 function regionPreset(rule: TemplateCreateInput['rules'][number]) { return rule.countries[0] === 'Alaska' ? 'islands' : 'mainland' }
 function setRegionPreset(rule: TemplateCreateInput['rules'][number], preset: string) { rule.countries = [...(preset === 'islands' ? V2_ISLAND_COUNTRIES : V2_MAINLAND_COUNTRIES)] }
 const approved = computed(() => Boolean(selected.value?.signature && selected.value.signingKeyId && selected.value.profile.reviewStatus === 'approved' && selected.value.profile.edition === 'v2' && selected.value.profile.capabilities.includes('template.create.v1')))
+const connectionHeading = computed(() => {
+  if (!selected.value) return { title: '申请平台接入', description: '填写老师或比赛方提供的网址，先让团队确认是否支持。提交申请不会打开登录窗口，也不会开始工具操作。' }
+  if (approved.value) return { title: '打开平台并登录', description: '平台已通过审核。登录后进入本次课程或店铺，再回来核对现场。' }
+  if (selected.value.profile.reviewStatus === 'pending') return { title: '等待平台审核', description: '你已完成申请，团队确认前无需登录，也不用重复提交。' }
+  if (selected.value.profile.reviewStatus === 'rejected') return { title: '平台暂未通过审核', description: '请联系团队了解原因，核对入口后再继续；无需重复申请同一个网址。' }
+  if (selected.value.profile.reviewStatus === 'disabled') return { title: '平台已暂停使用', description: '请联系团队确认恢复时间。已有操作记录仍保留，现在不会打开平台。' }
+  return { title: '当前工具暂未开放', description: '平台入口已审核，但当前工具的使用条件仍需核对。请联系团队确认。' }
+})
 const reviewedTrainingScope = computed(() => selected.value?.profile.executionScopes?.some(scope => scope.courseRef === observation.value?.courseRef && scope.scenario === 'training' && scope.stage === 'not_applicable' && scope.source === 'admin-verified') || false)
 const probeLabel = computed(() => ({ matched: observation.value?.missing.length ? '页面已识别，身份或现场仍待核对' : '现场已识别，执行仍需预检', ambiguous: '识别冲突，不可写入', unknown: '识别未完成，不可写入', login_required: '请刷新并重新登录，进入原课程后再识别' })[observation.value?.kind || 'unknown'])
 const contextRef = (value: string | null) => value ? `本机已识别 · ${value.slice(0, 8)}` : '未识别，不能执行'
@@ -197,7 +225,13 @@ async function load() {
   })
 }
 function selectProfile(id: string) { selectedId.value = id; const item = profiles.value.find(row => row.profile.id === id); entryUrl.value = item?.profile.entryUrl || ''; observation.value = null; opened.value = false; invalidate() }
-async function openPlatform() { if (!bridge) return; await task('open', async () => { await bridge.open({ entryUrl: entryUrl.value, ...(selected.value ? { profileId: selected.value.profile.id } : {}) }); opened.value = true; observation.value = null; invalidate(); notice.value = '已打开本机平台窗口。请完成登录并进入目标课程 / 店铺，再回来识别现场。' }) }
+async function openPlatform() {
+  // Login is only available after the team has reviewed and signed the entry.
+  // A new URL must go through submit() first; this prevents an accidental
+  // click from making an unapproved platform look ready for use.
+  if (!bridge || !selected.value || !approved.value) return
+  await task('open', async () => { await bridge.open({ entryUrl: entryUrl.value, profileId: selected.value!.profile.id }); opened.value = true; observation.value = null; invalidate(); notice.value = '已打开本机平台窗口。请完成登录并进入目标课程 / 店铺，再回来核对现场。' })
+}
 async function refreshPlatform() {
   if (!bridge || !opened.value) return
   await task('refresh', async () => {
@@ -210,13 +244,19 @@ async function refreshPlatform() {
 async function detect() { if (!bridge || !opened.value) return; await task('detect', async () => { observation.value = await bridge.detect(); invalidate() }) }
 async function submit() {
   const observed = observation.value
-  if (!observed || selected.value) return
+  if (selected.value || !entryUrl.value) return
   await task('submit', async () => {
-    const markers = reviewedMarkerNames(observed.evidence)
     const fallbackName = (() => { try { return new URL(entryUrl.value).hostname } catch { return '新平台入口' } })()
-    const item = await submitTargetProfile({ name: entryName.value || fallbackName, entryUrl: displayEntry(entryUrl.value), providerId: 'bjysoft', productKey: 'amazon', edition: observed.version || 'unknown', evidence: { edition: observed.version || 'unknown', pageFingerprint: observed.pageFingerprint, markers } })
+    const markers = observed ? reviewedMarkerNames(observed.evidence) : []
+    const edition = observed?.version || 'unknown'
+    const item = await submitTargetProfile({ name: entryName.value || fallbackName, entryUrl: displayEntry(entryUrl.value), providerId: 'bjysoft', productKey: 'amazon', edition, evidence: { edition, pageFingerprint: observed?.pageFingerprint || null, markers } })
     profiles.value = [...profiles.value.filter(row => row.profile.id !== item.profile.id), item]; selectedId.value = item.profile.id
-    notice.value = '检测资料已提交，等待团队首次审核。此次没有保存或提交平台业务。'; invalidate()
+    notice.value = observed
+      ? '检测资料已提交，等待团队首次审核。此次没有保存或提交平台业务。'
+      : '平台接入申请已提交，等待团队审核。审核通过后，再选择这个入口打开平台登录。'
+    observation.value = null
+    opened.value = false
+    invalidate()
   })
 }
 async function preflight() {
@@ -346,8 +386,24 @@ async function loadHistory(event: Event) { if (!bridge || !(event.target as HTML
 }
 .target-connect-section { display: grid; gap: 16px; padding: 22px; }
 .target-entry-row { padding: 14px; border: 1px solid #e4eaf2; border-radius: 12px; background: #f8faff; }
-.target-entry-form { align-items: end; gap: 12px; }
-.target-entry-form > label { min-width: 240px; }
+.target-entry-form { display: grid; align-items: start; gap: 8px; }
+.target-entry-form > label { min-width: 0; }
+.target-entry-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 12px; }
+.target-entry-controls input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; }
+.target-entry-controls button { min-height: 44px; white-space: nowrap; }
+.target-entry-form > small { color: var(--target-muted); font-size: 12px; line-height: 1.6; }
+.target-review-state { display: grid; gap: 7px; padding: 16px 18px; border: 1px solid #d9e1ee; border-radius: 12px; background: #f8faff; color: var(--target-ink); }
+.target-review-state strong { font-size: 14px; }
+.target-review-state p { margin: 0; color: var(--target-muted); font-size: 13px; line-height: 1.65; }
+.target-saved-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.target-after-open { display: flex; flex-wrap: wrap; gap: 10px; }
+.target-technical-details { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border); }
+.target-technical-details summary { cursor: pointer; color: var(--color-text-secondary); font-size: 13px; }
+@media (max-width: 650px) {
+  .target-entry-controls { grid-template-columns: 1fr; }
+  .target-entry-controls button { width: 100%; }
+  .target-saved-entry { grid-template-columns: 1fr; align-items: stretch; }
+}
 label { gap: 8px; color: var(--target-ink); font-size: 13px; font-weight: 650; }
 input:not([type=checkbox]), select { border-color: #cfd9e7; border-radius: 9px; padding: 11px 12px; background: #fff; }
 input:not([type=checkbox]):hover, select:hover { border-color: #aabbd3; }

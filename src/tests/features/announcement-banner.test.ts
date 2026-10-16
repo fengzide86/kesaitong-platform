@@ -73,7 +73,7 @@ describe('AnnouncementBanner', () => {
     const trigger = document.createElement('button'); document.body.appendChild(trigger); trigger.focus()
     const [notice] = await mocks.getAnnouncementFeed()
     mocks.getAnnouncementFeed.mockResolvedValue([{ ...notice, content: '长公告'.repeat(3333) + '末' }])
-    mocks.dismissAnnouncement.mockResolvedValue({ success: true })
+    mocks.dismissAnnouncement.mockResolvedValue({ success: true, data: { announcement_id: 8, revision: 1, action: 'dismiss' } })
     const wrapper = mount(AnnouncementBanner, { attachTo: document.body, global: { plugins: [createPinia()] } })
     await flushPromises()
     const modal = document.body.querySelector('.announcement-modal')!
@@ -84,7 +84,7 @@ describe('AnnouncementBanner', () => {
     expect(document.activeElement).toBe(focused)
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await flushPromises()
-    expect(mocks.dismissAnnouncement).toHaveBeenCalledWith(8)
+    expect(mocks.dismissAnnouncement).toHaveBeenCalledWith(8, 1)
     expect(document.activeElement).toBe(trigger)
     wrapper.unmount()
   })

@@ -68,6 +68,11 @@ class AuthCodeResponse(BaseModel):
     code: str
     plan_id: int | None = None
     user_id: int | None = None
+    customer_name: str | None = None
+    user_name: str | None = None
+    project_id: str | None = None
+    order_no: str | None = None
+    responsible: str | None = None
     device_id: str | None = None
     device_name: str | None = None
     max_devices: int | None = None

@@ -62,8 +62,10 @@ class TargetProfileReview(BaseModel):
     reviewStatus: Literal["approved", "rejected", "disabled"]
     # Rejection and disablement are status-only decisions.  Keeping the
     # editable approval draft out of those requests prevents an invalid draft
-    # from blocking a safe state transition.  Approval still requires every
-    # saved configuration field below (see the model validator).
+    # from blocking a safe state transition.  Approval can also be a simple
+    # entry review: the administrator may open the URL, confirm that it is
+    # reachable, and record an approval without enabling any tool capability.
+    # Enabling a tool still requires the complete verified configuration below.
     edition: Edition | None = None
     allowedRoutes: list[TargetRoute] | None = Field(default=None, max_length=24)
     capabilities: list[Literal["template.create.v1"]] | None = Field(default=None, max_length=1)
@@ -73,7 +75,9 @@ class TargetProfileReview(BaseModel):
 
     @model_validator(mode="after")
     def require_approval_configuration(self) -> "TargetProfileReview":
-        if self.reviewStatus == "approved":
+        if self.reviewStatus == "approved" and any(value is not None for value in (
+            self.edition, self.allowedRoutes, self.capabilities, self.evidence, self.executionScopes,
+        )):
             required = {
                 "edition": self.edition,
                 "allowedRoutes": self.allowedRoutes,

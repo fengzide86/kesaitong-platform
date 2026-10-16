@@ -166,26 +166,41 @@ async def review_profile(db: AsyncSession, profile_id: str, payload: TargetProfi
     if before["revision"] != payload.revision:
         raise fail("TARGET_PROFILE_REVISION_CONFLICT", "入口已被其他管理员修改，请刷新后审核")
     if payload.reviewStatus == "approved":
+        # A simple entry review only records that an administrator opened and
+        # accepted the submitted URL.  It deliberately grants no executable
+        # capability; the complete evidence form below remains required before
+        # any tool can be enabled for this profile.
+        if all(value is None for value in (
+            payload.edition, payload.allowedRoutes, payload.capabilities,
+            payload.adapterVersion, payload.evidence, payload.executionScopes,
+        )):
+            changes: dict[str, Any] = {
+                "reviewStatus": "approved",
+                "capabilities": [],
+                "adapterVersion": None,
+                "executionScopes": [],
+            }
+        else:
         # The schema requires these values for approval; keep the explicit
         # guard here as a defensive boundary for callers constructing models
         # directly rather than through FastAPI validation.
-        if payload.edition is None or payload.allowedRoutes is None or payload.capabilities is None or payload.evidence is None or payload.executionScopes is None:
-            raise fail("TARGET_REVIEW_CONFIGURATION_REQUIRED", "批准入口必须提供完整配置", 422)
-        changes = payload.model_dump(exclude={"revision"})
-        changes["allowedRoutes"] = normalized_routes(changes["allowedRoutes"])
-        if not any(route["role"] == "entry" and route_matches(before["entryUrl"], route) for route in changes["allowedRoutes"]):
-            raise fail("TARGET_ENTRY_NOT_ALLOWED", "审核路由没有覆盖登记的入口")
-        if payload.capabilities:
-            markers = set(payload.evidence.markers)
-            if payload.edition != "v2" or payload.evidence.edition != "v2" or payload.evidence.source != "admin-verified" or not payload.evidence.pageFingerprint or not {"amazon-v2", "seller-shipping-template"}.issubset(markers) or "amazon-v3" in markers or payload.adapterVersion != TEMPLATE_ADAPTER:
-                raise fail("TARGET_EVIDENCE_REQUIRED", "只有经管理员核验的 V2 入口才能启用配送模板能力")
-            if not any(route["role"] == "business" for route in changes["allowedRoutes"]):
-                raise fail("TARGET_BUSINESS_ROUTE_REQUIRED", "启用工具必须登记明确的业务页面路由")
-            fingerprints = payload.evidence.pageFingerprints
-            if not fingerprints or not all((fingerprints.courseMap, fingerprints.templateList, fingerprints.templateEditor)):
-                raise fail("TARGET_PAGE_EVIDENCE_REQUIRED", "启用模板创建需要课程地图、模板列表和编辑页分别核验的结构指纹")
-            if not payload.executionScopes or len({scope.courseRef for scope in payload.executionScopes}) != len(payload.executionScopes):
-                raise fail("TARGET_EXECUTION_SCOPE_REQUIRED", "请核验具体实训课程范围，不接受空范围或重复课程")
+            if payload.edition is None or payload.allowedRoutes is None or payload.capabilities is None or payload.evidence is None or payload.executionScopes is None:
+                raise fail("TARGET_REVIEW_CONFIGURATION_REQUIRED", "批准入口必须提供完整配置", 422)
+            changes = payload.model_dump(exclude={"revision"})
+            changes["allowedRoutes"] = normalized_routes(changes["allowedRoutes"])
+            if not any(route["role"] == "entry" and route_matches(before["entryUrl"], route) for route in changes["allowedRoutes"]):
+                raise fail("TARGET_ENTRY_NOT_ALLOWED", "审核路由没有覆盖登记的入口")
+            if payload.capabilities:
+                markers = set(payload.evidence.markers)
+                if payload.edition != "v2" or payload.evidence.edition != "v2" or payload.evidence.source != "admin-verified" or not payload.evidence.pageFingerprint or not {"amazon-v2", "seller-shipping-template"}.issubset(markers) or "amazon-v3" in markers or payload.adapterVersion != TEMPLATE_ADAPTER:
+                    raise fail("TARGET_EVIDENCE_REQUIRED", "只有经管理员核验的 V2 入口才能启用配送模板能力")
+                if not any(route["role"] == "business" for route in changes["allowedRoutes"]):
+                    raise fail("TARGET_BUSINESS_ROUTE_REQUIRED", "启用工具必须登记明确的业务页面路由")
+                fingerprints = payload.evidence.pageFingerprints
+                if not fingerprints or not all((fingerprints.courseMap, fingerprints.templateList, fingerprints.templateEditor)):
+                    raise fail("TARGET_PAGE_EVIDENCE_REQUIRED", "启用模板创建需要课程地图、模板列表和编辑页分别核验的结构指纹")
+                if not payload.executionScopes or len({scope.courseRef for scope in payload.executionScopes}) != len(payload.executionScopes):
+                    raise fail("TARGET_EXECUTION_SCOPE_REQUIRED", "请核验具体实训课程范围，不接受空范围或重复课程")
     else:
         # Rejection/disablement deliberately ignores all editable approval
         # fields.  The request may contain only revision + status, and the

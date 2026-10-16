@@ -2,8 +2,8 @@
   <div class="toolbox-page" data-testid="tools-page">
     <PageHeader
       eyebrow="课赛通工具箱"
-      title="先选要完成的任务"
-      description="从注册公司、选品到商品、物流、营销与发货，按任务找到工具；授权、平台现场和桌面端能力会在开始前逐项核对。"
+      title="你想先完成哪件事？"
+      description="按你现在要做的事情找工具。先看准备什么、能帮你做到哪一步，再决定是否打开。"
     >
       <template #actions>
         <router-link class="plan-chip" to="/user/plans">
@@ -19,8 +19,8 @@
     <section class="directory-intro" data-testid="directory-intro" aria-labelledby="directory-title">
       <div>
         <span class="directory-kicker">工具目录</span>
-        <h2 id="directory-title">按任务找工具</h2>
-        <p>先按任务筛选，再查看当前授权、平台和运行环境是否满足。</p>
+        <h2 id="directory-title">按事情找工具</h2>
+        <p>不确定工具名字也没关系，先选你要完成的事情。</p>
       </div>
       <span class="directory-count">{{ filteredTools.length }} 项匹配</span>
     </section>
@@ -35,17 +35,17 @@
         <div class="task-group-heading"><div><h3>{{ group.title }}</h3><p>{{ group.description }}</p></div><span class="task-group-count">{{ PRODUCT_TASKS.filter(item => item.group === group.id).length }} 个任务</span></div>
         <div class="task-grid">
           <button v-for="task in PRODUCT_TASKS.filter(item => item.group === group.id)" :key="task.id" type="button" :data-task-id="task.id" :aria-pressed="selectedTask === task.id" @click="selectedTask = task.id">
-            <strong>{{ task.title }}</strong><span>{{ task.preparation }}</span>
+            <strong class="task-title"><component :is="iconMap[task.id]" :size="20" aria-hidden="true" />{{ task.title }}</strong><span>{{ task.preparation }}</span>
             <small>{{ loading ? '正在核对工具' : loadError ? '工具目录待重试' : toolCountForTask(task.id) ? `${toolCountForTask(task.id)} 项目录能力 · 开放状态见下方` : '尚无开放工具 · 可先准备资料' }}</small>
-            <span class="task-action" aria-hidden="true">查看工具 <ArrowRight :size="14" /></span>
+            <span class="task-action" aria-hidden="true">看看能做什么 <ArrowRight :size="14" /></span>
           </button>
         </div>
       </section>
     </div>
-    <p class="directory-summary" role="status">{{ selectedTaskTitle }} · {{ filteredTools.length }} 项匹配工具<span v-if="onlyUsable"> · 已核对套餐、发布状态与本机能力</span></p>
+    <p class="directory-summary" role="status">{{ selectedTaskTitle }} · 找到 {{ filteredTools.length }} 个工具<span v-if="onlyUsable"> · 已帮你筛出现在可以用的</span></p>
     <section v-if="!loading && !loadError && firstReadyTool" class="ready-next-step" aria-label="开始使用">
-      <div><strong>先准备「{{ firstReadyTool.name }}」</strong><p>当前授权与本机支持使用。先查看输入资料和使用条件，确认后再启动。</p></div>
-      <button type="button" @click="openDetails(firstReadyTool)">查看准备项 <ArrowRight :size="16" /></button>
+      <div><strong>可以开始「{{ firstReadyTool.name }}」了</strong><p>先看看需要准备什么，确认后就能打开工具。</p></div>
+      <button type="button" @click="openDetails(firstReadyTool)">查看怎么开始 <ArrowRight :size="16" /></button>
     </section>
 
     <div v-if="loading" class="tool-grid" aria-label="工具加载中">
@@ -67,7 +67,7 @@
         type="button"
         :class="['tool-card', `is-${toolState(tool)}`, { 'is-launching': launchingToolId === tool.id, 'is-focused': route.query?.tool === tool.id }]"
         :disabled="launchingToolId !== null || (!hasToolDetails(tool) && toolExecutionUnavailable(tool))"
-        :aria-label="`${tool.name}，${hasToolDetails(tool) ? '查看工具说明，' : ''}${toolActionText(tool)}`"
+        :aria-label="`${tool.name}，${hasToolDetails(tool) ? '查看工具说明，' : ''}${cardActionText(tool)}`"
         :data-testid="'tool-card-' + tool.name"
         @click="hasToolDetails(tool) ? openDetails(tool) : handleToolClick(tool)"
       >
@@ -82,14 +82,14 @@
 
         <span class="tool-copy">
           <strong>{{ tool.name }}</strong>
-          <span>{{ tool.description || defaultDescription(tool) }}</span>
+            <span>{{ customerDescription(tool) }}</span>
           <span v-if="toolCapabilities(tool).length" class="capability-tags" aria-label="工具能力">
             <span v-for="tag in toolCapabilities(tool)" :key="tag">{{ tag }}</span>
           </span>
           <span class="tool-operational-meta">
-            <span><small>目标平台</small><b>{{ toolPlatformLabel(tool) }}</b></span>
+            <span><small>在哪儿用</small><b>{{ toolPlatformLabel(tool) }}</b></span>
             <span><small>需要准备</small><b>{{ toolInputLabel(tool) }}</b></span>
-            <span><small>执行方式</small><b>{{ getToolPresentation(tool).operationLabel }}</b></span>
+            <span><small>它会怎么帮你</small><b>{{ getToolPresentation(tool).operationLabel }}</b></span>
           </span>
         </span>
 
@@ -125,7 +125,7 @@
         </div>
       </template>
       <div v-if="detailsTool" class="drawer-content">
-        <p class="drawer-description">{{ detailsTool.description || defaultDescription(detailsTool) }}</p>
+        <p class="drawer-description">{{ customerDescription(detailsTool) }}</p>
         <p v-if="toolState(detailsTool) === 'platform-locked'" class="drawer-authorization-note">当前授权未包含{{ toolPlatformLabel(detailsTool) }}，请联系授权提供方核对平台范围。更换套餐并不代表已获此平台授权。</p>
         <p v-else-if="toolState(detailsTool) === 'locked'" class="drawer-authorization-note">当前套餐未包含此工具，可查看可用套餐；平台范围和工具开放状态仍需分别核对。</p>
         <section v-if="toolCapabilities(detailsTool).length">
@@ -151,7 +151,7 @@
 
     <el-dialog v-model="runDialogVisible" width="min(560px, 94vw)" :close-on-click-modal="!launchingToolId" destroy-on-close>
       <template #header>
-        <div class="run-dialog-heading"><small>LIVE AUTOMATION</small><h3>{{ pendingTool?.name }}</h3><p>参数只会发送给本机执行器。</p></div>
+        <div class="run-dialog-heading"><small>开始使用</small><h3>{{ pendingTool?.name }}</h3><p>请补充下面的信息，工具会在当前电脑上帮你处理。</p></div>
       </template>
       <p v-if="pendingTool" class="platform-account-confirmation" role="note" data-testid="platform-account-confirmation">请核对当前平台账号；KST 未自动核验平台身份。开始前请确认目标平台登录的是本次要操作的账号。</p>
       <el-form v-if="pendingTool" label-position="top" class="run-form">
@@ -170,7 +170,7 @@
           <el-input v-else v-model="runInput[field.key]" :placeholder="`请输入${field.label}`" />
         </el-form-item>
       </el-form>
-      <template #footer><div class="run-dialog-actions"><el-button :disabled="Boolean(launchingToolId)" @click="runDialogVisible=false">取消</el-button><el-button type="primary" :disabled="Boolean(selectingFile)" :loading="Boolean(launchingToolId)" @click="confirmRun">启动自动处理</el-button></div></template>
+      <template #footer><div class="run-dialog-actions"><el-button :disabled="Boolean(launchingToolId)" @click="runDialogVisible=false">取消</el-button><el-button type="primary" :disabled="Boolean(selectingFile)" :loading="Boolean(launchingToolId)" @click="confirmRun">开始处理</el-button></div></template>
     </el-dialog>
   </div>
 </template>
@@ -184,7 +184,8 @@ import { requiresTargetProfile, supportsTargetWorkspace } from '@/features/targe
 import { useRoute, useRouter, type LocationQuery } from 'vue-router'
 import {
   ArrowRight,
-  BadgeDollarSign,
+  Calculator,
+  Building2,
   Boxes,
   CheckCircle2,
   CircleAlert,
@@ -192,11 +193,11 @@ import {
   LockKeyhole,
   Megaphone,
   PackageCheck,
-  PackagePlus,
+  FileSpreadsheet,
   Search,
   ShieldCheck,
+  Store,
   Truck,
-  UserPlus,
   Warehouse,
   Wrench,
   Zap,
@@ -216,7 +217,7 @@ import { buildLiveLaunch, buildPreflightLaunch, isLiveTool } from '@/features/au
 import { getRuntimeCapabilities } from '@/runtime/capabilities'
 import { downloadDesktopInstaller } from '@/runtime/desktop-download'
 import { validateSingleToolInput } from '@/features/automation/input-validation'
-import { PRODUCT_TASKS, PRODUCT_TASK_GROUPS, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable, isToolIncluded, isToolInPlatformScope, isToolPublished, type ProductTaskId } from '@/features/tools/presentation'
+import { PRODUCT_TASKS, PRODUCT_TASK_GROUPS, getToolIconKey, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable, isToolIncluded, isToolInPlatformScope, isToolPublished, type ProductTaskId } from '@/features/tools/presentation'
 
 const router = useRouter() || { push: () => {} }
 const route = useRoute() || { query: {} as LocationQuery }
@@ -324,27 +325,46 @@ const targetWorkspaceAvailable = computed<boolean | undefined>(() => loading.val
   : tools.value.some(tool => supportsTargetWorkspace(tool) && isToolCurrentlyUsable(tool, currentUsability.value)))
 
 const iconMap = {
-  register: UserPlus,
-  ali_register: UserPlus,
-  logistics_standard: Truck,
-  logistics_template: Truck,
-  logistics_cost: BadgeDollarSign,
-  ad_script: Megaphone,
-  ads: Megaphone,
-  ship_script: PackageCheck,
-  ali_ship: PackageCheck,
-  listing_script: PackagePlus,
-  listing: PackagePlus,
-  ali_listing: PackagePlus,
-  fba_agl: Warehouse,
+  company: Building2,
+  sourcing: Search,
+  product: FileSpreadsheet,
+  shipping: Truck,
+  marketing: Megaphone,
+  fba: Warehouse,
+  orders: PackageCheck,
+  pricing: Calculator,
+  shop: Store,
+  automation: Zap,
+  default: Boxes,
 }
 
 function toolIcon(tool: ToolCatalogItem) {
-  return (tool.capability_key ? iconMap[tool.capability_key as keyof typeof iconMap] : undefined) || (tool.category === 'automation' ? Zap : Boxes)
+  return iconMap[getToolIconKey(tool) as keyof typeof iconMap] || Boxes
 }
 
 function defaultDescription(tool: ToolCatalogItem) {
-  return `自动处理${tool.name || '当前功能'}中的重复操作`
+  return `帮你完成${tool.name || '当前事情'}，少一些重复操作`
+}
+
+const customerDescriptions: Record<string, string> = {
+  company: '按步骤完成公司注册，减少重复填写。',
+  sourcing: '比较商品和成本，帮你选出更合适的产品。',
+  product: '整理商品资料，按要求完成商品发布。',
+  shipping: '把配送方式和运费规则整理成可直接使用的模板。',
+  marketing: '配置广告、秒杀和优惠券等经营活动。',
+  fba: '整理库存和货件信息，完成 FBA 配送准备。',
+  orders: '把订单、打包和运单信息整理好，方便完成发货。',
+  pricing: '比较售价、运费和利润，方便你做决定。',
+}
+
+function customerDescription(tool: ToolCatalogItem): string {
+  const raw = String(tool.description || '').trim()
+  if (!raw) return customerDescriptions[getToolIconKey(tool)] || defaultDescription(tool)
+  // Catalogs may carry internal execution wording; keep the meaning while
+  // removing terms that are only useful to operators.
+  return raw
+    .replace(/执行器|脚本|运行环境/g, '工具')
+    .replace(/参数/g, '信息')
 }
 
 function normalizedList(value: unknown): string[] {
@@ -368,7 +388,7 @@ function toolInputCount(tool: ToolCatalogItem): number {
 
 function toolInputLabel(tool: ToolCatalogItem): string {
   const count = toolInputCount(tool)
-  return count ? `${count} 项` : '无需填写'
+  return count ? `${count} 项资料` : '无需填写'
 }
 
 function hasToolDetails(tool: ToolCatalogItem) {
@@ -398,7 +418,6 @@ function toolActionText(tool: ToolCatalogItem): string {
 }
 
 function cardActionText(tool: ToolCatalogItem): string {
-  if (liveUnavailable(tool)) return '下载桌面端'
   // Cards with guidance always open the read-only detail surface first. Keep
   // the CTA honest instead of implying that a click immediately starts work.
   if (!hasToolDetails(tool)) return toolActionText(tool)
@@ -657,11 +676,10 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  transition: transform var(--motion-normal) var(--ease-emphasized), border-color var(--motion-fast), box-shadow var(--motion-normal);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .tool-card:not(:disabled):hover {
-  transform: translateY(-3px);
   border-color: #bdcbe8;
   box-shadow: var(--shadow-medium);
 }
@@ -968,6 +986,8 @@ onUnmounted(() => { catalogSequence += 1; launchSequence += 1; window.removeEven
 .directory-intro h2 { margin: 0; color: var(--color-text); font-size: 18px; letter-spacing: -.02em; }
 .directory-intro p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
 .directory-count { flex: none; color: var(--color-text-tertiary); font-size: 12px; font-weight: 700; }
+.task-title { display: flex; align-items: center; gap: 9px; }
+.task-title svg { flex: none; color: var(--color-primary); }
 
 @media (max-width: 620px) {
   .directory-intro { align-items: flex-start; flex-direction: column; gap: 8px; margin-top: 20px; padding: 16px; }
