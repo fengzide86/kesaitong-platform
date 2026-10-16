@@ -2228,6 +2228,83 @@
         "title": "APIResponse[PlanStatsResponse]",
         "type": "object"
       },
+      "APIResponse_PolicyInput_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyInput-Output"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "响应数据"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "APIResponse[PolicyInput]",
+        "type": "object"
+      },
       "APIResponse_PolicyResponse_": {
         "properties": {
           "data": {
@@ -8259,6 +8336,17 @@
             ],
             "title": "Created At"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "device_id": {
             "anyOf": [
               {
@@ -8331,6 +8419,17 @@
             ],
             "title": "Max Devices"
           },
+          "order_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order No"
+          },
           "plan_id": {
             "anyOf": [
               {
@@ -8371,6 +8470,28 @@
             "default": "consumer",
             "title": "Product Type",
             "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "responsible": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsible"
           },
           "scene_type": {
             "anyOf": [
@@ -8419,6 +8540,17 @@
               }
             ],
             "title": "User Id"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
           }
         },
         "required": [
@@ -18558,12 +18690,51 @@
         "title": "PlanUpdate",
         "type": "object"
       },
-      "PolicyInput": {
+      "PolicyInput-Input": {
         "additionalProperties": false,
         "properties": {
           "items": {
             "items": {
               "$ref": "#/components/schemas/PolicyItem-Input"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "product_skus": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Product Skus",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "product_skus",
+          "items"
+        ],
+        "title": "PolicyInput",
+        "type": "object"
+      },
+      "PolicyInput-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyItem-Output"
             },
             "maxItems": 100,
             "minItems": 1,
@@ -18628,6 +18799,17 @@
             ],
             "title": "Method",
             "type": "string"
+          },
+          "purchased_service_codes": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Purchased Service Codes",
+            "type": "array"
           },
           "ratio": {
             "anyOf": [
@@ -18697,6 +18879,17 @@
             ],
             "title": "Method",
             "type": "string"
+          },
+          "purchased_service_codes": {
+            "items": {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Purchased Service Codes",
+            "type": "array"
           },
           "ratio": {
             "title": "Ratio",
@@ -19559,6 +19752,25 @@
           "satisfaction"
         ],
         "title": "RateSessionRequest",
+        "type": "object"
+      },
+      "ReceiptAction": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "title": "ReceiptAction",
         "type": "object"
       },
       "RefreshTokenData": {
@@ -20753,6 +20965,13 @@
           "order_id": {
             "title": "Order Id",
             "type": "integer"
+          },
+          "purchased_service_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Purchased Service Codes",
+            "type": "array"
           },
           "service_code": {
             "anyOf": [
@@ -23722,6 +23941,17 @@
             ],
             "title": "Created At"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "device_id": {
             "anyOf": [
               {
@@ -23743,6 +23973,17 @@
               }
             ],
             "title": "Device Name"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "extra_devices": {
             "anyOf": [
@@ -23792,6 +24033,17 @@
             ],
             "title": "Name"
           },
+          "order_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order No"
+          },
           "phone": {
             "anyOf": [
               {
@@ -23802,6 +24054,50 @@
               }
             ],
             "title": "Phone"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "responsible": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsible"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           },
           "total_seats": {
             "anyOf": [
@@ -24365,6 +24661,17 @@
             ],
             "title": "Created At"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "device_id": {
             "anyOf": [
               {
@@ -24386,6 +24693,17 @@
               }
             ],
             "title": "Device Name"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "extra_devices": {
             "anyOf": [
@@ -24413,6 +24731,17 @@
             ],
             "title": "Is Active"
           },
+          "last_active_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
           "name": {
             "anyOf": [
               {
@@ -24424,6 +24753,17 @@
             ],
             "title": "Name"
           },
+          "order_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order No"
+          },
           "phone": {
             "anyOf": [
               {
@@ -24434,6 +24774,50 @@
               }
             ],
             "title": "Phone"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "responsible": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsible"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           },
           "total_seats": {
             "anyOf": [
@@ -24859,7 +25243,7 @@
   },
   "info": {
     "title": "课赛通 KST · 跨境电商赛训效率平台",
-    "version": "1.9.2"
+    "version": "1.9.25"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -27810,6 +28194,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReceiptAction"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -27857,6 +28258,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReceiptAction"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -32237,6 +32655,25 @@
             }
           },
           {
+            "description": "搜索标题、内容或工单号",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "搜索标题、内容或工单号",
+              "title": "Keyword"
+            }
+          },
+          {
             "in": "query",
             "name": "user_id",
             "required": false,
@@ -34149,6 +34586,25 @@
                 }
               ],
               "title": "Plan Id"
+            }
+          },
+          {
+            "description": "搜索订单号、客户或负责人",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "搜索订单号、客户或负责人",
+              "title": "Keyword"
             }
           },
           {
@@ -37378,7 +37834,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PolicyInput"
+                "$ref": "#/components/schemas/PolicyInput-Input"
               }
             }
           },
@@ -37526,6 +37982,33 @@
           }
         ],
         "summary": "Activate Policy",
+        "tags": [
+          "成员结算台账"
+        ]
+      }
+    },
+    "/api/team-ledger/policy-template": {
+      "get": {
+        "description": "Preview only: no import, activation, ownership, or historical mutation.",
+        "operationId": "policy_template_api_team_ledger_policy_template_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_PolicyInput_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Policy Template",
         "tags": [
           "成员结算台账"
         ]

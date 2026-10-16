@@ -25,6 +25,7 @@ from models.team_ledger import (
     TeamServiceDelivery,
     TeamSettlement,
 )
+from schemas.commercial import IncludedService
 from schemas.team_ledger import (
     AdjustmentInput,
     AllocationInput,
@@ -289,6 +290,9 @@ class TeamLedgerService:
         orders = []
         fulfillment: list[dict] = []
         internal_delivery: list[dict] = []
+        linked_service_codes = {code for item in json.loads(policy.items)
+                               for code in item.get("purchased_service_codes", [])}
+        purchased_services: list[dict] = []
         for item in allocations:
             order = await self._get(Order, item.order_id)
             if order.status not in (OrderStatus.PAID, OrderStatus.REFUNDED) or order.paid_at is None:
@@ -298,6 +302,11 @@ class TeamLedgerService:
                 raise ConflictException("退款后分配金额超过净实收，请重新确认金额")
             orders.append({"id": order.id, "amount": str(money(order.amount)), "refund_amount": str(money(order.refund_amount)),
                            "net": str(net), "paid_at": order.paid_at.isoformat(), "status": order.status})
+            if linked_service_codes:
+                purchased = await self._purchased_services(order.id)
+                purchased_services.append({"order_id": order.id, "services": [
+                    {"code": code, "count": purchased[code]} for code in sorted(linked_service_codes & purchased.keys())
+                ]})
             rows = (await self.db.execute(select(ServiceFulfillment).where(
                 ServiceFulfillment.order_id == order.id,
             ).order_by(ServiceFulfillment.id).with_for_update().execution_options(populate_existing=True))).scalars().all()
@@ -321,9 +330,55 @@ class TeamLedgerService:
                                         .execution_options(populate_existing=True))).scalars().all()
         # Ledger totals and unrelated name changes are not policy dependencies.
         member_states = [{"id": row.id, "name": row.name, "active": row.active, "version": row.version} for row in members]
-        return {"policy": row_data(policy), "allocations": [row_data(item) for item in allocations],
-                "orders": orders, "ownerships": [row_data(item) for item in ownerships],
-                "members": member_states, "fulfillment": fulfillment, "internal_delivery": internal_delivery}
+        result = {"policy": row_data(policy), "allocations": [row_data(item) for item in allocations],
+                  "orders": orders, "ownerships": [row_data(item) for item in ownerships],
+                  "members": member_states, "fulfillment": fulfillment, "internal_delivery": internal_delivery}
+        if linked_service_codes:
+            result["purchased_services"] = purchased_services
+        return result
+
+    async def _purchased_services(self, order_id: int) -> dict[str, int]:
+        """Read immutable purchase scope; never infer a purchase from a policy or proof."""
+        snapshot = (await self.db.execute(select(CommercialOrderSnapshot).where(
+            CommercialOrderSnapshot.order_id == order_id,
+        ).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+        try:
+            if snapshot is None:
+                raise ValueError("missing purchase snapshot")
+            definition = json.loads(snapshot.snapshot)["definition"]
+            if not isinstance(definition, dict):
+                raise ValueError("invalid purchase definition")
+            services = definition["services"]
+            if not isinstance(services, list):
+                raise ValueError("invalid purchased services")
+            parsed = [IncludedService.model_validate(item) for item in services]
+            if len({item.code for item in parsed}) != len(parsed):
+                raise ValueError("duplicate purchased services")
+            return {item.code: item.count for item in parsed}
+        except (ValueError, KeyError, TypeError) as cause:
+            raise ConflictException("订单购买快照不完整，无法核对已购服务，请先核对订单") from cause
+
+    @staticmethod
+    def _purchased_service_complete(inputs: dict[str, Any], order_id: int, code: str, count: int) -> bool:
+        row = next((item for item in inputs["fulfillment"]
+                    if item["order_id"] == order_id and item["service_code"] == code), None)
+        # Internal duty proofs can never substitute for purchased service counts.
+        return (row is not None and row["total_count"] == count and not row["blocked"]
+                and row["required_count"] > 0 and row["completed_count"] >= row["required_count"])
+
+    async def _purchased_services_complete(self, order_id: int, codes: list[str]) -> bool:
+        purchased = await self._purchased_services(order_id)
+        for code in codes:
+            if code not in purchased:
+                return False
+            await self.db.execute(select(ServiceFulfillment).where(
+                ServiceFulfillment.order_id == order_id, ServiceFulfillment.service_code == code,
+            ).with_for_update().execution_options(populate_existing=True))
+            current = await service_fulfillment_requirement(self.db, order_id, code)
+            if (current is None or current.purchased_count != purchased[code] or current.blocked
+                    or current.required_count <= 0 or current.completed_count < current.required_count):
+                return False
+        return True
 
     @staticmethod
     def _service_complete(inputs: dict[str, Any], order_id: int, service_code: str) -> bool:
@@ -416,7 +471,12 @@ class TeamLedgerService:
                 reasons = []
                 recipients = []
                 service_code = item.get("service_code")
-                if service_code and not TeamLedgerService._service_complete(inputs, order_id, service_code):
+                declared: list[dict[str, Any]] = next((row["services"] for row in inputs.get("purchased_services", [])
+                                                      if row["order_id"] == order_id), [])
+                required_services = [row for row in declared if row["code"] in item.get("purchased_service_codes", [])]
+                if ((service_code and not TeamLedgerService._service_complete(inputs, order_id, service_code))
+                        or any(not TeamLedgerService._purchased_service_complete(inputs, order_id, row["code"], row["count"])
+                               for row in required_services)):
                     reasons.append("service_unfulfilled")
                 if item["method"] == "fixed":
                     paid_date = orders[order_id]["paid_at"][:10]
@@ -447,10 +507,13 @@ class TeamLedgerService:
                     line_reasons = reasons.copy()
                     if member_id is None and item["method"] != "fixed" and "missing_attribution" not in line_reasons:
                         line_reasons.append("missing_attribution")
-                    lines.append({"order_id": order_id, "item_code": item["code"], "label": item["label"],
-                                  "group": item["group"], "member_id": member_id, "amount": str(money(part)),
-                                  "bucket": "held" if line_reasons or member_id is None else "due",
-                                  "held_reasons": line_reasons, "service_code": service_code})
+                    line = {"order_id": order_id, "item_code": item["code"], "label": item["label"],
+                            "group": item["group"], "member_id": member_id, "amount": str(money(part)),
+                            "bucket": "held" if line_reasons or member_id is None else "due",
+                            "held_reasons": line_reasons, "service_code": service_code}
+                    if item.get("purchased_service_codes"):
+                        line["purchased_service_codes"] = [row["code"] for row in required_services]
+                    lines.append(line)
         assert sum((money(line["amount"]) for line in lines), ZERO) == total
         assert all(remaining == ZERO for remaining in remaining_orders)
         return total, lines
@@ -577,6 +640,9 @@ class TeamLedgerService:
         if original.get("service_code"):
             if not await self._is_service_complete(entry.order_id, original["service_code"]):
                 raise ConflictException("对应服务尚未全部履约，请先登记真实履约证据")
+        if original.get("purchased_service_codes"):
+            if not await self._purchased_services_complete(entry.order_id, original["purchased_service_codes"]):
+                raise ConflictException("对应已购服务尚未完成有效次数，不能用内部职责证明代替")
         member = await self._active_member(data.member_id)
         if entry.member_id and entry.member_id != member.id:
             raise ConflictException("已有明确承担人的暂留不可直接转给其他成员")

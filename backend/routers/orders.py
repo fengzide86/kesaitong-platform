@@ -65,6 +65,7 @@ async def get_orders(
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
     plan_id: int | None = Query(default=None, gt=0),
+    keyword: str | None = Query(None, max_length=200, description="搜索订单号、客户或负责人"),
     platform_key: str | None = None,
     source: Literal["direct", "agency"] | None = None,
     db: AsyncSession = Depends(get_db),
@@ -77,6 +78,7 @@ async def get_orders(
         plan_id=plan_id,
         platform_key=platform_key,
         source=source,
+        keyword=keyword,
     )
 
 

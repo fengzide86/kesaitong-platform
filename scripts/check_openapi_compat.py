@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from pathlib import Path
@@ -28,9 +29,15 @@ ADMIN_OPTIONAL_FILTERS: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
         "status": nullable({"enum": ["unused", "active", "frozen", "expired", "deleted"], "type": "string"}),
     },
     ("/api/auth-codes/{code_id}", "get"): {"platform_key": nullable({"pattern": "^(amazon|aliexpress)$", "type": "string"})},
-    ("/api/feedback", "get"): {"user_id": nullable({"minimum": 1, "type": "integer"})},
+    ("/api/feedback", "get"): {
+        "user_id": nullable({"minimum": 1, "type": "integer"}),
+        "keyword": nullable({"maxLength": 200, "type": "string"}),
+    },
     ("/api/feedback/{feedback_id}", "get"): {"platform_key": nullable({"pattern": "^(amazon|aliexpress)$", "type": "string"})},
-    ("/api/orders", "get"): {"source": nullable({"enum": ["direct", "agency"], "type": "string"})},
+    ("/api/orders", "get"): {
+        "source": nullable({"enum": ["direct", "agency"], "type": "string"}),
+        "keyword": nullable({"maxLength": 200, "type": "string"}),
+    },
     ("/api/orders/export", "get"): {"source": nullable({"enum": ["direct", "agency"], "type": "string"})},
     ("/api/orders/{order_id}", "get"): {"platform_key": nullable({"type": "string"})},
     ("/api/users", "get"): {
@@ -97,6 +104,19 @@ TARGET_EXTENSION_OPERATIONS = {
     ("/api/tool-releases/target-profiles", "get"): (None, "TargetProfileListResponse"),
     ("/api/tool-releases/target-profiles/{profile_id}/review", "post"): ("TargetProfileReview", "TargetProfileResponse"),
     ("/api/executions/reconcile", "post"): ("ExecutionReconcileRequest", "ExecutionReportResponse"),
+}
+
+# Reviewed 2026-10-16: read-only private policy template and purchased-service
+# requirements. Exact route/method + complete model closure, not a prefix allowlist.
+TEAM_POLICY_EXTENSION_OPERATIONS = {
+    ("/api/team-ledger/policies", "get"),
+    ("/api/team-ledger/policies", "post"),
+    ("/api/team-ledger/policies/{identity}", "put"),
+    ("/api/team-ledger/policies/{identity}/activate", "post"),
+    ("/api/team-ledger/policy-template", "get"),
+    ("/api/team-ledger/settlements", "get"),
+    ("/api/team-ledger/settlements/preview", "post"),
+    ("/api/team-ledger/settlements/{identity}/confirm", "post"),
 }
 
 
@@ -225,8 +245,44 @@ def is_compatible_launch_transport(
     return query_schema.get("type") == "string" or {"type": "string"} in query_schema.get("anyOf", [])
 
 
+def is_compatible_announcement_receipt(
+    key: tuple[str, str], before: dict[str, Any], after: dict[str, Any], schema: dict[str, Any],
+) -> bool:
+    """Allow only the reviewed optional revision body on the two receipt APIs.
+
+    Bodyless/empty legacy requests remain structurally valid. The service only
+    accepts them for revision 1; it must never infer a later version was viewed.
+    This exception does not permit changed parameters, auth, or response shapes.
+    """
+    if key not in {("/api/announcements/{announcement_id}/read", "post"), ("/api/announcements/{announcement_id}/dismiss", "post")} or before.get("requestBody"):
+        return False
+    original = parameter_contracts(before)
+    candidate = parameter_contracts(after)
+    if original is None or candidate is None or original.keys() != candidate.keys():
+        return False
+    if any(not same_contract(candidate[name], contract) for name, contract in original.items()):
+        return False
+    if not same_contract(before.get("security"), after.get("security")) or not same_contract(before.get("responses"), after.get("responses")):
+        return False
+    body = after.get("requestBody", {})
+    if set(body) - {"content", "description"}:
+        return False
+    content = body.get("content", {})
+    if set(content) != {"application/json"} or set(content["application/json"]) != {"schema"}:
+        return False
+    expected_schema = nullable({"$ref": "#/components/schemas/ReceiptAction"})
+    expected_model = {"type": "object", "additionalProperties": False, "properties": {
+        "revision": nullable({"type": "integer", "minimum": 1.0}),
+    }}
+    return same_contract(schema_without_documentation(content["application/json"]["schema"]), expected_schema) and same_contract(
+        schema_without_documentation(schema.get("components", {}).get("schemas", {}).get("ReceiptAction")), expected_model,
+    )
+
+
 def is_reviewed_extension_operation(key: tuple[str, str], operation: dict[str, Any], schema: dict[str, Any]) -> bool:
     if is_reviewed_framework_operation(key, operation, schema):
+        return True
+    if is_reviewed_team_policy_extension(key, operation, schema):
         return True
     if key in TARGET_EXTENSION_OPERATIONS:
         request_model, response_model = TARGET_EXTENSION_OPERATIONS[key]
@@ -300,6 +356,62 @@ def is_reviewed_framework_operation(key: tuple[str, str], operation: dict[str, A
     )
 
 
+def is_reviewed_team_policy_extension(key: tuple[str, str], operation: dict[str, Any], schema: dict[str, Any]) -> bool:
+    """Derive one exact reviewed extension without rewriting the frozen v1 file.
+
+    Existing fields/auth remain frozen. The only model edits are the optional
+    purchased-service arrays and Pydantic's explicit input/output name split;
+    neither arbitrary alias normalization nor arbitrary optional fields pass.
+    """
+    if key not in TEAM_POLICY_EXTENSION_OPERATIONS:
+        return False
+    contract_path = ROOT / "backend/openapi-framework-v1.json"
+    if not contract_path.exists():
+        return False
+    document = load(contract_path)
+    models = document["models"]
+    for name in ("PolicyItem-Input", "PolicyItem-Output"):
+        models[name]["properties"]["purchased_service_codes"] = {
+            "type": "array", "maxItems": 20, "items": {
+                "type": "string", "minLength": 1, "maxLength": 80,
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+            },
+        }
+    models["SettlementLine"]["properties"]["purchased_service_codes"] = {
+        "type": "array", "items": {"type": "string"},
+    }
+    # A response use of PolicyInput now produces distinct Pydantic schemas.
+    # Both aliases are built from the frozen definition, never from current.
+    models["PolicyInput-Input"] = copy.deepcopy(models["PolicyInput"])
+    models["PolicyInput-Output"] = copy.deepcopy(models["PolicyInput"])
+    models["PolicyInput-Output"]["properties"]["items"]["items"] = {
+        "$ref": "#/components/schemas/PolicyItem-Output",
+    }
+    document["operations"]["POST /api/team-ledger/policies"]["requestBody"]["content"]["application/json"]["schema"] = {
+        "$ref": "#/components/schemas/PolicyInput-Input",
+    }
+    models["APIResponse_PolicyInput_"] = {
+        "type": "object", "properties": {
+            "data": nullable({"$ref": "#/components/schemas/PolicyInput-Output"}),
+            "message": {"type": "string", "default": "ok"},
+            "success": {"type": "boolean", "default": True},
+            **{name: nullable({"type": "integer"}) for name in ("page", "page_size", "total", "total_pages")},
+        },
+    }
+    document["operations"]["GET /api/team-ledger/policy-template"] = {
+        "security": [{"HTTPBearer": []}],
+        "responses": {"200": {
+            "description": "Successful Response",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/APIResponse_PolicyInput_"}}},
+        }},
+    }
+    reviewed = document["operations"][f"{key[1].upper()} {key[0]}"]
+    return same_contract(
+        framework_operation_contract(operation, schema),
+        framework_operation_contract(reviewed, {"components": {"schemas": models}}),
+    )
+
+
 def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     baseline_ops = operations(baseline)
@@ -316,6 +428,7 @@ def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[str]:
         before = baseline_ops[key]
         after = current_ops[key]
         launch_migration = is_compatible_launch_transport(key, before, after, current)
+        announcement_receipt = is_compatible_announcement_receipt(key, before, after, current)
         parameter_compatible = (
             is_compatible_admin_context_filters(key, before, after)
             if key in REVIEWED_OPTIONAL_PARAMETERS
@@ -323,7 +436,7 @@ def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[str]:
         )
         if not parameter_compatible and not launch_migration:
             errors.append(f"parameters changed for {key[1].upper()} {key[0]}")
-        if bool(before.get("requestBody")) != bool(after.get("requestBody")) and not launch_migration:
+        if bool(before.get("requestBody")) != bool(after.get("requestBody")) and not launch_migration and not announcement_receipt:
             errors.append(f"request body presence changed for {key[1].upper()} {key[0]}")
         if key in REVIEWED_REQUEST_ROUTES and not same_contract(
             schema_without_documentation(before.get("requestBody")), schema_without_documentation(after.get("requestBody")),

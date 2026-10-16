@@ -41,6 +41,14 @@ class UserSummaryResponse(BaseModel):
     extra_devices: int | None = None
     is_active: bool | None = None
     created_at: str | None = None
+    customer_name: str | None = None
+    project_id: str | None = None
+    order_no: str | None = None
+    responsible: str | None = None
+    plan_name: str | None = None
+    status: str | None = None
+    expires_at: str | None = None
+    last_active_at: str | None = None
 
 
 class UserDetailResponse(UserSummaryResponse):

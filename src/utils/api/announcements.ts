@@ -10,10 +10,10 @@ export const getAnnouncements = (status?: string): Promise<AnnouncementList> =>
 
 export const getAnnouncementFeed = (): Promise<AnnouncementList> =>
   api.get('/api/announcements/feed', {}, { cache: false })
-export const markAnnouncementRead = (id: AnnouncementId): Promise<Schemas['APIResponse_AnnouncementReceiptResponse_']> =>
-  api.post(`/api/announcements/${id}/read`)
-export const dismissAnnouncement = (id: AnnouncementId): Promise<Schemas['APIResponse_AnnouncementReceiptResponse_']> =>
-  api.post(`/api/announcements/${id}/dismiss`)
+export const markAnnouncementRead = (id: AnnouncementId, revision: number): Promise<Schemas['APIResponse_AnnouncementReceiptResponse_']> =>
+  api.post(`/api/announcements/${id}/read`, { revision })
+export const dismissAnnouncement = (id: AnnouncementId, revision: number): Promise<Schemas['APIResponse_AnnouncementReceiptResponse_']> =>
+  api.post(`/api/announcements/${id}/dismiss`, { revision })
 export const createAnnouncement = (
   data: Schemas['AnnouncementCreate'],
 ): Promise<Schemas['APIResponse_AnnouncementResponse_']> => api.post('/api/announcements', data)

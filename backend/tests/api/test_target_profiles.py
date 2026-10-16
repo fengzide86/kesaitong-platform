@@ -168,6 +168,23 @@ async def test_status_only_review_ignores_unsaved_approval_draft(client, auth_he
 
 
 @pytest.mark.asyncio
+async def test_entry_only_approval_does_not_enable_tools(client, auth_headers, target_keys):
+    created = (await client.post("/api/tools/target-profiles", headers=auth_headers, json=submission())).json()["data"]
+    response = await client.post(
+        f"/api/tool-releases/target-profiles/{created['profile']['id']}/review",
+        headers=auth_headers,
+        json={"revision": created["profile"]["revision"], "reviewStatus": "approved"},
+    )
+    assert response.status_code == 200, response.text
+    approved = response.json()["data"]
+    assert approved["profile"]["reviewStatus"] == "approved"
+    assert approved["profile"]["capabilities"] == []
+    assert approved["profile"]["executionScopes"] == []
+    assert approved["profile"]["allowedRoutes"] == []
+    assert approved["signature"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("changes", [
     {"edition": "unknown"}, {"edition": "v3"}, {"adapterVersion": None},
     {"evidence": {"edition": "v2", "markers": ["amazon-v2"], "source": "admin-verified"}},

@@ -15,11 +15,12 @@ from sqlalchemy.orm import selectinload
 
 from core.audit import log_admin_action
 from core.exceptions import NotFoundException
-from models import AuthCode, AuthSeat, Device, LaunchToken, Plan
+from models import AgencyCustomer, AuthCode, AuthSeat, Device, LaunchToken, Order, Plan, User
 from models.commercial import CommercialGrant
 from schemas import AuthCodeGenerate, AuthCodeResponse, AuthCodeUpdate
 from schemas.auth_code import AuthCodeExtend
 
+from .admin_context import authorization_context
 from .entitlements import normalize_entitlements, resolve_product_access
 from .license_state import effective_license_status, effective_license_status_sql
 from .locking import lock_auth_code
@@ -47,6 +48,7 @@ async def _device_used(db: AsyncSession, auth_code_id: int) -> int:
 
 
 async def build_response(db: AsyncSession, code: AuthCode) -> AuthCodeResponse:
+    context = (await authorization_context(db, [code.id])).get(code.id, {})
     plan_row = (
         await db.execute(
             select(Plan.name, Plan.product_type, Plan.entitlements).where(Plan.id == code.plan_id)
@@ -61,6 +63,11 @@ async def build_response(db: AsyncSession, code: AuthCode) -> AuthCodeResponse:
         code=code.code,
         plan_id=code.plan_id,
         user_id=code.user_id,
+        customer_name=context.get("customer_name"),
+        user_name=context.get("user_name"),
+        project_id=context.get("project_id"),
+        order_no=context.get("order_no"),
+        responsible=context.get("responsible"),
         device_id=code.device_id,
         device_name=code.device_name,
         max_devices=code.max_devices,
@@ -131,11 +138,26 @@ async def list_codes(
             Device.auth_code_id == AuthCode.id,
             or_(Device.device_name.contains(normalized_keyword, autoescape=True), Device.device_id.contains(normalized_keyword, autoescape=True)),
         ).exists()
+        user_match = select(User.id).where(User.auth_code_id == AuthCode.id, or_(
+            User.name.contains(normalized_keyword, autoescape=True),
+            User.phone.contains(normalized_keyword, autoescape=True),
+        )).exists()
+        customer_match = select(AgencyCustomer.id).where(AgencyCustomer.id == AuthCode.customer_id,
+            AgencyCustomer.name.contains(normalized_keyword, autoescape=True)).exists()
+        order_match = select(Order.id).where(Order.id == AuthCode.order_id, or_(
+            Order.order_no.contains(normalized_keyword, autoescape=True),
+            Order.responsible.contains(normalized_keyword, autoescape=True),
+            select(AgencyCustomer.id).where(AgencyCustomer.id == Order.customer_id,
+                AgencyCustomer.name.contains(normalized_keyword, autoescape=True)).exists(),
+        )).exists()
+        project_match = select(CommercialGrant.id).where(CommercialGrant.auth_code_id == AuthCode.id,
+            CommercialGrant.project_id.contains(normalized_keyword, autoescape=True)).exists()
         filters.append(or_(
             AuthCode.code.contains(normalized_keyword, autoescape=True),
             AuthCode.device_name.contains(normalized_keyword, autoescape=True),
             AuthCode.device_id.contains(normalized_keyword, autoescape=True),
             device_match,
+            user_match, customer_match, order_match, project_match,
         ))
     query = query.where(*filters)
     count_query = count_query.where(*filters)
@@ -151,8 +173,10 @@ async def list_codes(
         CommercialGrant.auth_code_id.in_([row[0].id for row in rows]),
     ))).all() if rows else []
     commercial_by_code = {grant.auth_code_id: json.loads(grant.snapshot) for grant in commercial_rows}
+    contexts = await authorization_context(db, [row[0].id for row in rows])
     data = []
     for code, seat_used, device_used, plan_name, product_type, plan_entitlements in rows:
+        context = contexts.get(code.id, {})
         if code.id in commercial_by_code:
             snapshot = commercial_by_code[code.id]
             plan_name = snapshot["definition"]["name"]
@@ -165,6 +189,11 @@ async def list_codes(
                 code=code.code,
                 plan_id=code.plan_id,
                 user_id=code.user_id,
+                customer_name=context.get("customer_name"),
+                user_name=context.get("user_name"),
+                project_id=context.get("project_id"),
+                order_no=context.get("order_no"),
+                responsible=context.get("responsible"),
                 device_id=code.device_id,
                 device_name=code.device_name,
                 max_devices=code.max_devices,

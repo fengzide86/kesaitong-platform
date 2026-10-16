@@ -195,6 +195,8 @@ npm run package:audit
 
 当前 `internal` 桌面安装包不包含 Python 后端；`package:audit` 会拒绝 `toolbox-backend.exe`。包内包含前端、编译后的 Electron/Runner、必要生产依赖和模板、费率、品牌资源。安装包不得包含 Token、测试、文档、运维脚本、TypeScript 源码或 source map。`backend:build` 仅保留为兼容场景的手动命令，不是默认发布步骤。
 
+团队分配方案模板属于私有运行配置，不能提交到公开源码或放入桌面安装包。后端从 `TEAM_POLICY_TEMPLATE_FILE` 指定文件读取；未指定时读取 `TOOLBOX_RUNTIME_DIR/private/team-policy-template.json`。正式部署前，应将已确认模板放到服务器实际运行目录的 `private` 子目录，限制为服务账号可读，并核对文件哈希。该模板只用于超级管理员载入草稿，不自动修改已启用规则和历史记录。缺少或无效时，该入口提示暂不可用，已有台账和规则继续可用。测试仅使用虚构配置。
+
 ## 独立宣传官网
 
 2026-09-21 实际可访问通道为 `https://fengzide86.github.io`（独立静态仓库），Cloudflare 的 `kesaitong.pages.dev` 当时返回 522。官网通道以本机 `.env.marketing.local` 的当前配置及公开访问核验为准，登录成功不等于域名或站点可用。域名 `kesaitong.top` 是否完成绑定必须另行核验。

@@ -153,10 +153,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/features/agency/AgencyManagementView.vue'),
         meta: { title: '代理与交付', roles: ['super_admin'] },
       },
-      { path: 'commercial', name: 'AdminCommercial', component: () => import('@/views/admin/CommercialView.vue'), meta: { title: '商品与项目权益', roles: ['super_admin'] } },
+      { path: 'commercial', name: 'AdminCommercial', component: () => import('@/views/admin/CommercialView.vue'), meta: { title: '套餐与服务', roles: ['super_admin'] } },
       { path: 'team-ledger', name: 'AdminTeamLedger', component: () => import('@/views/admin/TeamLedgerView.vue'), meta: { title: '成员结算台账', roles: ['super_admin'] } },
       { path: 'scenarios', name: 'AdminScenarios', component: () => import('@/views/admin/ScenariosView.vue'), meta: { title: '场景与运行权限', roles: ['super_admin'] } },
-      { path: 'local-runtime', name: 'AdminLocalRuntime', component: () => import('@/views/admin/LocalRuntimeView.vue'), meta: { title: '本机多账号现场', roles: ['super_admin', 'operator', 'support'] } },
+      { path: 'local-runtime', name: 'AdminLocalRuntime', component: () => import('@/views/admin/LocalRuntimeView.vue'), meta: { title: '账号工作区', roles: ['super_admin', 'operator', 'support'] } },
       {
         path: 'dashboard',
         name: 'AdminDashboard',
@@ -377,9 +377,12 @@ router.beforeEach((to, from, next) => {
   }
 })
 
-router.afterEach((to) => {
-  if (typeof document === 'undefined') return
+router.afterEach((to, from, failure) => {
+  if (failure || typeof document === 'undefined') return
   document.title = `${String(to.meta.title || '课赛通 KST')} · 课赛通 KST`
+  // Filters and pagination update query parameters in place. They must not
+  // move keyboard focus away from the field the user is actively editing.
+  if (to.path === from.path) return
   const focusRoute = () => {
     const target = document.querySelector<HTMLElement>('[data-route-focus], main')
     if (!target) return

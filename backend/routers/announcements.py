@@ -17,6 +17,7 @@ from domains.announcements.schemas import (
     AnnouncementReceiptEnvelope,
     AnnouncementUpdate,
     LegacyAnnouncementListResponse,
+    ReceiptAction,
 )
 
 router = APIRouter()
@@ -58,19 +59,21 @@ async def get_release_notes(
 @router.post("/{announcement_id}/read", response_model=AnnouncementReceiptEnvelope)
 async def mark_announcement_read(
     announcement_id: int,
+    data: ReceiptAction | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, object] = Depends(get_current_user),
 ) -> object:
-    return success_response(data=await service.record_receipt(db, announcement_id, current_user, "read"))
+    return success_response(data=await service.record_receipt(db, announcement_id, current_user, "read", data.revision if data else None))
 
 
 @router.post("/{announcement_id}/dismiss", response_model=AnnouncementReceiptEnvelope)
 async def dismiss_announcement(
     announcement_id: int,
+    data: ReceiptAction | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, object] = Depends(get_current_user),
 ) -> object:
-    return success_response(data=await service.record_receipt(db, announcement_id, current_user, "dismiss"))
+    return success_response(data=await service.record_receipt(db, announcement_id, current_user, "dismiss", data.revision if data else None))
 
 
 @router.post("", response_model=AnnouncementEnvelope)

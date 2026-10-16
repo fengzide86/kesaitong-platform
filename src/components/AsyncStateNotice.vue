@@ -35,4 +35,5 @@ defineEmits<{ retry: [] }>()
 
 <style scoped>
 .async-notice{min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:11px 14px;border:1px solid var(--color-border);border-radius:11px;color:var(--color-text-secondary);background:var(--color-surface);font-size:var(--type-meta)}.async-notice>div{display:grid;gap:3px}.async-notice strong{color:var(--color-text);font-size:var(--type-control)}.async-notice.is-error{border-color:rgba(195,61,73,.28);background:var(--color-danger-soft)}.async-notice.is-stale{border-color:rgba(190,128,25,.28);background:#fff9eb}.async-notice.is-loading{justify-content:flex-start}.async-notice button{min-height:34px;padding:0 11px;border:1px solid currentColor;border-radius:8px;color:var(--color-primary);background:var(--color-surface);font-weight:700;cursor:pointer}.spinner{width:16px;height:16px;border:2px solid var(--color-border-strong);border-top-color:var(--color-primary);border-radius:50%;animation:async-spin .8s linear infinite}@keyframes async-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 </style>

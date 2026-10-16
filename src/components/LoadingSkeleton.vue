@@ -237,4 +237,7 @@ withDefaults(defineProps<{
     flex-wrap: wrap;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-container, .skeleton-container * { animation: none; transition: none; }
+}
 </style>

@@ -2,12 +2,13 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.dependencies import require_commerce_operator, require_super_admin
 from core.response import APIResponse
 from database import get_db
+from domains.team_ledger.policy_template import latest_policy_template
 from domains.team_ledger.service import TeamLedgerService
 from models.team_ledger import (
     TeamLedgerEntry,
@@ -53,6 +54,13 @@ router = APIRouter()
 
 def envelope(data: object) -> dict[str, Any]:
     return {"success": True, "message": "ok", "data": data}
+
+
+@router.get("/policy-template", response_model=APIResponse[PolicyInput], response_model_exclude_unset=True)
+async def policy_template(response: Response, _actor: dict = Depends(require_super_admin)) -> dict[str, Any]:
+    """Preview only: no import, activation, ownership, or historical mutation."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return envelope(latest_policy_template().model_dump(mode="json"))
 
 
 @router.get("/policies", response_model=APIResponse[list[PolicyResponse]], response_model_exclude_unset=True)

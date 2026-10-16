@@ -1,82 +1,56 @@
 <template>
-  <div>
-  <PageHeader title="订单管理" description="按来源查看订单；直营订单在此处理，代理订单只读核对并由负责人进入代理交付。">
-    <template #actions><el-button v-if="canManageAgency" @click="router.push('/admin/agency?section=orders')">代理订单交付</el-button></template>
+  <div class="orders-page">
+  <PageHeader title="订单管理" description="查找客户订单，确认收款，再核对授权交付。代理订单由负责人在代理交付中处理。">
+    <template #actions><el-button v-if="canWrite" type="primary" @click="openCreate">登记新订单</el-button><el-button v-if="canManageAgency" @click="router.push('/admin/agency?section=orders')">代理订单交付</el-button></template>
   </PageHeader>
     <AsyncStateNotice :state="loadState" :message="loadError" loading-text="正在加载订单…" @retry="loadData" />
 
     <section v-if="loadState !== 'loading' && loadState !== 'error'" class="order-stats" aria-label="订单统计">
       <article class="stat-card">
-          <div class="stat-label">{{ filterStatus ? '匹配订单数' : '总订单数' }}</div>
-          <div class="stat-value" style="color: var(--color-primary);">{{ stats.total }}</div>
+          <div class="stat-label">本页待收款</div>
+          <div class="stat-value" style="color: var(--color-warning);">{{ stats.pending }}</div>
       </article>
       <article class="stat-card">
           <div class="stat-label">本页已收款</div>
           <div class="stat-value">{{ stats.paid }}</div>
       </article>
       <article class="stat-card">
-          <div class="stat-label">本页待收款</div>
-          <div class="stat-value" style="color: var(--color-warning);">{{ stats.pending }}</div>
-      </article>
-      <article class="stat-card">
-          <div class="stat-label">本页已退款</div>
-          <div class="stat-value" style="color: var(--color-danger);">{{ stats.refunded }}</div>
-      </article>
-      <article class="stat-card">
-          <div class="stat-label">本页已取消</div>
-          <div class="stat-value">{{ stats.cancelled }}</div>
+          <div class="stat-label">本页待核对授权</div>
+          <div class="stat-value" style="color: var(--color-primary);">{{ stats.paidPendingAuth }}</div>
+          <small>已收款，尚无关联授权</small>
       </article>
     </section>
 
     <!-- 创建订单 -->
-    <el-card v-if="canWrite && loadState !== 'loading' && loadState !== 'error'" class="table-card" style="margin-bottom: 1.5rem;">
+    <el-card v-if="canWrite && createOpen && loadState !== 'loading' && loadState !== 'error'" id="order-create" class="table-card kst-reveal" style="margin-bottom: 1.5rem;">
       <template #header>
         <div class="card-header">
-          <h3>创建新订单</h3>
+          <h3>登记新订单</h3><el-button text @click="closeCreate">收起</el-button>
         </div>
       </template>
       <div class="form-row">
         <label class="order-field order-field--wide"><span>套餐</span><el-select v-model="newOrder.plan_id" placeholder="选择启用套餐"><el-option v-for="plan in activePlans" :key="plan.id" :label="`${plan.name} - ¥${plan.price}`" :value="plan.id" /></el-select></label>
+        <label class="order-field"><span>本次订单金额（元）</span><el-input-number v-model="newOrder.amount" :min="0.01" :max="99999999.99" :precision="2" :controls="false" /></label>
         <label class="order-field order-field--wide"><span>人工收款渠道</span><el-input v-model="newOrder.channel" placeholder="如微信转账 / 银行转账 / 线下收款" /></label>
         <label class="order-field"><span>负责人</span><el-input v-model="newOrder.responsible" placeholder="负责人" /></label>
         <div class="order-submit"><el-button type="primary" @click="createOrder" :loading="isLoading">{{ isLoading ? '创建中...' : '创建订单' }}</el-button></div>
       </div>
     </el-card>
 
-    <el-card v-if="canReadPlans && loadState !== 'loading' && loadState !== 'error'" class="table-card plan-overview-card">
-      <template #header>
-        <div class="card-header">
-          <div>
-            <h3>套餐概览</h3>
-            <small class="card-hint">三类后台角色均可查看；订单只能选择启用中的套餐</small>
-          </div>
-          <el-button v-if="canManageSettings" size="small" type="primary" @click="goPlanSettings">管理套餐</el-button>
-        </div>
-      </template>
-      <el-table :data="plans" size="small" style="width:100%">
-        <el-table-column prop="name" label="套餐" min-width="140" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }"><el-tag :type="getPlanStatusType(row.status)" size="small">{{ getPlanStatusText(row.status) }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="价格" width="110"><template #default="{ row }">¥{{ row.price }}</template></el-table-column>
-        <el-table-column label="时长" width="100"><template #default="{ row }">{{ row.duration_days }} 天</template></el-table-column>
-        <el-table-column label="类型" width="120"><template #default="{ row }">{{ row.product_type === 'business' ? '专业 B 端' : '普通 C 端' }}</template></el-table-column>
-      </el-table>
-    </el-card>
-
-    <el-card v-if="loadState !== 'loading' && loadState !== 'error'" class="table-card">
+    <el-card v-if="loadState !== 'loading' && loadState !== 'error'" class="table-card orders-list-card">
       <template #header>
         <div class="card-header">
           <h3>订单列表</h3>
         </div>
       </template>
-      <DataToolbar label="订单筛选">
-        <el-select v-model="filterSource" aria-label="订单来源" style="width: 170px;">
+      <DataToolbar label="订单筛选" class="orders-toolbar">
+        <el-input v-model="searchText" clearable aria-label="搜索订单" placeholder="搜索订单号、客户或负责人" class="order-search" @keyup.enter="applySearch" @clear="applySearch" />
+        <el-select v-model="filterSource" aria-label="订单来源" class="order-source-filter">
           <el-option label="直营订单" value="direct" />
           <el-option label="代理订单（只读）" value="agency" />
           <el-option label="全部来源" value="all" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="全部状态" clearable style="width: 150px;">
+        <el-select v-model="filterStatus" aria-label="收款状态" placeholder="全部状态" clearable class="order-status-filter">
               <el-option label="已收款" value="paid" />
               <el-option label="待收款" value="pending" />
           <el-option label="已退款" value="refunded" />
@@ -84,73 +58,89 @@
         </el-select>
         <template #summary>共 {{ total }} 笔 · 本页 {{ orders.length }} 笔</template>
         <template #actions>
-          <el-button @click="exportOrdersData">
+          <el-button title="导出当前平台、来源和收款状态的全部订单，不含关键词筛选" @click="exportOrdersData">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            导出 CSV
+            导出订单
           </el-button>
         </template>
       </DataToolbar>
-      <el-table :data="orders" style="width: 100%">
-        <el-table-column label="来源" width="100"><template #default="{ row }">{{ row.agency_id ? '代理订单' : '直营登记' }}</template></el-table-column>
-        <el-table-column label="订单号" min-width="140">
+      <el-table :data="orders" class="orders-table" style="width: 100%">
+        <el-table-column label="客户 / 订单" min-width="185">
           <template #default="{ row }">
-            <span style="font-family: monospace; font-size: 0.85rem;">{{ row.order_no }}</span>
+            <div class="order-customer">
+              <strong :title="row.customer_name || '未关联客户'">{{ row.customer_name || '未关联客户' }}</strong>
+              <small class="order-number" :title="row.order_no">{{ row.order_no }}</small>
+              <small>{{ row.agency_id ? '代理订单' : '直营登记' }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="套餐" min-width="120">
+        <el-table-column label="套餐 / 金额" min-width="145">
           <template #default="{ row }">
-            {{ getPlanName(row.plan_id) }}
+            <div class="order-cell">
+              <strong class="order-amount">¥{{ row.amount }}</strong>
+              <small :title="row.plan_name_snapshot || getPlanName(row.plan_id)">{{ row.plan_name_snapshot || getPlanName(row.plan_id) }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="金额" width="100">
+        <el-table-column label="收款 / 授权" min-width="140">
           <template #default="{ row }">
-            ¥{{ row.amount }}
+            <div class="order-cell">
+              <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusText(row.status) }}</el-tag>
+              <small v-if="row.auth_code_id">授权：{{ licenseStateLabel(row.auth_code_status) }}</small>
+              <small v-else-if="row.status === 'paid'" class="order-followup">授权待核对</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="渠道" width="120">
+        <el-table-column v-if="!isCompact" label="负责人 / 渠道" min-width="140">
           <template #default="{ row }">
-            {{ row.channel || '-' }}
+            <div class="order-cell">
+              <strong :title="row.responsible || '未填写负责人'">{{ row.responsible || '未填写负责人' }}</strong>
+              <small :title="row.channel || '未填写渠道'">{{ row.channel || '未填写渠道' }}</small>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompact" label="负责人" width="120">
+        <el-table-column label="操作" width="184" fixed="right">
           <template #default="{ row }">
-            {{ row.responsible || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">
-              {{ getStatusText(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="!isCompact" label="创建时间" width="140">
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" :width="isCompact ? 136 : 270" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="openOrderDetail(row)">详情</el-button>
-            <el-dropdown v-if="canOperateOrder(row) && isCompact && (row.status === 'pending' || row.status === 'paid')" trigger="click" @command="command => handleOrderCommand(command, row)">
-              <el-button size="small">更多</el-button>
-                  <template #dropdown><el-dropdown-menu><el-dropdown-item v-if="row.status === 'pending'" command="paid">标记已收款</el-dropdown-item><el-dropdown-item v-if="row.status === 'pending'" command="cancel">取消订单</el-dropdown-item><el-dropdown-item v-if="row.status === 'paid'" command="refund">登记退款</el-dropdown-item></el-dropdown-menu></template>
-            </el-dropdown>
-            <template v-else-if="canOperateOrder(row) && !isCompact">
-              <el-button v-if="row.status === 'pending'" size="small" @click="markPaid(row)">标记已收款</el-button>
-              <el-button v-if="row.status === 'pending'" size="small" type="warning" @click="cancel(row)">取消</el-button>
-              <el-button v-if="row.status === 'paid'" size="small" type="danger" @click="refund(row)">登记退款</el-button>
-            </template>
+            <div class="order-actions">
+              <el-button size="small" @click="openOrderDetail(row)">详情</el-button>
+              <el-button v-if="canOperateOrder(row) && row.status === 'pending'" size="small" type="primary" plain :disabled="transitionBusy" @click="markPaid(row)">标记已收款</el-button>
+              <el-dropdown v-else-if="canOperateOrder(row) && row.status === 'paid'" trigger="click" @command="command => handleOrderCommand(command, row)">
+                <el-button size="small">更多</el-button>
+                <template #dropdown><el-dropdown-menu><el-dropdown-item command="refund">登记退款</el-dropdown-item></el-dropdown-menu></template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
-          <div class="empty-state">暂无订单</div>
+          <div class="empty-state">
+            <strong>{{ searchText.trim() || filterStatus ? '没有找到匹配的订单' : '当前来源暂无订单' }}</strong>
+            <p>{{ searchText.trim() || filterStatus ? '换一个关键词或收款状态试试。' : '新登记的订单会显示在这里。' }}</p>
+          </div>
         </template>
       </el-table>
       <div class="orders-pagination">
         <el-pagination :current-page="page" :page-size="pageSize" :total="total" :pager-count="5" layout="prev, pager, next" @current-change="changePage" />
       </div>
     </el-card>
+
+    <details v-if="canReadPlans && loadState !== 'loading' && loadState !== 'error'" class="plan-overview-card">
+      <summary><span>套餐参考</span><small>查看可选套餐与价格</small></summary>
+      <div class="plan-overview-content">
+        <div class="card-header">
+          <p class="card-hint">登记订单只能选择启用中的套餐；历史订单以购买时的套餐记录为准。</p>
+          <el-button v-if="canManageSettings" size="small" @click="goPlanSettings">管理套餐</el-button>
+        </div>
+        <el-table :data="plans" size="small" style="width:100%">
+          <el-table-column prop="name" label="套餐" min-width="140" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }"><el-tag :type="getPlanStatusType(row.status)" size="small">{{ getPlanStatusText(row.status) }}</el-tag></template>
+          </el-table-column>
+          <el-table-column label="价格" width="110"><template #default="{ row }">¥{{ row.price }}</template></el-table-column>
+          <el-table-column label="时长" width="100"><template #default="{ row }">{{ row.duration_days }} 天</template></el-table-column>
+          <el-table-column label="类型" width="120"><template #default="{ row }">{{ row.product_type === 'business' ? '专业 B 端' : '普通 C 端' }}</template></el-table-column>
+        </el-table>
+      </div>
+    </details>
 
     <AdminDetailDrawer v-model="showDetailDrawer" title="订单详情">
       <p v-if="detailLoading" role="status">正在读取订单详情…</p>
@@ -182,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { getOrdersPage, getOrder, createOrder as apiCreateOrder, markOrderPaid, cancelOrder, refundOrder, getPlansAdmin, exportOrders } from '@/utils/api'
@@ -199,6 +189,7 @@ import { hasStaffPermission } from '@/features/auth/permissions'
 import { failedDataState, settledDataState, type AsyncDataState } from '@/features/async/state'
 import { buildPendingOrderPayload } from '@/features/admin/orderLifecycle'
 import { supportReturnPath } from '@/features/admin/supportContext'
+import { scrollToWorkflowTarget } from '@/shared/ui/workflowMotion'
 import {
   adminOrderSchema,
   adminOrdersSchema,
@@ -215,16 +206,36 @@ const loadError = ref('')
 const isLoading = ref(false)
 const filterStatus = ref(typeof route.query.status === 'string' ? route.query.status : '')
 const filterSource = ref<'direct' | 'agency' | 'all'>(route.query.source === 'agency' || route.query.source === 'all' ? route.query.source : 'direct')
+const searchText = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
 const page = ref(typeof route.query.page === 'string' && /^[1-9]\d*$/.test(route.query.page) && Number.isSafeInteger(Number(route.query.page)) ? Number(route.query.page) : 1)
 const pageSize = 20
 const total = ref(0)
 let loadGeneration = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 const planNameMap = reactive<Record<string, string>>({})
 
 const platformStore = usePlatformStore()
 const router = useRouter()
 const isCompact = useCompactLayout()
 const canWrite = computed(() => hasStaffPermission(authService.getRole(), 'orders.write'))
+const createOpen = ref(false)
+function openCreate() {
+  if (!canWrite.value) return
+  createOpen.value = true
+  void nextTick(() => {
+    const form = document.getElementById('order-create')
+    scrollToWorkflowTarget(form, { block: 'start', focusSelector: 'input' })
+  })
+}
+function closeCreate() { createOpen.value = false; if (route.query.action === 'create') void router.replace({ query: { ...route.query, action: undefined } }) }
+let createShortcutHandled = false
+watch([() => route.query.action, loadState], ([action, state]) => {
+  if (action !== 'create') { createShortcutHandled = false; return }
+  // The shortcut locates the form once, not on every search or background refresh.
+  if (createShortcutHandled || state === 'loading' || state === 'error' || !canWrite.value) return
+  createShortcutHandled = true
+  openCreate()
+}, { immediate: true })
 const canReadPlans = computed(() => hasStaffPermission(authService.getRole(), 'plans.read'))
 const canManageSettings = computed(() => hasStaffPermission(authService.getRole(), 'settings.manage'))
 const canManageAgency = computed(() => authService.getRole() === 'super_admin')
@@ -238,11 +249,9 @@ const newOrder = ref<{ plan_id: string | number | null; amount: number; channel:
 const activePlans = computed(() => plans.value.filter((plan) => plan.status === 'active'))
 
 const stats = computed(() => ({
-  total: total.value,
   paid: orders.value.filter(o => o.status === 'paid').length,
   pending: orders.value.filter(o => o.status === 'pending').length,
-  refunded: orders.value.filter(o => o.status === 'refunded').length,
-  cancelled: orders.value.filter(o => o.status === 'cancelled').length,
+  paidPendingAuth: orders.value.filter(o => o.status === 'paid' && !o.auth_code_id).length,
 }))
 
 function getPlanName(planId?: string | number | null) {
@@ -292,7 +301,7 @@ async function loadData() {
   loadError.value = ''
   try {
     const platformKey = platformStore.adminPlatform !== 'all' ? platformStore.adminPlatform : undefined
-    const params = { platform_key: platformKey, status: filterStatus.value || undefined, page: page.value, page_size: pageSize, source: filterSource.value === 'all' ? undefined : filterSource.value }
+    const params = { platform_key: platformKey, status: filterStatus.value || undefined, ...(searchText.value.trim() ? { keyword: searchText.value.trim() } : {}), page: page.value, page_size: pageSize, source: filterSource.value === 'all' ? undefined : filterSource.value }
     const [ordersRes, plansRes] = await Promise.all([getOrdersPage(params), getPlansAdmin({ page_size: 100 })])
     if (generation !== loadGeneration) return
     const parsedOrders = adminOrdersSchema.parse(ordersRes.items)
@@ -322,8 +331,10 @@ function changePage(nextPage: number) {
 }
 function syncOrderListQuery() {
   const { record_id: _record, ...remaining } = route.query
-  void router.replace({ query: { ...remaining, status: filterStatus.value || undefined, page: page.value > 1 ? String(page.value) : undefined, source: filterSource.value !== 'direct' ? filterSource.value : undefined } })
+  void router.replace({ query: { ...remaining, status: filterStatus.value || undefined, keyword: searchText.value.trim() || undefined, page: page.value > 1 ? String(page.value) : undefined, source: filterSource.value !== 'direct' ? filterSource.value : undefined } })
 }
+
+function applySearch() { if (searchTimer) clearTimeout(searchTimer); page.value = 1; syncOrderListQuery(); void loadData() }
 
 watch([() => platformStore.adminPlatform, filterStatus, filterSource], () => {
   page.value = 1
@@ -335,6 +346,7 @@ watch([() => platformStore.adminPlatform, filterStatus, filterSource], () => {
   syncOrderListQuery()
   void loadData()
 })
+watch(searchText, () => { loadGeneration++; if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(applySearch, 250) }, { flush: 'sync' })
 
 async function createOrder() {
   if (!canWrite.value || isLoading.value) return
@@ -497,24 +509,32 @@ watch(() => route.query.record_id, value => {
   else { detailGeneration++; showDetailDrawer.value = false; detailOrder.value = null; detailLoading.value = false; detailError.value = '' }
 }, { immediate: true })
 watch(showDetailDrawer, visible => { if (!visible) detailGeneration++ }, { flush: 'sync' })
-onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++ })
+onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++; if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
 <style scoped>
-.stat-card {
-  padding: 18px;
-  text-align: center;
+.orders-page .order-stats .stat-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 30px;
+  align-content: start;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 16px 20px;
+  min-height: 96px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
-.order-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 1.5rem; }
+.order-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.orders-page .stat-card small { grid-column: 2; grid-row: 2; color: var(--color-text-secondary); font-size: 12px; }
+.orders-page .stat-card .stat-label { grid-column: 1 / -1; margin: 0; }
+.orders-page .stat-card .stat-value { grid-column: 1; grid-row: 2; margin: 0; line-height: 30px; }
 
 .stat-label {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
-  margin-bottom: 0.5rem;
 }
 
 .stat-value {
@@ -523,17 +543,23 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
   color: var(--color-text);
 }
 
-.table-card {
+.orders-page .table-card {
+  padding: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-low);
 }
 
-.card-header {
+.orders-page .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  border: 0;
 }
 
 .card-header h3 {
@@ -545,12 +571,23 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
 
 .form-row {
   display: grid;
-  grid-template-columns: 1.35fr 1.25fr .8fr auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
 }
-.plan-overview-card { margin-bottom: 1.5rem; }
-.card-hint { display: block; margin-top: .25rem; color: var(--color-text-secondary); font-size: .78rem; font-weight: 400; }
+.plan-overview-card {
+  margin-top: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.plan-overview-card > summary { cursor: pointer; padding: 16px 20px; color: var(--color-text); font-size: 14px; }
+.plan-overview-card > summary > span { font-weight: 600; margin-inline: 4px 12px; }
+.plan-overview-card > summary > small { color: var(--color-text-secondary); font-size: 13px; }
+.plan-overview-card > summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; border-radius: inherit; }
+.plan-overview-content { padding: 0 20px 20px; }
+.plan-overview-content .card-header { margin-bottom: 16px; }
+.card-hint { margin: 0; color: var(--color-text-secondary); font-size: 13px; font-weight: 400; }
 
 .order-field {
   display: flex;
@@ -559,9 +596,25 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
   gap: 7px;
 }
 .order-field > span { color: var(--color-text-secondary); font-size: .85rem; }
-.order-field :deep(.el-select), .order-field :deep(.el-input) { width: 100%; }
+.order-field :deep(.el-select), .order-field :deep(.el-input), .order-field :deep(.el-input-number) { width: 100%; }
+.order-customer, .order-cell { display: grid; min-width: 0; gap: 5px; justify-items: start; }
+.order-customer strong, .order-cell strong { max-width: 100%; font-size: 14px; font-weight: 600; }
+.order-customer small, .order-cell small { max-width: 100%; color: var(--color-text-secondary); font-size: 12px; }
+.order-customer strong, .order-customer .order-number, .order-cell small, .order-cell strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-number { font-family: monospace; }
+.order-cell .order-amount { font-variant-numeric: tabular-nums; }
+.order-cell .order-followup { color: var(--color-warning); }
+.order-actions { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.order-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.orders-table :deep(.el-table__cell) { padding-block: 14px; }
 .order-submit { display: flex; justify-content: flex-end; }
 .data-toolbar-v6 { margin-bottom: 1rem; }
+.orders-page .orders-toolbar { display: flex; flex-wrap: wrap; gap: 12px 16px; padding: 0; border: 0; background: transparent; }
+.orders-toolbar :deep(.data-toolbar-v6__filters) { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 12px; }
+.orders-toolbar :deep(.data-toolbar-v6__actions) { margin-left: auto; }
+.order-search { width: 260px; max-width: 100%; }
+.order-source-filter { width: 170px; }
+.order-status-filter { width: 150px; }
 .orders-pagination { display: flex; justify-content: flex-end; margin-top: 16px; overflow-x: auto; }
 
 .empty-state {
@@ -569,6 +622,8 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
   text-align: center;
   color: var(--color-text-secondary);
 }
+.empty-state strong { color: var(--color-text); font-size: 14px; font-weight: 500; }
+.empty-state p { margin: 8px 0 0; font-size: 13px; }
 
 :deep(.el-table) {
   --el-table-border-color: var(--color-border);
@@ -576,13 +631,17 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
   --el-table-row-hover-bg-color: var(--color-canvas);
 }
 
-:deep(.el-card__header) {
-  padding: 1rem 1.25rem;
+.orders-page .table-card :deep(.el-card__header) {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
 }
+.orders-page .table-card :deep(.el-card__header) > .card-header { width: 100%; }
 
-:deep(.el-card__body) {
-  padding: 1.25rem;
+.orders-page .table-card :deep(.el-card__body) {
+  padding: 20px;
 }
 
 .detail-list { display: grid; gap: 12px; }
@@ -596,7 +655,7 @@ onBeforeUnmount(() => { disposed = true; loadGeneration += 1; detailGeneration++
   .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .order-submit { grid-column: 1 / -1; }
 }
-@media (max-width: 899px) { .order-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+@media (max-width: 899px) { .order-stats { gap: 10px; } .orders-page .order-stats .stat-card { padding: 14px; } }
 @media (max-width: 560px) {
   .order-stats, .form-row { grid-template-columns: 1fr; }
   .order-submit { grid-column: auto; }

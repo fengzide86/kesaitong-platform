@@ -238,7 +238,7 @@ async def delete(
     await db.commit()
 
 
-async def record_receipt(db: AsyncSession, announcement_id: int, current_user: dict[str, object], action: str) -> dict[str, object]:
+async def record_receipt(db: AsyncSession, announcement_id: int, current_user: dict[str, object], action: str, viewed_revision: int | None = None) -> dict[str, object]:
     auth_code_id = current_user.get("auth_code_id")
     device_id = current_user.get("device_id")
     if not auth_code_id or not device_id:
@@ -247,17 +247,26 @@ async def record_receipt(db: AsyncSession, announcement_id: int, current_user: d
     announcement = result.scalar_one_or_none()
     if not announcement:
         raise HTTPException(status_code=404, detail="公告不存在")
+    # Bodyless legacy clients cannot identify which revision they saw. Keep
+    # their original (revision 1) receipt behavior, but never assume they saw
+    # an edited announcement. New clients must send the displayed revision.
+    receipt_revision = viewed_revision if viewed_revision is not None else 1
+    if receipt_revision != announcement.revision:
+        raise HTTPException(status_code=409, detail={
+            "code": "ANNOUNCEMENT_REVISION_CONFLICT" if viewed_revision is not None else "ANNOUNCEMENT_REVISION_REQUIRED",
+            "message": "公告内容已更新，请重新读取后确认" if viewed_revision is not None else "公告内容已更新，请更新客户端后重新读取并确认",
+        })
     result = await db.execute(select(AnnouncementReceipt).where(
         AnnouncementReceipt.announcement_id == announcement_id,
         AnnouncementReceipt.auth_code_id == auth_code_id,
         AnnouncementReceipt.device_id == device_id,
-        AnnouncementReceipt.revision == announcement.revision,
+        AnnouncementReceipt.revision == receipt_revision,
     ))
     receipt = result.scalar_one_or_none()
     if not receipt:
         receipt = AnnouncementReceipt(
             announcement_id=announcement_id, auth_code_id=auth_code_id,
-            device_id=device_id, revision=announcement.revision,
+            device_id=device_id, revision=receipt_revision,
         )
         db.add(receipt)
     now = datetime.now()
@@ -265,4 +274,6 @@ async def record_receipt(db: AsyncSession, announcement_id: int, current_user: d
     if action == "dismiss":
         receipt.dismissed_at = now
     await db.commit()
-    return {"announcement_id": announcement_id, "revision": announcement.revision, "action": action}
+    # A publication racing the write must not change the receipt target or
+    # response: this acknowledgement belongs only to the version just checked.
+    return {"announcement_id": announcement_id, "revision": receipt_revision, "action": action}

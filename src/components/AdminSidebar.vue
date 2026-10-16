@@ -57,11 +57,14 @@ const areaIcons: Record<AdminAreaId, Component> = {
   backdrop-filter: blur(18px);
 }
 
+.sidebar-brand-zone :deep(.kst-brand-lockup.is-horizontal) { align-items: center; gap: 4px; }
+.sidebar-brand-zone :deep(.kst-brand-lockup.is-horizontal .kst-lockup-logo) { width: 104px; height: 34px; }
+.sidebar-brand-zone :deep(.kst-brand-lockup.is-horizontal .kst-lockup-subtitle) { padding-left: 4px; font-size: 11.5px; line-height: 1.45; }
 .sidebar-brand-zone {
   height: var(--shell-header-height, 88px);
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 8px 0 20px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }

@@ -5,7 +5,7 @@
 from typing import Any
 
 from fastapi import HTTPException, Request
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import String, case, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import log_admin_action
@@ -29,7 +29,8 @@ class FeedbackService:
         status: str | None = None,
         user_id: int | None = None,
         platform_key: str | None = None,
-        pagination: PaginationParams | None = None
+        pagination: PaginationParams | None = None,
+        keyword: str | None = None,
     ) -> dict[str, Any]:
         """获取工单列表（支持过滤和分页）"""
         query = select(Feedback)
@@ -50,6 +51,13 @@ class FeedbackService:
         # 平台过滤（1.5 新增）
         if platform_key:
             query = query.where(Feedback.platform_key == platform_key)
+        if keyword and keyword.strip():
+            value = keyword.strip()
+            query = query.where(or_(
+                Feedback.title.contains(value, autoescape=True),
+                Feedback.content.contains(value, autoescape=True),
+                cast(Feedback.id, String).contains(value, autoescape=True),
+            ))
         
         if pagination:
             items, total = await paginate(query, self.db, pagination)

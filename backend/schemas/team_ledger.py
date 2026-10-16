@@ -23,6 +23,13 @@ class PolicyItem(StrictModel):
     ratio: Ratio
     method: Literal["fixed", "acquisition", "closing"] = "fixed"
     service_code: Code | None = None
+    purchased_service_codes: list[Code] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_purchased_services(self):
+        if len(set(self.purchased_service_codes)) != len(self.purchased_service_codes):
+            raise ValueError("关联的已购服务编号不能重复")
+        return self
 
 
 class PolicyInput(StrictModel):
@@ -223,6 +230,7 @@ class SettlementLine(StrictModel):
     bucket: Literal["due", "held"]
     held_reasons: list[str]
     service_code: str | None
+    purchased_service_codes: list[str] = Field(default_factory=list)
 
 
 class SettlementResponse(StrictModel):

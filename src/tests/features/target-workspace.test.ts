@@ -44,22 +44,48 @@ describe('target workspace', () => {
   it('makes the manual login handoff explicit instead of implying password automation', async () => {
     const bridge = desktop(); const wrapper = mount(TargetWorkspace); await open(wrapper)
     expect(wrapper.get('.target-entry-form button[type="submit"]').text()).toContain('打开并登录')
+    expect(wrapper.get('.target-step-nav li.active').text()).toBe('2 审核通过后登录')
+    expect(wrapper.get('.target-entry-controls').find('[data-testid="target-entry-url"]').exists()).toBe(true)
+    expect(wrapper.get('.target-entry-controls').find('[data-testid="target-open"]').exists()).toBe(true)
+    expect(wrapper.get('.target-entry-controls').find('small').exists()).toBe(false)
     await wrapper.get('input[aria-label="平台入口网址"]').setValue('https://school.example/entry')
     await wrapper.get('.target-entry-form').trigger('submit'); await flushPromises()
     expect(bridge.open).toHaveBeenCalledOnce(); expect(wrapper.text()).toContain('请完成登录并进入目标课程 / 店铺')
   })
-  it('submits only whitelisted detection evidence, never context hashes or URL params', async () => {
+  it('先提交平台接入申请，不打开登录窗口或误示为可用', async () => {
     const bridge = desktop(); mocks.list.mockResolvedValue([])
     const wrapper = mount(TargetWorkspace); await open(wrapper)
     expect(wrapper.get('input[aria-label="平台入口网址"]').attributes('maxlength')).toBe('8192')
     await wrapper.get('input[aria-label="平台入口网址"]').setValue('https://school.example/entry?paras=private')
     await wrapper.get('.target-entry-form').trigger('submit'); await flushPromises()
-    await wrapper.get('[data-testid="target-detect"]').trigger('click'); await flushPromises()
-    expect(wrapper.get('.target-submit input').attributes('maxlength')).toBe('100')
-    await wrapper.get('.target-submit').trigger('submit'); await flushPromises()
+    expect(bridge.open).not.toHaveBeenCalled()
     const payload = mocks.submit.mock.calls[0]![0]
-    expect(payload.entryUrl).not.toContain('?'); expect(JSON.stringify(payload)).not.toContain('private'); expect(payload).not.toHaveProperty('courseRef'); expect(payload).not.toHaveProperty('localAccountRef')
-    expect(bridge.preflight).not.toHaveBeenCalled(); expect(wrapper.text()).toContain('等待团队首次审核')
+    expect(payload.entryUrl).not.toContain('?'); expect(JSON.stringify(payload)).not.toContain('private'); expect(payload.evidence.edition).toBe('unknown'); expect(payload.evidence.pageFingerprint).toBeNull()
+    expect(bridge.preflight).not.toHaveBeenCalled(); expect(wrapper.text()).toContain('等待团队审核')
+  })
+  it.each([
+    ['pending', '等待平台审核'],
+    ['rejected', '平台暂未通过审核'],
+    ['disabled', '平台已暂停使用'],
+  ] as const)('平台状态为 %s 时标题准确说明下一步，不开放登录', async (status, title) => {
+    const bridge = desktop(); mocks.list.mockResolvedValue([targetProfile(status)])
+    const wrapper = mount(TargetWorkspace); await open(wrapper)
+    await wrapper.get('[data-testid="target-profile-select"]').setValue('school-a')
+    expect(wrapper.get('#target-connect-title').text()).toBe(title)
+    expect(wrapper.get('.target-flow-heading h2').text()).toBe(title)
+    expect(wrapper.find('[data-testid="target-open"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="target-apply"]').exists()).toBe(false)
+    expect(wrapper.get('.target-step-nav li.active').text()).toBe('1 申请接入')
+    if (status !== 'pending') expect(wrapper.get('.target-flow-heading').text()).not.toContain('等待')
+    expect(bridge.open).not.toHaveBeenCalled(); expect(bridge.execute).not.toHaveBeenCalled(); wrapper.unmount()
+  })
+  it('审核通过但缺少当前工具能力时，不误示为仍待审核或可以登录', async () => {
+    const bridge = desktop(); const profile = targetProfile(); profile.profile.capabilities = []; mocks.list.mockResolvedValue([profile])
+    const wrapper = mount(TargetWorkspace); await open(wrapper)
+    expect(wrapper.get('#target-connect-title').text()).toBe('当前工具暂未开放')
+    expect(wrapper.find('[data-testid="target-open"]').exists()).toBe(false)
+    expect(wrapper.get('.target-step-nav li.active').text()).toBe('1 申请接入')
+    expect(bridge.open).not.toHaveBeenCalled(); wrapper.unmount()
   })
   it('does not expose executable actions without a published target tool', async () => {
     const bridge = desktop(); const wrapper = mount(TargetWorkspace); await open(wrapper)
@@ -67,16 +93,19 @@ describe('target workspace', () => {
   })
   it('distinguishes an empty directory from a not-yet-selected tool', async () => {
     desktop(); const closed = mount(TargetWorkspace, { props: { hasOpenTools: false } }); await open(closed)
-    expect(closed.find('.target-tool-section').exists()).toBe(true); expect(closed.text()).toContain('当前目录尚无开放')
+    expect(closed.find('.target-tool-section').exists()).toBe(true); expect(closed.text()).toContain('配送模板工具暂未对你开放')
     const available = mount(TargetWorkspace, { props: { hasOpenTools: true } }); await open(available)
-    expect(available.find('.target-tool-section').exists()).toBe(true); expect(available.text()).toContain('请先在工具目录选择'); expect(available.text()).not.toContain('当前目录尚无开放')
+    expect(available.find('.target-tool-section').exists()).toBe(true); expect(available.text()).toContain('请先在工具目录选择'); expect(available.text()).not.toContain('配送模板工具暂未对你开放')
   })
   it('preflight binds published tool, entry revision and scenario; execution requires confirmation', async () => {
     const bridge = desktop(); const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
     expect(bridge.preflight).toHaveBeenCalledWith(expect.objectContaining({ toolId: 'template-tool', profileId: 'school-a', profileRevision: 1, scenario: 'training', stage: 'not_applicable' }))
     expect(wrapper.get('.target-preview button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.target-preview').classes()).toContain('kst-reveal')
+    expect(wrapper.get('.target-preview').classes()).not.toContain('kst-confirm')
     await wrapper.get('.target-confirm input').setValue(true); await wrapper.get('.target-preview button').trigger('click'); await flushPromises()
     expect(bridge.execute).toHaveBeenCalledExactlyOnceWith({ planId: 'plan-1' }); expect(wrapper.text()).toContain('已核验成功')
+    expect(wrapper.get('.target-result').classes()).toContain('kst-reveal')
   })
   it('prefills the complete mandatory mainland rule instead of free-typing 49 states', async () => {
     const bridge = desktop(); const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
@@ -151,7 +180,7 @@ describe('target workspace', () => {
     await ready(wrapper)
     expect(wrapper.get('[data-testid="assigned-context"]').element).toHaveProperty('value', '指定比赛')
     expect(wrapper.get('[data-testid="assigned-context"]').attributes('readonly')).toBeDefined()
-    expect(wrapper.get('.formal-warning').text()).toContain('比赛写入动作尚未验收')
+    expect(wrapper.get('.formal-warning').text()).toContain('当前工具尚不支持在比赛中保存模板')
     expect(bridge.preflight).toHaveBeenCalledWith(expect.objectContaining({ scenario: 'competition', stage: 'formal' }))
     expect(wrapper.find('.target-confirm').exists()).toBe(false)
     expect(bridge.execute).not.toHaveBeenCalled()
@@ -161,6 +190,8 @@ describe('target workspace', () => {
     const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
     await wrapper.get('.target-confirm input').setValue(true); await wrapper.get('.target-preview button').trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('结果待核对'); expect(wrapper.find('.target-preview button').exists()).toBe(false)
+    expect(wrapper.get('.target-result').classes()).not.toContain('verified')
+    expect(wrapper.get('.target-result').classes()).not.toContain('kst-confirm')
     await wrapper.get('.target-result button').trigger('click'); await flushPromises()
     expect(bridge.reconcile).toHaveBeenCalledWith({ operationId: 'operation-1' }); expect(bridge.execute).toHaveBeenCalledTimes(1)
   })
@@ -188,7 +219,7 @@ describe('target workspace', () => {
   })
   it('shows reversible receipt context without exposing a full URL or requiring course data in the journal', async () => {
     const bridge = desktop(); bridge.listReceipts.mockResolvedValue([targetReceipt('needs_review')])
-    const wrapper = mount(TargetWorkspace); await open(wrapper); const details = wrapper.get('details'); (details.element as HTMLDetailsElement).open = true; await details.trigger('toggle'); await flushPromises()
+    const wrapper = mount(TargetWorkspace); await open(wrapper); const details = wrapper.get('.target-history'); (details.element as HTMLDetailsElement).open = true; await details.trigger('toggle'); await flushPromises()
     expect(wrapper.text()).toContain('学校实训'); expect(wrapper.text()).toContain('school.example/entry'); expect(wrapper.text()).toContain('课程/店铺需重新识别'); expect(wrapper.text()).toContain('aaaaaaaa')
     expect(wrapper.text()).not.toContain('?paras=')
   })
@@ -201,7 +232,7 @@ describe('target workspace', () => {
   it('unknown or V3 detection never enables V2 preflight', async () => {
     const bridge = desktop(); bridge.detect.mockResolvedValue({ ...targetObservation(), kind: 'unknown', version: 'v3' })
     const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
-    expect(bridge.preflight).not.toHaveBeenCalled(); expect(wrapper.text()).toContain('没有已验收的 V3 执行能力')
+    expect(bridge.preflight).not.toHaveBeenCalled(); expect(wrapper.text()).toContain('已识别为 V3 平台，目前还不能使用工具操作')
   })
   it('refresh invalidates the plan but retains unresolved receipt without a submission retry', async () => {
     const bridge = desktop(); bridge.execute.mockResolvedValue(targetReceipt('needs_review'))
@@ -214,7 +245,7 @@ describe('target workspace', () => {
   it('login required tells the user to refresh and re-enter their selected course, not the first course', async () => {
     const bridge = desktop(); bridge.detect.mockResolvedValue({ ...targetObservation(), kind: 'login_required', missing: ['course-context'] })
     const wrapper = mount(TargetWorkspace, { props: { toolId: 'template-tool' } }); await ready(wrapper)
-    expect(wrapper.get('.target-context').text()).toContain('请刷新并重新登录'); expect(wrapper.text()).toContain('工具不会替你选课程'); expect(bridge.preflight).not.toHaveBeenCalled()
+    expect(wrapper.get('.target-context').text()).toContain('请刷新并重新登录'); expect(wrapper.text()).toContain('未经你的确认，工具不会提交操作'); expect(bridge.preflight).not.toHaveBeenCalled()
   })
   it('refresh failure clears a usable plan without claiming login has recovered', async () => {
     const bridge = desktop(); bridge.refresh.mockRejectedValue(new Error('窗口刷新失败，请重新打开入口'))

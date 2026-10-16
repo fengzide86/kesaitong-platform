@@ -31,6 +31,7 @@ export interface components {
     "APIResponse_OwnershipResponse_": { "data"?: components['schemas']["OwnershipResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_PlanResponse_": { "data"?: components['schemas']["PlanResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_PlanStatsResponse_": { "data"?: components['schemas']["PlanStatsResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "APIResponse_PolicyInput_": { "data"?: components['schemas']["PolicyInput-Output"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_PolicyResponse_": { "data"?: components['schemas']["PolicyResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_ProfitPolicyResponse_": { "data"?: components['schemas']["ProfitPolicyResponse"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_ProjectRuntimeScopeRead_": { "data"?: components['schemas']["ProjectRuntimeScopeRead"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
@@ -116,7 +117,7 @@ export interface components {
     "AuthCodeExtend": { "days": number }
     "AuthCodeGenerate": { "count"?: number; "duration_days"?: number | null; "max_devices"?: number | null; "plan_id"?: number | null; "platform_scope"?: string | null; "scene_type"?: "competition" | "course" | "operations" | null; "seat_limit"?: number | null }
     "AuthCodePageResponse": { "data": Array<components['schemas']["AuthCodeResponse"]>; "page": number; "page_size": number; "total": number }
-    "AuthCodeResponse": { "code": string; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "device_used"?: number | null; "devices"?: Array<components['schemas']["DeviceResponse"]>; "entitlements"?: {  }; "expires_at"?: string | null; "id": number; "max_devices"?: number | null; "plan_id"?: number | null; "plan_name"?: string | null; "platform_scope"?: Array<string> | null; "product_type"?: string; "scene_type"?: string | null; "seat_limit"?: number | null; "seat_used"?: number | null; "status": string; "user_id"?: number | null }
+    "AuthCodeResponse": { "code": string; "created_at"?: string | null; "customer_name"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "device_used"?: number | null; "devices"?: Array<components['schemas']["DeviceResponse"]>; "entitlements"?: {  }; "expires_at"?: string | null; "id": number; "max_devices"?: number | null; "order_no"?: string | null; "plan_id"?: number | null; "plan_name"?: string | null; "platform_scope"?: Array<string> | null; "product_type"?: string; "project_id"?: string | null; "responsible"?: string | null; "scene_type"?: string | null; "seat_limit"?: number | null; "seat_used"?: number | null; "status": string; "user_id"?: number | null; "user_name"?: string | null }
     "AuthCodeUpdate": { "device_id"?: string | null; "device_name"?: string | null; "expires_at"?: string | null; "max_devices"?: number | null; "status"?: "unused" | "active" | "frozen" | "expired" | "deleted" | null }
     "AuthStatusResponse": { "data"?: components['schemas']["StaffContextResponse"] | components['schemas']["UserAuthStatusData"] | components['schemas']["LegacyAdminStatusData"] | null; "error_code"?: number | null; "message": string; "success": boolean }
     "BalanceResponse": { "due": string; "held": string; "paid": string; "unpaid": string }
@@ -300,9 +301,10 @@ export interface components {
     "PlanResponse": { "allowed_tools"?: Array<unknown>; "benefits"?: Array<unknown>; "code_prefix"?: string | null; "created_at"?: string | null; "display_badge"?: string | null; "duration_days": number; "duration_label": string; "entitlements"?: {  }; "features"?: string | null; "id": number; "is_recommended"?: boolean; "name": string; "plan_code"?: string | null; "price": number; "product_type"?: string; "sort_order"?: number; "status": string; "updated_at"?: string | null }
     "PlanStatsResponse": { "codes": components['schemas']["PlanCodeStats"]; "orders": components['schemas']["PlanOrderStats"]; "plan": components['schemas']["PlanResponse"] }
     "PlanUpdate": { "code_prefix"?: string | null; "duration_days"?: number | null; "entitlements"?: {  } | null; "expected_price"?: number | string | null; "features"?: string | null; "name"?: string | null; "price"?: number | string | null; "product_type"?: "consumer" | "business" | null; "sort_order"?: number | null }
-    "PolicyInput": { "items": Array<components['schemas']["PolicyItem-Input"]>; "name": string; "product_skus": Array<string> }
-    "PolicyItem-Input": { "code": string; "group": string; "label": string; "method"?: "fixed" | "acquisition" | "closing"; "ratio": number | string; "service_code"?: string | null }
-    "PolicyItem-Output": { "code": string; "group": string; "label": string; "method"?: "fixed" | "acquisition" | "closing"; "ratio": string; "service_code"?: string | null }
+    "PolicyInput-Input": { "items": Array<components['schemas']["PolicyItem-Input"]>; "name": string; "product_skus": Array<string> }
+    "PolicyInput-Output": { "items": Array<components['schemas']["PolicyItem-Output"]>; "name": string; "product_skus": Array<string> }
+    "PolicyItem-Input": { "code": string; "group": string; "label": string; "method"?: "fixed" | "acquisition" | "closing"; "purchased_service_codes"?: Array<string>; "ratio": number | string; "service_code"?: string | null }
+    "PolicyItem-Output": { "code": string; "group": string; "label": string; "method"?: "fixed" | "acquisition" | "closing"; "purchased_service_codes"?: Array<string>; "ratio": string; "service_code"?: string | null }
     "PolicyResponse": { "created_at": string; "created_by_staff_id": number; "id": number; "items": Array<components['schemas']["PolicyItem-Output"]>; "name": string; "product_skus": Array<string>; "status": "draft" | "active"; "version": number }
     "PolicyUpdate": { "expected_version": number; "items": Array<components['schemas']["PolicyItem-Input"]>; "name": string; "product_skus": Array<string> }
     "PreviewInput": { "period": string; "policy_id": number; "product_sku": string }
@@ -319,6 +321,7 @@ export interface components {
     "PublicCatalogResponse": { "catalog_version": string; "items": Array<components['schemas']["PublicOffer"]>; "schema_version": 1 }
     "PublicOffer": { "allowed_capabilities"?: Array<string>; "availability"?: "consult" | "limited" | "available"; "business_line": "trial" | "competition" | "training" | "single_tool" | "service"; "description"?: string; "name": string; "price": string; "services"?: Array<components['schemas']["IncludedService"]>; "sku": string; "term_type": "project_end" | "service_fulfillment"; "version": number }
     "RateSessionRequest": { "satisfaction": number }
+    "ReceiptAction": { "revision"?: number | null }
     "RefreshTokenData": { "token": string }
     "RefreshTokenResponse": { "data": components['schemas']["RefreshTokenData"]; "success": true }
     "RefundEntitlementReviewRequest": { "evidence_ref": string; "expected_refunded_total": number | string; "expected_revision": number; "retained_capabilities": Array<string>; "service_limits": { [key: string]: number } }
@@ -343,7 +346,7 @@ export interface components {
     "SettingResponse": { "created_at"?: string | null; "description"?: string | null; "id": number; "key": string; "value"?: string | null }
     "SettingUpdate": { "description"?: string | null; "key": string; "value": string }
     "SettingUpdateResponse": { "success": boolean }
-    "SettlementLine": { "amount": string; "bucket": "due" | "held"; "group": string; "held_reasons": Array<string>; "item_code": string; "label": string; "member_id": number | null; "order_id": number; "service_code": string | null }
+    "SettlementLine": { "amount": string; "bucket": "due" | "held"; "group": string; "held_reasons": Array<string>; "item_code": string; "label": string; "member_id": number | null; "order_id": number; "purchased_service_codes"?: Array<string>; "service_code": string | null }
     "SettlementResponse": { "confirmed_at": string | null; "confirmed_by_staff_id": number | null; "created_at": string; "created_by_staff_id": number; "fingerprint": string; "id": number; "inputs_snapshot": { [key: string]: components['schemas']["JsonValue"] }; "lines_snapshot": Array<components['schemas']["SettlementLine"]>; "period": string; "policy_id": number; "product_sku": string; "status": "preview" | "confirmed"; "total_amount": string; "version": number }
     "SignedTargetProfile": { "profile": components['schemas']["TargetProfile"]; "signature": string | null; "signingKeyId": string | null }
     "StaffAccountCreate": { "agency_id"?: number | null; "display_name": string; "password": string; "role": "super_admin" | "operator" | "support" | "agent"; "username": string }
@@ -395,14 +398,14 @@ export interface components {
     "UpdateReleaseResponse": { "files": Array<components['schemas']["UpdateFileResponse"]>; "is_latest"?: boolean | null; "manifest"?: {  } | null; "published_at"?: string | null; "staged_at"?: string | null; "status": string; "version": string }
     "UserAuthStatusData": { "business_workspace_enabled": boolean; "device_used": number; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "max_devices": number; "plan_code"?: string | null; "plan_name": string; "product_type": string; "role": "user"; "seat_limit": number; "seat_used": number }
     "UserDetailEnvelope": { "data"?: components['schemas']["UserDetailResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
-    "UserDetailResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "last_active_at"?: string | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null; "updated_at"?: string | null }
+    "UserDetailResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "customer_name"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "expires_at"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "last_active_at"?: string | null; "name"?: string | null; "order_no"?: string | null; "phone"?: string | null; "plan_name"?: string | null; "project_id"?: string | null; "responsible"?: string | null; "status"?: string | null; "total_seats"?: number | null; "updated_at"?: string | null }
     "UserDevicesEnvelope": { "data"?: Array<components['schemas']["schemas__user__UserDeviceResponse"]> | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserInfoData": { "business_workspace_enabled": boolean; "device_id"?: string | null; "device_name"?: string | null; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "name": string; "plan_code"?: string | null; "plan_name": string; "product_type": string; "role": "user"; "user_id": number }
     "UserItemEnvelope": { "data"?: components['schemas']["UserSummaryResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserListEnvelope": { "data"?: Array<components['schemas']["UserSummaryResponse"]> | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserStatsEnvelope": { "data"?: components['schemas']["UserStatsResponse"] | null; "detail"?: unknown | null; "error_code"?: number | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "UserStatsResponse": { "active_users": number; "today_new": number; "total_users": number }
-    "UserSummaryResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null }
+    "UserSummaryResponse": { "auth_code_id"?: number | null; "created_at"?: string | null; "customer_name"?: string | null; "device_id"?: string | null; "device_name"?: string | null; "expires_at"?: string | null; "extra_devices"?: number | null; "id": number; "is_active"?: boolean | null; "last_active_at"?: string | null; "name"?: string | null; "order_no"?: string | null; "phone"?: string | null; "plan_name"?: string | null; "project_id"?: string | null; "responsible"?: string | null; "status"?: string | null; "total_seats"?: number | null }
     "UserUpdate": { "extra_devices"?: number | null; "name"?: string | null; "phone"?: string | null; "total_seats"?: number | null }
     "ValidationError": { "ctx"?: {  }; "input"?: unknown; "loc": Array<string | number>; "msg": string; "type": string }
     "VerifyData": { "business_workspace_enabled": boolean; "code": string; "device_id"?: string | null; "device_used": number; "entitlements": components['schemas']["EntitlementsResponse"]; "expires_at"?: string | null; "max_devices": number; "plan_code"?: string | null; "plan_name": string; "platform_scope": Array<string>; "product_type": string; "scene_type"?: string | null; "seat_limit": number; "seat_used": number; "token": string; "user_id": number }
@@ -675,12 +678,12 @@ export interface operations {
   }
   "dismiss_announcement_api_announcements__announcement_id__dismiss_post": {
     parameters: { "path": { "announcement_id": number } }
-    requestBody: never
+    requestBody: components['schemas']["ReceiptAction"] | null
     responses: { "200": components['schemas']["APIResponse_AnnouncementReceiptResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "mark_announcement_read_api_announcements__announcement_id__read_post": {
     parameters: { "path": { "announcement_id": number } }
-    requestBody: never
+    requestBody: components['schemas']["ReceiptAction"] | null
     responses: { "200": components['schemas']["APIResponse_AnnouncementReceiptResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_auth_codes_api_auth_codes_get": {
@@ -1094,7 +1097,7 @@ export interface operations {
     responses: { "200": components['schemas']["APIResponse_ExpenseRecordResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_feedback_list_api_feedback_get": {
-    parameters: { "query": { "status"?: string | null; "user_id"?: number | null; "platform_key"?: string | null; "page"?: number; "page_size"?: number } }
+    parameters: { "query": { "status"?: string | null; "keyword"?: string | null; "user_id"?: number | null; "platform_key"?: string | null; "page"?: number; "page_size"?: number } }
     requestBody: never
     responses: { "200": components['schemas']["FeedbackListEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1254,7 +1257,7 @@ export interface operations {
     responses: { "200": Array<string>; "422": components['schemas']["HTTPValidationError"] }
   }
   "get_orders_api_orders_get": {
-    parameters: { "query": { "page"?: number; "page_size"?: number; "status"?: string | null; "plan_id"?: number | null; "platform_key"?: string | null; "source"?: "direct" | "agency" | null } }
+    parameters: { "query": { "page"?: number; "page_size"?: number; "status"?: string | null; "plan_id"?: number | null; "keyword"?: string | null; "platform_key"?: string | null; "source"?: "direct" | "agency" | null } }
     requestBody: never
     responses: { "200": components['schemas']["OrderPageResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
@@ -1575,7 +1578,7 @@ export interface operations {
   }
   "create_policy_api_team_ledger_policies_post": {
     parameters: never
-    requestBody: components['schemas']["PolicyInput"]
+    requestBody: components['schemas']["PolicyInput-Input"]
     responses: { "200": components['schemas']["APIResponse_PolicyResponse_"]; "422": components['schemas']["HTTPValidationError"] }
   }
   "update_policy_api_team_ledger_policies__identity__put": {
@@ -1587,6 +1590,11 @@ export interface operations {
     parameters: { "path": { "identity": number } }
     requestBody: components['schemas']["VersionInput"]
     responses: { "200": components['schemas']["APIResponse_PolicyResponse_"]; "422": components['schemas']["HTTPValidationError"] }
+  }
+  "policy_template_api_team_ledger_policy_template_get": {
+    parameters: never
+    requestBody: never
+    responses: { "200": components['schemas']["APIResponse_PolicyInput_"] }
   }
   "refund_reviews_api_team_ledger_refund_reviews_get": {
     parameters: { "query": { "status"?: string | null } }
@@ -2374,6 +2382,9 @@ export interface paths {
   }
   "/api/team-ledger/policies/{identity}/activate": {
     post: operations["activate_policy_api_team_ledger_policies__identity__activate_post"]
+  }
+  "/api/team-ledger/policy-template": {
+    get: operations["policy_template_api_team_ledger_policy_template_get"]
   }
   "/api/team-ledger/refund-reviews": {
     get: operations["refund_reviews_api_team_ledger_refund_reviews_get"]

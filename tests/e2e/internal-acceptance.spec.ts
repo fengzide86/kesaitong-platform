@@ -224,7 +224,7 @@ test('C 端目录隐藏内部 Demo，网页版已开放工具只引导下载桌�
   await expect(page.getByTestId('tools-page')).toBeVisible()
   await expect(page.getByTestId('tool-card-注册流程演示')).toHaveCount(0)
   const liveCard = page.getByTestId('tool-card-公司登记工具')
-  await expect(liveCard).toContainText('下载桌面端')
+  await expect(liveCard).toContainText('查看准备项')
   await liveCard.click()
   await expect(page.locator('.drawer-assurance')).toContainText('本网页不会启动外部平台操作')
   await page.getByRole('button', { name: '下载桌面端', exact: true }).click()
@@ -462,7 +462,7 @@ const roleExpectations: Array<{
     areas: ['行动中心', '客户与授权', '订单与代理', '售后支持', '经营财务', '产品与系统'],
     sections: [
       { area: '经营财务', visible: ['分润管理', '公账支出', '代理返佣'], hidden: [] },
-      { area: '产品与系统', visible: ['套餐与设置', '工作台开放', '公告管理', '平台入口审核', '应用更新', '物流费率', '后台账号'], hidden: [] },
+      { area: '产品与系统', visible: ['系统设置', '工作台开放', '公告管理', '平台入口审核', '应用更新', '物流费率', '后台账号'], hidden: [] },
     ],
     forbiddenPaths: [],
   },
@@ -472,7 +472,7 @@ const roleExpectations: Array<{
     sections: [
       { area: '经营财务', visible: ['分润管理', '公账支出'], hidden: ['代理返佣'] },
       { area: '售后支持', visible: ['工单管理', '知识库管理', '客服规则'], hidden: ['代理售后'] },
-      { area: '产品与系统', visible: ['工作台开放', '公告管理'], hidden: ['套餐与设置', '平台入口审核', '应用更新', '物流费率', '后台账号'] },
+      { area: '产品与系统', visible: ['工作台开放', '公告管理'], hidden: ['系统设置', '平台入口审核', '应用更新', '物流费率', '后台账号'] },
     ],
     forbiddenPaths: ['/admin/settings', '/admin/updates', '/admin/staff-accounts', '/admin/freight-rates', '/admin/agency'],
   },
@@ -633,6 +633,7 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
   await installSession(page, 'super_admin')
   let status: 'pending' | 'paid' | 'refunded' = 'pending'
   const actionCalls: Array<{ method: string; path: string; body: string | null }> = []
+  const ledgerMutationCalls: string[] = []
   const order = () => ({
     id: 1,
     order_no: 'INTERNAL-ORDER-001',
@@ -646,6 +647,7 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
   })
   await installApi(page, (request, path) => {
     if (path === '/api/orders' && request.method() === 'GET') return wrapped([order()])
+    if (path === '/api/orders/1' && request.method() === 'GET') return wrapped(order())
     if (path === '/api/plans/admin') return wrapped([{
       id: 11,
       name: '内部验证套餐',
@@ -665,6 +667,30 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
       status = 'refunded'
       return wrapped(order())
     }
+    if (path === '/api/team-ledger/summary' && request.method() === 'GET') {
+      return wrapped({ totals: { due: '0.00', held: '0.00', paid: '0.00', unpaid: '0.00' } })
+    }
+    if (path === '/api/team-ledger/policies' && request.method() === 'GET') {
+      return wrapped([{
+        id: 1,
+        name: '基础分配规则',
+        version: 1,
+        status: 'active',
+        items: [
+          { code: 'tech', label: '技术开发与维护', group: '技术开发与维护', ratio: '0.30' },
+          { code: 'market', label: '市场与销售', group: '市场与销售', ratio: '0.25' },
+          { code: 'product', label: '产品战略与团队协作', group: '产品战略与团队协作', ratio: '0.15' },
+          { code: 'service', label: '客户交付与支持', group: '客户交付与支持', ratio: '0.15' },
+          { code: 'coordination', label: '统筹协作', group: '统筹协作', ratio: '0.10' },
+          { code: 'record', label: '历史记录', group: '历史记录', ratio: '0.05' },
+        ],
+      }])
+    }
+    if (path === '/api/team-ledger/entries' && request.method() === 'GET') return wrapped([])
+    if (path.startsWith('/api/team-ledger/') && request.method() !== 'GET') {
+      ledgerMutationCalls.push(path)
+      return wrapped({})
+    }
     if (path === '/api/profit/summary') {
       const active = status === 'paid' ? 100 : 0
       const reversed = status === 'refunded' ? 100 : 0
@@ -679,6 +705,24 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
         active: { grand_total: active },
         reversed: { grand_total: reversed },
       })
+    }
+    if (path === '/api/profit' && request.method() === 'GET') {
+      const record = {
+        id: 1,
+        order_id: 1,
+        status: status === 'refunded' ? 'reversed' : 'active',
+        policy_version: 1,
+        order_amount_snapshot: 100,
+        tech_share: 30,
+        market_share: 25,
+        product_share: 15,
+        service_share: 15,
+        coordination_share: 10,
+        record_share: 5,
+        reversal_reason: status === 'refunded' ? '内部验收退款' : null,
+        created_at: now,
+      }
+      return { body: { success: true, data: { items: [record], total: 1, page: 1, page_size: 20 } } }
     }
     if (path === '/api/profit/policy') {
       return wrapped({
@@ -701,26 +745,33 @@ test('订单人工确认收款走独立动作接口，随后可见分润，退�
   await expect(page.getByRole('row', { name: /INTERNAL-ORDER-001.*已收款/ })).toBeVisible()
 
   await page.goto('/#/admin/profit')
-  await expect(page.getByText('¥100.00', { exact: true })).toBeVisible()
-  await expect(page.locator('.profit-summary')).toBeVisible()
-  await expect(page.locator('.distribution-item')).toHaveCount(6)
-  await expect(page.locator('.stat-icon')).toHaveCount(0)
+  await expect(page.getByText('历史有效金额：¥100.00 · 已冲正：¥0.00', { exact: true })).toBeVisible()
+  await expect(page.locator('section[aria-label="成员台账状态"] [data-testid="ledger-due"]')).toContainText('¥0.00')
+  await expect(page.locator('section[aria-label="成员台账状态"] [data-testid="ledger-held"]')).toContainText('¥0.00')
+  await expect(page.locator('section[aria-label="成员台账状态"] [data-testid="ledger-paid"]')).toContainText('¥0.00')
+  await expect(page.locator('section[aria-label="成员台账状态"] [data-testid="ledger-unpaid"]')).toContainText('¥0.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥100.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥30.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥25.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥15.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥10.00')
+  await expect(page.locator('section[aria-label="历史分润快照"] .el-table__body-wrapper')).toContainText('¥5.00')
+  expect(ledgerMutationCalls).toEqual([])
   for (const width of [1365, 1024, 768, 520]) {
     await page.setViewportSize({ width, height: 800 })
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     expect(overflow).toBeLessThanOrEqual(1)
-    const rowCounts = await page.locator('.distribution-item').evaluateAll((items) => {
-      const tops = items.map(item => Math.round(item.getBoundingClientRect().top))
-      return [...new Set(tops)].map(top => tops.filter(value => value === top).length)
-    })
-    if (width === 1365) expect(rowCounts).toEqual([3, 3])
-    else if (width === 520) expect(rowCounts).toEqual([1, 1, 1, 1, 1, 1])
-    else expect(rowCounts).toEqual([2, 2, 2])
+    await expect(page.locator('section[aria-label="成员台账状态"] [data-testid="ledger-due"]')).toBeVisible()
+    await expect(page.locator('section[aria-label="历史分润快照"] .el-table')).toBeVisible()
   }
   await page.setViewportSize({ width: 1365, height: 800 })
 
   await page.goto('/#/admin/orders')
-  await page.getByRole('button', { name: '退款' }).click()
+  const orderRow = page.getByRole('row', { name: /INTERNAL-ORDER-001/ })
+  await orderRow.getByRole('button', { name: '详情', exact: true }).click()
+  const drawer = page.locator('.el-drawer').last()
+  await expect(drawer.getByText('INTERNAL-ORDER-001', { exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: '登记退款', exact: true }).click()
   const dialog = page.locator('.el-message-box')
   await expect(dialog.getByText('确认退款', { exact: true })).toBeVisible()
   await dialog.getByPlaceholder('请填写至少 2 个字的原因').fill('内部验收退款')

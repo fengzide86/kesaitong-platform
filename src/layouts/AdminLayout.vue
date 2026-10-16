@@ -13,7 +13,9 @@
       <AdminSidebar :class="{ 'mobile-open': showMobileSidebar }" />
       <main class="content admin-content">
         <AppNoticeQueue :customer-announcements="false" />
-        <Breadcrumb />
+        <!-- 行动中心已经有明确的页面标题；不再重复显示“首页 / 行动中心”。
+             子页面仍保留面包屑，帮助用户理解所在层级。 -->
+        <Breadcrumb v-if="route.path !== '/admin/dashboard'" />
         <AdminSectionNav />
         <router-view :key="platformKey" v-slot="{ Component }">
           <Suspense>

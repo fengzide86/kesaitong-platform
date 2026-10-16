@@ -15,13 +15,6 @@
     border-radius: var(--radius-lg);
     padding: var(--space-6);
     box-shadow: var(--shadow-low);
-    transition: all var(--transition);
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-    border-color: var(--color-primary);
 }
 
 .stat-icon {
@@ -137,7 +130,7 @@
     background: linear-gradient(180deg, var(--color-primary-muted), var(--color-primary));
     border-radius: 6px 6px 0 0;
     position: relative;
-    transition: all var(--transition);
+    transition: opacity var(--motion-fast), transform var(--motion-fast) var(--ease-standard);
     min-width: 20px;
     opacity: 0.8;
 }
@@ -203,36 +196,6 @@
     border-top: 1px solid var(--color-border);
 }
 
-/* ===== Tool Card Stagger Animation ===== */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(16px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.tool-card {
-    opacity: 0;
-    animation: fadeInUp 400ms ease forwards;
-}
-
-.tool-card:nth-child(1) { animation-delay: 0ms; }
-.tool-card:nth-child(2) { animation-delay: 50ms; }
-.tool-card:nth-child(3) { animation-delay: 100ms; }
-.tool-card:nth-child(4) { animation-delay: 150ms; }
-.tool-card:nth-child(5) { animation-delay: 200ms; }
-.tool-card:nth-child(6) { animation-delay: 250ms; }
-.tool-card:nth-child(7) { animation-delay: 300ms; }
-.tool-card:nth-child(8) { animation-delay: 350ms; }
-.tool-card:nth-child(9) { animation-delay: 400ms; }
-.tool-card:nth-child(10) { animation-delay: 450ms; }
-.tool-card:nth-child(11) { animation-delay: 500ms; }
-.tool-card:nth-child(12) { animation-delay: 550ms; }
-
 /* ===== Cards Responsive ===== */
 @media (max-width: 1024px) {
     .charts-grid {
@@ -252,26 +215,4 @@
     }
 }
 
-/* 卡片悬浮：物理阻尼上浮 */
-.bento-card,
-.tool-card,
-.stat-card,
-.chart-card {
-    transition: all var(--transition-physics);
-}
-
-.bento-card:hover,
-.tool-card:hover,
-.stat-card:hover,
-.chart-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-}
-
-/* Reduced motion 时禁用动画 */
-@media (prefers-reduced-motion: reduce) {
-    .tool-card {
-        opacity: 1;
-        animation: none;
-    }
-}
+/* Static cards stay still. Opt in to .kst-interactive only for a real action. */

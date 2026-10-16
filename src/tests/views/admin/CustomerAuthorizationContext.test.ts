@@ -9,10 +9,10 @@ import { authService } from '@/utils/auth'
 import type { AdminAuthCode, AdminUser } from '@/features/admin/model'
 import { supportSourcePath } from '@/features/admin/supportContext'
 
-const mocks = vi.hoisted(() => ({ users: vi.fn(), user: vi.fn(), codes: vi.fn(), code: vi.fn(), plans: vi.fn(), push: vi.fn(), replace: vi.fn(), toast: vi.fn() }))
+const mocks = vi.hoisted(() => ({ users: vi.fn(), user: vi.fn(), update: vi.fn(), codes: vi.fn(), code: vi.fn(), plans: vi.fn(), push: vi.fn(), replace: vi.fn(), toast: vi.fn() }))
 const route = ref({ path: '/admin/users', fullPath: '/admin/users?user_id=91&page=3&keyword=客户', query: {} as Record<string, string> })
 vi.mock('vue-router', () => ({ useRouter: () => ({ currentRoute: route, push: mocks.push, replace: mocks.replace }) }))
-vi.mock('@/utils/api', () => ({ getUsersPage: (...a: unknown[]) => mocks.users(...a), getUser: (...a: unknown[]) => mocks.user(...a), getAuthCodesPage: (...a: unknown[]) => mocks.codes(...a), getAuthCode: (...a: unknown[]) => mocks.code(...a), getPlansAdmin: (...a: unknown[]) => mocks.plans(...a), updateUser: vi.fn(), batchGenerateAuthCodes: vi.fn(), updateAuthCode: vi.fn(), deleteAuthCode: vi.fn(), unbindDevice: vi.fn() }))
+vi.mock('@/utils/api', () => ({ getUsersPage: (...a: unknown[]) => mocks.users(...a), getUser: (...a: unknown[]) => mocks.user(...a), getAuthCodesPage: (...a: unknown[]) => mocks.codes(...a), getAuthCode: (...a: unknown[]) => mocks.code(...a), getPlansAdmin: (...a: unknown[]) => mocks.plans(...a), updateUser: (...a: unknown[]) => mocks.update(...a), batchGenerateAuthCodes: vi.fn(), updateAuthCode: vi.fn(), deleteAuthCode: vi.fn(), unbindDevice: vi.fn() }))
 vi.mock('@/utils', () => ({ showToast: (...a: unknown[]) => mocks.toast(...a) }))
 const user = { id: 91, name: '客户九十一', auth_code_id: 12, total_seats: 1, extra_devices: 0 }
 const code = { id: 12, code: 'QA-CONTEXT-12', status: 'active', devices: [], platform_scope: ['amazon'], max_devices: 2, seat_limit: 2, product_type: 'consumer' }
@@ -92,6 +92,38 @@ describe('客户与授权独立详情和稳定关联', () => {
     const wrapper = mountUsers(); await flushPromises()
     route.value.query = { keyword: '后退搜索', page: '2' }; await flushPromises()
     expect(mocks.users).toHaveBeenLastCalledWith({ keyword: '后退搜索', page: 2, page_size: 20 })
+    wrapper.unmount()
+  })
+  it('用户详情显示真实项目编号，并用可理解的授权状态', async () => {
+    mocks.user.mockResolvedValue({ ...user, project_id: '2026秋季实训', plan_name: '实训完整工具包', status: 'frozen' })
+    const wrapper = mountUsers(); await flushPromises()
+    expect(wrapper.text()).toContain('2026秋季实训')
+    expect(wrapper.text()).toContain('已冻结')
+    expect(wrapper.text()).not.toContain('frozen')
+    wrapper.unmount()
+  })
+  it('统一侧栏保存仍限定为四个可编辑字段，成功后回读', async () => {
+    authService.setRole('super_admin')
+    const wrapper = mountUsers(); await flushPromises()
+    const state = wrapper.vm as unknown as { openUser: (id: number, editing: boolean) => Promise<void>; detailUser: AdminUser; drawerEditing: boolean; saveDrawerUser: () => Promise<void> }
+    await state.openUser(91, true)
+    state.detailUser.name = '修改后的用户'
+    state.detailUser.phone = '13800000000'
+    state.detailUser.extra_devices = 2
+    mocks.user.mockResolvedValue({ ...user, name: '修改后的用户', phone: '13800000000', extra_devices: 2 })
+    await state.saveDrawerUser()
+    expect(mocks.update).toHaveBeenCalledWith(91, { name: '修改后的用户', phone: '13800000000', total_seats: 1, extra_devices: 2 })
+    expect(state.drawerEditing).toBe(false)
+    expect(state.detailUser.name).toBe('修改后的用户')
+    wrapper.unmount()
+  })
+  it('只读客服无法通过打开编辑侧栏或保存绕过权限', async () => {
+    const wrapper = mountUsers(); await flushPromises()
+    const state = wrapper.vm as unknown as { openUser: (id: number, editing: boolean) => Promise<void>; drawerEditing: boolean; saveDrawerUser: () => Promise<void> }
+    await state.openUser(91, true)
+    expect(state.drawerEditing).toBe(false)
+    await state.saveDrawerUser()
+    expect(mocks.update).not.toHaveBeenCalled()
     wrapper.unmount()
   })
   it('授权反查失败不是空列表成功，界面给出可重试错误', async () => {

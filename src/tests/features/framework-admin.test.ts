@@ -1,9 +1,11 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Component } from 'vue'
 import CommercialView from '@/views/admin/CommercialView.vue'
 import TeamLedgerView from '@/views/admin/TeamLedgerView.vue'
 import ScenariosView from '@/views/admin/ScenariosView.vue'
 import RefundEntitlementsPanel from '@/features/admin/RefundEntitlementsPanel.vue'
+import { authService } from '@/utils/auth'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), paid: vi.fn(), confirm: vi.fn() }))
 vi.mock('@/utils/api', () => ({ api: { get: mocks.get, post: mocks.post, put: mocks.put, patch: mocks.patch }, markOrderPaid: mocks.paid }))
@@ -29,6 +31,7 @@ const stubs = { TeamLedgerAdjustments: true, ProjectScopesPanel: true, RefundEnt
 
 beforeEach(() => {
   vi.resetAllMocks()
+  authService.setRole('super_admin')
   fixtures = {
     '/api/commercial/offers': [structuredClone(offer)], '/api/commercial/orders': [structuredClone(order)],
     '/api/commercial/tool-options': [{ capability: 'template.create', name: '配送模板', selectable: true }],
@@ -90,17 +93,59 @@ describe('管理端商业流程：先读、再显式确认', () => {
   })
 
   it('比赛分配使用精确官网入口并要求确认，默认不开管理员写入权限', async () => {
+    fixtures['/api/users'] = { data: [{ id: 91, name: '样例用户', device_name: '课堂电脑' }], total: 1, page: 1, page_size: 20 }
+    fixtures['/api/users/91'] = { id: 91, name: '样例用户', device_name: '课堂电脑' }
+    mocks.put.mockImplementation(async (_path: string, body: Record<string, unknown>) => ({ ...body, subject_type: 'user', subject_id: 91, revision: 1 }))
     wrapper = mount(ScenariosView, { global: { stubs } }); await flushPromises()
-    expect((input('额外授权已审核').element as HTMLInputElement).checked).toBe(false)
-    await input('场景', 'select').setValue('competition')
-    expect((input('入口网址').element as HTMLInputElement).value).toBe('https://www.idtrade.cn/User/Contest')
-    await input('结束时间').setValue('2027-01-01T12:00')
+    expect(wrapper.find('form[aria-label="工作区权限编辑"]').exists()).toBe(false)
+    await click('新增使用范围')
+    await click('选择')
+    await input('使用方式', 'select').setValue('competition')
+    expect((input('平台入口').element as HTMLInputElement).value).toBe('https://www.idtrade.cn/User/Contest')
+    await input('使用截止时间').setValue('2027-01-01T12:00')
     mocks.confirm.mockResolvedValue(false)
     await wrapper.findAll('form')[0]!.trigger('submit'); await flushPromises()
     expect(mocks.put).not.toHaveBeenCalled()
     mocks.confirm.mockResolvedValue(true)
     await wrapper.findAll('form')[0]!.trigger('submit'); await flushPromises()
-    expect(mocks.put).toHaveBeenCalledWith('/api/scenarios/assignments/user/1', expect.objectContaining({ mode: 'competition', expected_revision: 0, allowed_origins: ['https://www.idtrade.cn'] }))
+    expect(mocks.put).toHaveBeenCalledWith('/api/scenarios/assignments/user/91', expect.objectContaining({ mode: 'competition', expected_revision: 0, allowed_origins: ['https://www.idtrade.cn'] }))
+  })
+})
+
+const readCases: Array<{ name: string; component: Component; empty: string; refresh: string }> = [
+  { name: '商品与订单', component: CommercialView, empty: '暂无新商品订单', refresh: '刷新' },
+  { name: '使用范围', component: ScenariosView, empty: '暂无场景分配', refresh: '刷新' },
+  { name: '成员台账', component: TeamLedgerView, empty: '暂无已确认的台账明细', refresh: '刷新台账' },
+]
+
+describe('管理页读取失败与真实空态分离', () => {
+  it.each(readCases)('$name 首次读取失败不提示暂无，重试成功后才显示真实空态', async ({ component, empty }) => {
+    fixtures['/api/commercial/offers'] = []
+    fixtures['/api/commercial/orders'] = []
+    mocks.get.mockRejectedValueOnce(new Error('网络临时中断'))
+    wrapper = mount(component, { global: { stubs } })
+    expect(wrapper.text()).not.toContain(empty)
+    expect(wrapper.get('[role="status"]').text()).toContain('正在读取')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('网络临时中断')
+    expect(wrapper.text()).not.toContain(empty)
+    expect(wrapper.text()).not.toContain('尚无新商品')
+    await click('重新加载')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(empty)
+    expect(mocks.post).not.toHaveBeenCalled()
+    expect(mocks.put).not.toHaveBeenCalled()
+  })
+
+  it.each(readCases)('$name 刷新失败不继续显示上次的暂无结论', async ({ component, empty, refresh }) => {
+    fixtures['/api/commercial/offers'] = []
+    fixtures['/api/commercial/orders'] = []
+    wrapper = mount(component, { global: { stubs } }); await flushPromises()
+    expect(wrapper.text()).toContain(empty)
+    mocks.get.mockRejectedValueOnce(new Error('刷新暂时失败'))
+    await click(refresh)
+    expect(wrapper.get('[role="alert"]').text()).toContain('刷新暂时失败')
+    expect(wrapper.text()).not.toContain(empty)
   })
 })
 

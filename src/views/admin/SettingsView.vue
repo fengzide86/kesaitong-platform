@@ -1,6 +1,12 @@
 <template>
   <div>
-    <PageHeader eyebrow="系统设置" title="系统设置" description="维护客服联系方式、套餐规则与后台运行配置。" />
+    <PageHeader eyebrow="系统设置" title="系统设置" description="维护客服联系方式和旧版兼容配置。新套餐与成员分成使用各自的管理入口。" />
+
+    <nav v-if="canEditProfitPolicy" class="settings-workflows" aria-label="当前业务入口">
+      <span>当前业务</span>
+      <el-button link type="primary" @click="router.push('/admin/commercial')">管理新套餐与服务 →</el-button>
+      <el-button link type="primary" @click="router.push('/admin/team-ledger')">管理新成员分成 →</el-button>
+    </nav>
 
     <el-card class="settings-card" shadow="never">
       <template #header><div class="card-header"><span>基本设置</span></div></template>
@@ -36,10 +42,10 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>分润比例</span>
-            <small class="header-hint">保存后生成新策略版本；历史订单继续使用原快照</small>
+            <span>旧版分润规则</span>
+            <small class="header-hint">仅用于旧版订单链路；不修改新的成员分成台账。保存后生成新版本，历史订单保留原快照。</small>
           </div>
-          <el-button type="primary" size="small" @click="openProfitEdit">编辑比例</el-button>
+          <el-button type="primary" size="small" @click="openProfitEdit">编辑旧版比例</el-button>
         </div>
       </template>
       <div class="profit-summary">{{ profitRatiosText }}</div>
@@ -49,15 +55,15 @@
       <template #header>
         <div class="card-header">
           <div>
-            <span>套餐管理</span>
-            <small class="header-hint">价格可随时调整；有效期和产品权限需先禁用套餐</small>
+            <span>旧版套餐（兼容）</span>
+            <small class="header-hint">仅供旧版下单与授权流程使用。新套餐、项目期限和服务次数请在“套餐与服务”中管理。</small>
           </div>
-          <el-button type="primary" size="small" :disabled="savingPlan" @click="showAddPlan = true">+ 新增套餐</el-button>
+          <el-button type="primary" size="small" :disabled="savingPlan" @click="showAddPlan = true">+ 新增旧版套餐</el-button>
         </div>
       </template>
 
       <div v-if="editingPlan?.status === 'active'" class="lifecycle-notice">
-        当前套餐正在启用：可保存名称、价格和功能说明；价格调整只影响新订单，历史订单金额保持不变。有效期和产品权限需先禁用套餐再修改。
+        当前旧版套餐正在启用：可保存名称、价格和功能说明；价格调整只影响通过旧版流程新建的订单，历史订单金额保持不变。有效期和产品权限需先禁用套餐再修改。
       </div>
 
       <el-table :data="plans" style="width: 100%">
@@ -148,7 +154,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="showAddPlan" title="新增套餐" width="500px">
+    <el-dialog v-model="showAddPlan" title="新增旧版套餐" width="500px">
       <el-form label-width="80px">
         <el-form-item label="套餐名称">
           <el-input v-model="newPlan.name" placeholder="请输入套餐名称" />
@@ -180,7 +186,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showPlanPermissions" title="产品与批量权限" width="520px">
+    <el-dialog v-model="showPlanPermissions" title="旧版套餐产品与批量权限" width="520px">
       <el-form v-if="planPermissionDraft" label-position="top">
         <el-form-item label="产品类型">
           <el-radio-group v-model="planPermissionDraft.product_type">
@@ -205,7 +211,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-if="canEditProfitPolicy" v-model="showProfitModal" title="编辑分润比例" width="500px">
+    <el-dialog v-if="canEditProfitPolicy" v-model="showProfitModal" title="编辑旧版分润比例" width="500px">
       <div class="profit-total" :class="{ invalid: Math.abs(profitTotal - 100) > 0.001 }">
         当前总和：{{ profitTotal }}% {{ Math.abs(profitTotal - 100) > 0.001 ? '（必须为 100%）' : '✓' }}
       </div>
@@ -266,6 +272,9 @@ function goChangePassword() {
 
 <style scoped>
 .page-title { margin-bottom: 1.5rem; color: var(--color-text); font-family: var(--font-family); font-size: 26px; font-weight: 700; }
+.settings-workflows { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin: 0 0 22px; color: var(--color-text-secondary); font-size: 14px; }
+.settings-workflows :deep(.el-button + .el-button) { margin-left: 0; }
+.settings-workflows :deep(.el-button) { min-height: 32px; }
 .settings-card { margin-bottom: 1.5rem; border-radius: var(--radius-lg); background: var(--color-surface); }
 .settings-card :deep(.el-card__header) { padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border); }
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

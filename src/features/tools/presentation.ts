@@ -43,6 +43,36 @@ export interface ToolPresentationInput {
   supports_live_single?: unknown
   supports_live_batch?: unknown
 }
+
+/**
+ * Stable customer-facing icon categories.  The catalog can use legacy
+ * capability names, so the mapping lives next to the task vocabulary instead
+ * of forcing every view to know the catalog's historical aliases.
+ */
+export type ToolIconKey = ProductTaskId | 'shop' | 'automation' | 'default'
+
+const TOOL_ICON_KEYS: Readonly<Record<string, ToolIconKey>> = {
+  company: 'company', register_company: 'company', 'company.register': 'company',
+  register: 'shop', ali_register: 'shop',
+  sourcing: 'sourcing', product_selection: 'sourcing', selection_compare: 'sourcing',
+  product: 'product', listing: 'product', listing_script: 'product', ali_listing: 'product', 'product.create': 'product',
+  shipping: 'shipping', logistics_standard: 'shipping', logistics_template: 'shipping', 'template.create': 'shipping',
+  logistics_cost: 'pricing', freight_quote: 'pricing', 'freight.quote': 'pricing',
+  marketing: 'marketing', ads: 'marketing', ad_script: 'marketing', coupon: 'marketing', coupons: 'marketing',
+  lightning: 'marketing', prime: 'marketing', promotion: 'marketing', flash_sale: 'marketing',
+  fba: 'fba', fba_agl: 'fba', replenishment: 'fba',
+  orders: 'orders', ship_script: 'orders', ali_ship: 'orders',
+  pricing: 'pricing', profit_calculator: 'pricing', price_calculator: 'pricing', cost_calculator: 'pricing',
+}
+
+export function getToolIconKey(tool: ToolPresentationInput): ToolIconKey {
+  const raw = String(tool.capability_key || tool.id || '').replace(/^tool_/, '').trim().toLowerCase()
+  const direct = TOOL_ICON_KEYS[raw]
+  if (direct) return direct
+  const task = getToolTaskIds(tool)[0]
+  if (task) return task
+  return tool.tool_kind === 'calculation' ? 'pricing' : tool.tool_kind ? 'automation' : 'default'
+}
 const LEGACY_TASKS: Readonly<Record<string, readonly ProductTaskId[]>> = {
   company: ['company'], register_company: ['company'], sourcing: ['sourcing'], product_selection: ['sourcing'],
   listing: ['product'], listing_script: ['product'], ali_listing: ['product'],

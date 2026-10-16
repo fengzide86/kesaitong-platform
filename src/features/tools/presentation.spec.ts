@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PRODUCT_TASKS, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable } from './presentation'
+import { PRODUCT_TASKS, getToolIconKey, getToolTaskIds, getToolPresentation, isCustomerTool, isToolCurrentlyUsable } from './presentation'
 const tool = { id: 'listing', capability_key: 'listing_script', availability: 'live', status: 'online', script_status: 'script_ready', supports_live_single: true, supports_live_batch: true, available_plans: ['Y199'] }
 describe('shared customer tool presentation', () => {
   it('keeps eight identities and explicit many-to-many mapping', () => {
@@ -7,6 +7,16 @@ describe('shared customer tool presentation', () => {
     expect(getToolTaskIds({ ...tool, task_ids: ['sourcing', 'pricing', 'pricing', 'unknown'] })).toEqual(['sourcing', 'pricing'])
     expect(getToolTaskIds({ capability_key: 'register' })).toEqual([]); expect(getToolTaskIds({ capability_key: 'future' })).toEqual([])
     expect(getToolTaskIds({ capability_key: 'freight_quote' })).toEqual(['sourcing', 'shipping', 'orders', 'pricing'])
+  })
+  it('maps legacy capability names to distinct customer task icons', () => {
+    expect(getToolIconKey({ capability_key: 'register' })).toBe('shop')
+    expect(getToolIconKey({ capability_key: 'company.register' })).toBe('company')
+    expect(getToolIconKey({ capability_key: 'product.create' })).toBe('product')
+    expect(getToolIconKey({ capability_key: 'template.create' })).toBe('shipping')
+    expect(getToolIconKey({ capability_key: 'listing_script' })).toBe('product')
+    expect(getToolIconKey({ capability_key: 'freight_quote' })).toBe('pricing')
+    expect(getToolIconKey({ task_ids: ['orders'] })).toBe('orders')
+    expect(getToolIconKey({ capability_key: 'future', tool_kind: 'automation' })).toBe('automation')
   })
   it('never promotes demos, blocked scripts or unknown states', () => {
     expect(isCustomerTool({ availability: 'demo_only', supports_live_single: true })).toBe(false)

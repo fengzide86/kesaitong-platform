@@ -1,0 +1,42 @@
+/* Task-oriented motion: opt in when a section appears or an action completes.
+   Do not apply reveal to a whole list, persistent layout or every table row. */
+.kst-reveal {
+  animation: kst-workflow-reveal var(--motion-normal) var(--ease-standard);
+}
+
+.kst-confirm {
+  animation: kst-workflow-confirm var(--motion-signature) var(--ease-standard);
+}
+
+/* Intended for neutral action surfaces, not passive metric/chart cards. */
+.kst-interactive {
+  transition: color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.kst-interactive:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+  border-color: var(--color-primary-muted);
+  background-color: var(--kst-interactive-background, var(--color-surface-soft));
+}
+
+@keyframes kst-workflow-reveal {
+  from { opacity: .75; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes kst-workflow-confirm {
+  from { box-shadow: 0 0 0 2px var(--color-focus-ring); }
+  to { box-shadow: 0 0 0 5px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kst-reveal,
+  .kst-confirm,
+  .kst-interactive {
+    animation: none !important;
+    animation-delay: 0s !important;
+    transition: none !important;
+    transition-delay: 0s !important;
+  }
+}

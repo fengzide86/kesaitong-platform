@@ -15,6 +15,7 @@ from core.pagination import PaginationParams, paginate
 from core.response import ErrorCodes, error_response, success_response
 from core.timestamps import utc_iso
 from domains.access import effective_license_status_sql
+from domains.access.admin_context import authorization_context
 from models import AuthCode, Device, User
 
 logger = get_logger(__name__)
@@ -52,8 +53,9 @@ class UserService:
         
         if pagination:
             items, total = await paginate(query, self.db, pagination)
+            contexts = await authorization_context(self.db, [u.auth_code_id for u in items if u.auth_code_id])
             return success_response(
-                data=[self._serialize_user(u) for u in items],
+                data=[{**self._serialize_user(u), **contexts.get(u.auth_code_id, {})} for u in items],
                 total=total,
                 page=pagination.page,
                 page_size=pagination.page_size,
@@ -61,8 +63,9 @@ class UserService:
         else:
             result = await self.db.execute(query)
             users = result.scalars().all()
+            contexts = await authorization_context(self.db, [u.auth_code_id for u in users if u.auth_code_id])
             return success_response(
-                data=[self._serialize_user(u) for u in users]
+                data=[{**self._serialize_user(u), **contexts.get(u.auth_code_id, {})} for u in users]
             )
     
     async def get_user_by_id(self, user_id: int, platform_key: str | None = None) -> dict[str, Any]:
@@ -78,7 +81,8 @@ class UserService:
             if platform_key not in [item.strip() for item in scope]:
                 raise HTTPException(status_code=403, detail="该用户不属于当前平台，请切换平台后查看")
         
-        return success_response(data=self._serialize_user(user, detailed=True))
+        contexts = await authorization_context(self.db, [user.auth_code_id] if user.auth_code_id else [])
+        return success_response(data={**self._serialize_user(user, detailed=True), **contexts.get(user.auth_code_id, {})})
     
     async def update_user(
         self,
@@ -204,6 +208,7 @@ class UserService:
             "total_seats": user.total_seats,
             "extra_devices": user.extra_devices,
             "is_active": user.is_active,
+            "last_active_at": user.last_active_at.isoformat() if user.last_active_at else None,
             # Created by the UTC database default (SQLite CURRENT_TIMESTAMP;
             # MySQL sessions SET +00:00), not a client-local wall clock.
             "created_at": utc_iso(user.created_at),
