@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const apiModules = import.meta.glob('../../utils/api/*.ts', { eager: true }) as Record<string, Record<string, unknown>>
+const apiModules = import.meta.glob([
+  '../../utils/api/*.ts',
+  '!../../utils/api/*.spec.ts',
+  '!../../utils/api/*.test.ts',
+], { eager: true }) as Record<string, Record<string, unknown>>
 
 const payload = {
   id: 'entity-1',

@@ -25,7 +25,7 @@ describe('AdminSectionNav', () => {
   it('only displays the current area and preserves direct link context on the active item', async () => {
     const wrapper = await render('/admin/authcodes?status=expired&auth_code_id=20')
     expect(wrapper.get('nav').attributes('aria-label')).toBe('客户与授权页面')
-    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['用户管理', '本机多账号现场', '授权码管理'])
+    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['用户管理', '账号工作区', '授权码与开通'])
     await wrapper.get('[aria-current="page"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ status: 'expired', auth_code_id: '20' })
@@ -40,7 +40,7 @@ describe('AdminSectionNav', () => {
   })
   it('places agency commission in finance while keeping the original permissions', async () => {
     const wrapper = await render('/admin/agency?section=commission')
-    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['分润管理', '成员结算台账', '公账支出', '代理返佣'])
+    expect(wrapper.findAll('a').map(link => link.text())).toEqual(['分润管理', '成员分成台账', '公账支出', '代理返佣'])
     expect(wrapper.get('[aria-current="page"]').text()).toBe('代理返佣')
   })
   it.each(['operator', 'support'])('hides owner-only agency support from %s', async role => {
