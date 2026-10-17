@@ -691,7 +691,13 @@ export class DesktopAutomationController {
       return { owner: recoveryOwnerHash([this.options.controlApiBase, 'staff', user.user_id, this.options.deviceId, scene.accountSlot]),
         token, kind: 'staff', deviceId: this.options.deviceId, accountSlot: scene.accountSlot }
     }
-    return { owner: recoveryOwnerHash([this.options.controlApiBase, user.user_id, claims.auth_code_id || null, claims.device_id || user.device_id || null]), token }
+    return {
+      owner: recoveryOwnerHash([this.options.controlApiBase, user.user_id, claims.auth_code_id || null, claims.device_id || user.device_id || null]),
+      token,
+      kind: 'customer',
+      deviceId: String(claims.device_id || user.device_id || ''),
+      accountSlot: 'single',
+    }
   }
 
   private async resolveRecoveryOwner(sender: WebContents): Promise<string> {

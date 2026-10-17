@@ -29,7 +29,7 @@ BASELINE_COMMIT = "5da800e87c74efa7086c3d6772985f9bfbf29c21"
 BASELINE_VERSION = "1.8.8"
 OLD_REVISION = "20260816_data_integrity"
 PRE_FRAMEWORK_REVISION = "20260922_agency_commission"
-NEW_REVISION = "20261015_framework_commerce"
+NEW_REVISION = "20261017_identity_leases"
 TEST_DATABASE = "toolbox_upgrade_test"
 
 

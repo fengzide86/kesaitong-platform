@@ -111,12 +111,12 @@ async def test_customer_cannot_assign_or_obtain_staff_grants(client, db_session)
     assert result.status_code in {401, 403}
 
 
-async def test_staff_permission_not_implicit_and_defaults_six(client, auth_headers, db_session):
+async def test_staff_permission_not_implicit_and_defaults_ten(client, auth_headers, db_session):
     actor = await db_session.scalar(select(StaffUser).where(StaffUser.username == "admin"))
     assert (await client.get("/api/scenarios/me", headers=auth_headers)).status_code == 403
     req = StaffRuntimePermissionWrite(expected_revision=0, enabled=True, allowed_origins=[ORIGIN], expires_at=future())
     saved = await service.save_staff_permission(db_session, actor.id, req, actor.id)
-    assert saved["max_scenes"] == 6 and saved["allowed_capabilities"] == []
+    assert saved["max_scenes"] == 10 and saved["allowed_capabilities"] == []
     policy = (await client.get("/api/scenarios/me", headers=auth_headers)).json()["data"]
     assert policy["principal"] == {"kind": "staff", "id": str(actor.id)}
     assert (await client.get("/api/scenarios/staff/permissions", headers=auth_headers)).json()["data"][0] == saved

@@ -18,10 +18,10 @@ const stubs = {
 }
 const tool = { id: 'template-tool', name: '配送模板', target_capability: 'template.create.v1', availability: 'live', script_status: 'script_ready' }
 let wrapper: VueWrapper | undefined
-function desktop() {
+function desktop(options: { maxScenes?: number; scenes?: Array<{ id: string; label: string; origin: string; selected: boolean; status: 'ready' | 'policy_blocked' }> } = {}) {
   const bridge = {
-    policy: vi.fn().mockResolvedValue({ allowedOrigins: ['https://school.example'], maxScenes: 6 }),
-    list: vi.fn().mockResolvedValue([{ id: 'scene-a', label: '测试账号', origin: 'https://school.example', selected: true, status: 'ready' }]),
+    policy: vi.fn().mockResolvedValue({ allowedOrigins: ['https://school.example'], maxScenes: options.maxScenes ?? 6 }),
+    list: vi.fn().mockResolvedValue(options.scenes ?? [{ id: 'scene-a', label: '测试账号', origin: 'https://school.example', selected: true, status: 'ready' }]),
     bounds: vi.fn().mockResolvedValue(undefined),
     hide: vi.fn().mockResolvedValue(undefined),
   }
@@ -42,6 +42,22 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('账号工作区工具目录失败恢复', () => {
+  it('用摘要和现场总览说明 10 个账号槽位，不把账号状态伪装成正在执行', async () => {
+    desktop({
+      maxScenes: 10,
+      scenes: [
+        { id: 'scene-a', label: '实训 A', origin: 'https://school.example', selected: true, status: 'ready' },
+        { id: 'scene-b', label: '实训 B', origin: 'https://school.example', selected: false, status: 'policy_blocked' },
+      ],
+    })
+    wrapper = mount(LocalRuntimeView, { global: { stubs } }); await flushPromises()
+    expect(wrapper.get('.runtime-summary').text()).toContain('2')
+    expect(wrapper.get('.scene-list-header').text()).toContain('2 / 10')
+    expect(wrapper.get('.runtime-overview').text()).toContain('实训 B')
+    expect(wrapper.get('.runtime-overview').text()).toContain('需要重新确认权限或登录')
+    expect(wrapper.get('.task-boundary').text()).toContain('相互隔离')
+  })
+
   it('首次目录失败不误示为没有可用工具，刷新会重新读取目录', async () => {
     desktop()
     let rejectLoad!: (reason: Error) => void

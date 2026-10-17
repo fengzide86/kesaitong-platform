@@ -53,6 +53,14 @@ from models.expense import (
 
 # 反馈相关模型
 from models.feedback import ExecutionVerification, Feedback, FeedbackStatus, LogStatus, RunLog
+from models.identity import (
+    AuthSession,
+    AuthSessionStatus,
+    ExternalAccountBinding,
+    ExternalAccountLease,
+    ExternalBindingStatus,
+    ExternalLeaseStatus,
+)
 
 # 订单相关模型
 from models.order import Order, OrderStatus, Plan, PlanStatus, ProfitRecord, ProfitStatus
@@ -144,4 +152,10 @@ __all__ = [
     "AuditLog",
     "AutomationBatch",
     "AutomationBatchItem",
+    "ExternalAccountLease",
+    "ExternalAccountBinding",
+    "ExternalBindingStatus",
+    "ExternalLeaseStatus",
+    "AuthSession",
+    "AuthSessionStatus",
 ]

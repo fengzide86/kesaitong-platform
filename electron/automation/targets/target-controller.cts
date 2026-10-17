@@ -17,6 +17,7 @@ import { reconcileV2Template } from './v2-template.cjs'
 import { resolveUiBinding } from './ui-bindings.cjs'
 import { TargetRunnerClient } from './target-runner-client.cjs'
 import type { TargetBrowserPort, BrowserSnapshot } from './contracts.cjs'
+import { bindAccountRef, canCreatePlan, createReLoginState, markLoginAttempt, markLoginRequired, markLoginSuccess, markPolicyBlocked, type ReLoginState } from './relogin-state.cjs'
 
 const { verifyToolManifest } = require('../manifest-verifier.cjs') as { verifyToolManifest(tool: unknown, key: string): { verified: boolean } }
 export type TargetSessionOwner = { owner: string; token: string; kind?: 'customer' | 'staff'; deviceId?: string; accountSlot?: string }
@@ -36,7 +37,7 @@ interface Options {
   staffReports?: ExecutionReportOutbox
 }
 interface Site {
-  owner: string; key: string; epoch: number; active: TargetWindow; windows: Set<TargetWindow>
+  owner: string; ownerKind?: 'customer' | 'staff'; ownerToken: string; deviceId?: string; accountSlot?: string; key: string; epoch: number; active: TargetWindow; windows: Set<TargetWindow>
   signed: SignedTargetProfile | null; initialOrigin: string; port?: TargetBrowserPort; portOrigin?: string
   entryUrl: string; profileId?: string
   navigation: OwnedNavigationScope; navigationBusy: boolean
@@ -44,10 +45,18 @@ interface Site {
   courseContext?: { courseId: string; companyId: string; shopId: string; userId: string }
   verifiedRole?: string
   loginFailure?: string
+  relogin: ReLoginState
+  /** Customer-side binding: once an external account is verified in this
+   * controlled scene, another account cannot be substituted silently. The
+   * value is already a one-way local reference; raw usernames are never kept. */
+  boundAccountRef?: string
+  identityLease?: { id: number; leaseToken: string }
+  identityHeartbeat?: ReturnType<typeof setInterval>
   clearSession?: () => Promise<void>
 }
 interface PendingPlan { owner: string; siteEpoch: number; plan: RunPlan; expected: ProbeObservation; toolId: string | number; enabled: boolean }
 interface OperationScope { permit: ExecutionPermit; epoch: number; drain?: Promise<void> }
+type IdentityEnvelope = { success?: unknown; data?: unknown; detail?: unknown }
 const envelope = z.object({ success: z.literal(true), data: z.unknown() })
 const grantSchema = z.object({ launch_data: z.object({
   token: z.string().min(1).max(16384), tool_id: z.union([z.string(), z.number()]), platform_key: z.literal('amazon'),
@@ -140,6 +149,45 @@ export class TargetExecutionController {
     if (raw.length > 2_000_000) throw targetError('TARGET_CONTROL_INVALID', '控制面响应超出范围')
     try { return envelope.parse(JSON.parse(raw)).data } catch { throw targetError('TARGET_CONTROL_INVALID', '控制面响应不符合当前合同') }
   }
+  /** Bind the verified platform identity to the current KST authorization.
+   * The server receives only the observer's one-way reference; credentials,
+   * cookies and MFA values never cross this boundary. */
+  private async identityRequest(site: Site, path: string, body: unknown, detached = false): Promise<Record<string, unknown>> {
+    if (!site.ownerToken || !site.deviceId) throw targetError('TARGET_ACCOUNT_LEASE_REJECTED', '当前登录缺少设备信息，无法锁定平台账号')
+    if (!detached && this.site !== site) throw targetError('TARGET_CONTEXT_CHANGED', '平台现场已经切换，请重新打开')
+    const response = await net.fetch(`${this.options.apiBase}/api/identity${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${site.ownerToken}`, 'Content-Type': 'application/json', 'X-Toolbox-Version': app.getVersion() },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(15_000),
+    })
+    const raw = await response.text()
+    if (raw.length > 200_000) throw targetError('TARGET_ACCOUNT_LEASE_REJECTED', '账号占用校验响应无效')
+    let envelope: IdentityEnvelope
+    try { envelope = JSON.parse(raw) as IdentityEnvelope } catch { throw targetError('TARGET_ACCOUNT_LEASE_REJECTED', '账号占用校验响应无效') }
+    if (!response.ok || envelope?.success !== true) {
+      const detail = typeof envelope?.detail === 'string' ? envelope.detail : '该平台账号已在其他现场使用，请先结束原现场'
+      throw targetError('TARGET_ACCOUNT_LEASE_REJECTED', detail.slice(0, 160))
+    }
+    if (!envelope.data || typeof envelope.data !== 'object' || Array.isArray(envelope.data)) throw targetError('TARGET_ACCOUNT_LEASE_REJECTED', '账号占用校验响应无效')
+    return envelope.data as Record<string, unknown>
+  }
+  private startIdentityHeartbeat(site: Site): void {
+    if (site.identityHeartbeat) clearInterval(site.identityHeartbeat)
+    site.identityHeartbeat = setInterval(() => {
+      const lease = site.identityLease
+      if (!lease || this.site !== site) return
+      void this.identityRequest(site, `/leases/${lease.id}/heartbeat`, { lease_token: lease.leaseToken }).then(data => {
+        if (data?.lease_token) site.identityLease = { id: Number(data.id), leaseToken: String(data.lease_token) }
+      }).catch(error => {
+        site.relogin = markLoginRequired(site.relogin, error instanceof Error ? error.message : '平台登录已失效，请人工重新登录')
+        site.loginFailure = 'TARGET_ACCOUNT_LEASE_EXPIRED'
+        this.plans.clear(); this.runner?.cancel()
+      })
+    }, 30_000)
+  }
+  private stopIdentityHeartbeat(site: Site): void {
+    if (site.identityHeartbeat) { clearInterval(site.identityHeartbeat); site.identityHeartbeat = undefined }
+  }
   private async profile(token: string, id: string, discoveryOnly = false): Promise<SignedTargetProfile> {
     const all = z.array(signedTargetProfileSchema).parse(await this.api(token, '/api/tools/target-profiles'))
     const match = all.filter(row => row.profile.id === id)
@@ -210,7 +258,7 @@ export class TargetExecutionController {
       win.webContents.on('will-navigate', (event, targetUrl) => {
         if (!mayNavigate(targetUrl)) event.preventDefault()
         else if (/\/(?:User\/(?:Login|login)|Account\/Logout)/i.test(new URL(targetUrl).pathname) && this.site?.epoch === epoch) {
-          this.site.loginEvidence = undefined; this.site.verifiedContext = undefined; this.site.courseContext = undefined; this.site.verifiedRole = undefined; this.plans.clear()
+          this.site.loginEvidence = undefined; this.site.verifiedContext = undefined; this.site.courseContext = undefined; this.site.verifiedRole = undefined; this.site.relogin = markLoginRequired(this.site.relogin, '平台要求重新登录'); this.plans.clear()
         }
       })
       win.webContents.on('will-redirect', (event, targetUrl) => { if (!mayNavigate(targetUrl)) event.preventDefault() })
@@ -244,7 +292,7 @@ export class TargetExecutionController {
       this.windowLoads.set(borrowed, Promise.resolve())
       borrowed.webContents.setWindowOpenHandler(details => handlePopup(borrowed, details))
     }
-    this.site = { owner: owner.owner, key, epoch, active, windows: new Set([active]), signed, initialOrigin: url.origin, entryUrl: signed?.profile.entryUrl || url.href, profileId: request.profileId,
+    this.site = { owner: owner.owner, ownerKind: owner.kind || 'customer', ownerToken: owner.token, deviceId: owner.deviceId, accountSlot: owner.accountSlot, key, epoch, active, windows: new Set([active]), signed, initialOrigin: url.origin, entryUrl: signed?.profile.entryUrl || url.href, profileId: request.profileId, relogin: createReLoginState(),
       navigation: new OwnedNavigationScope(() => { this.assertOperation(); if (this.site?.epoch !== epoch) throw targetError('TARGET_CONTEXT_CHANGED', '窗口切换期间现场已变更') }), navigationBusy: false,
       ...(!borrowed ? { clearSession: () => browserSession.clearStorageData() } : {}) }
     const site = this.site
@@ -265,9 +313,47 @@ export class TargetExecutionController {
         return active.webContents.mainFrame.framesInSubtree.some(frame => { try { return checkedUrl(frame.url).origin === origin } catch { return false } })
       },
       assertOwned: () => { if (this.site !== site || site.active !== active || active.isDestroyed()) throw targetError('TARGET_CONTEXT_CHANGED', '登录窗口已经不属于当前现场') },
-      onAttempt: () => { site.loginEvidence = undefined; site.verifiedContext = undefined; site.courseContext = undefined; site.verifiedRole = undefined; site.loginFailure = undefined; this.plans.clear(); this.runner?.cancel() },
-      onSuccess: evidence => { site.loginEvidence = evidence; site.loginFailure = undefined },
-      onFailure: code => { site.loginEvidence = undefined; site.verifiedContext = undefined; site.loginFailure = code },
+      onAttempt: () => { site.loginEvidence = undefined; site.verifiedContext = undefined; site.courseContext = undefined; site.verifiedRole = undefined; site.loginFailure = undefined; site.relogin = markLoginAttempt(site.relogin); this.plans.clear(); this.runner?.cancel() },
+      onSuccess: async evidence => {
+        const binding = bindAccountRef(site.ownerKind, site.boundAccountRef, evidence.accountRef)
+        if (!binding.accepted) {
+          site.loginEvidence = undefined
+          site.verifiedContext = undefined
+          site.courseContext = undefined
+          site.verifiedRole = undefined
+          site.loginFailure = 'TARGET_ACCOUNT_SWITCH_BLOCKED'
+          site.relogin = markLoginRequired(site.relogin, '本授权已绑定其他平台账号，请联系管理员解绑后再换号')
+          this.plans.clear()
+          this.runner?.cancel()
+          return
+        }
+        try {
+          const data = await this.identityRequest(site, '/leases', {
+            site_origin: evidence.origin,
+            external_account_ref: evidence.accountRef,
+            device_id: site.deviceId,
+            workspace_id: site.ownerKind === 'staff' ? 'admin' : 'customer',
+            account_slot: site.accountSlot || (site.ownerKind === 'staff' ? 'admin' : 'single'),
+            scene_id: site.key,
+            takeover: false,
+          })
+          if (!data?.id || typeof data.lease_token !== 'string') throw new Error('账号占用校验响应无效')
+          site.identityLease = { id: Number(data.id), leaseToken: data.lease_token }
+          this.startIdentityHeartbeat(site)
+        } catch (error) {
+          site.loginEvidence = undefined
+          site.verifiedContext = undefined
+          site.courseContext = undefined
+          site.verifiedRole = undefined
+          site.loginFailure = 'TARGET_ACCOUNT_LEASE_REJECTED'
+          site.relogin = markPolicyBlocked(site.relogin, error instanceof Error ? error.message : '该平台账号已在其他现场使用')
+          this.plans.clear(); this.runner?.cancel()
+          return
+        }
+        if (site.ownerKind === 'customer') site.boundAccountRef = binding.boundAccountRef
+        site.loginEvidence = evidence; site.loginFailure = undefined; site.relogin = markLoginSuccess(site.relogin)
+      },
+      onFailure: code => { site.loginEvidence = undefined; site.verifiedContext = undefined; site.loginFailure = code; site.relogin = markLoginRequired(site.relogin, code) },
     })
   }
   private requireSite(owner: string): Site {
@@ -400,6 +486,7 @@ export class TargetExecutionController {
     this.options.assertScenario?.(this.requireSite(owner.owner).active.webContents.getURL(), request.scenario)
     const profile = await this.profile(owner.token, request.profileId)
     const site = this.requireSite(owner.owner)
+    if (!canCreatePlan(site.relogin)) throw targetError('TARGET_LOGIN_REQUIRED', site.relogin.reason ? `平台登录状态已失效（${site.relogin.reason}），请在当前窗口手动登录后再试` : '平台登录状态已失效，请在当前窗口手动登录后再试')
     if (site.signed?.profile.id !== profile.profile.id || site.signed.profile.revision !== profile.profile.revision) throw targetError('TARGET_SESSION_PROFILE_MISMATCH', '请从已审核入口重新打开受控现场，再预检')
     const initial = await this.port(owner.owner).inspect()
     if (initial.path === '/ECrossCommon/CourseIndexTrainingCourse') throw targetError('TARGET_NAVIGATION_EVIDENCE_MISSING', '请手动选择本次课程，进入课程地图后再识别')
@@ -578,6 +665,11 @@ export class TargetExecutionController {
     ++this.epoch
     const site = this.site; this.site = null; this.plans.clear()
     this.runner?.cancel()
+    if (site) {
+      this.stopIdentityHeartbeat(site)
+      const lease = site.identityLease
+      if (lease) void this.identityRequest(site, `/leases/${lease.id}/release`, { lease_token: lease.leaseToken }, true).catch(() => undefined)
+    }
     site?.navigation.cancel()
     site?.port?.dispose()
     for (const win of site?.windows || []) if (!win.isDestroyed()) win.destroy()

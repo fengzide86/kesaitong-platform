@@ -29,7 +29,9 @@ class StaffRuntimePermission(Base):
     staff_id = Column(Integer, primary_key=True)
     revision = Column(Integer, nullable=False, default=1)
     enabled = Column(Boolean, nullable=False, default=False)
-    max_scenes = Column(Integer, nullable=False, default=6)
+    # Staff can keep up to ten isolated account scenes.  This is a window
+    # limit, not a promise that ten live tasks may submit concurrently.
+    max_scenes = Column(Integer, nullable=False, default=10)
     allowed_origins = Column(JSON, nullable=False, default=list)
     allowed_capabilities = Column(JSON, nullable=False, default=list)
     expires_at = Column(DateTime, nullable=False)

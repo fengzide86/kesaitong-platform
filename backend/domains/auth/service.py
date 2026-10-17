@@ -12,7 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.logging import get_logger
 from core.response import ErrorCodes, error_response, success_response
 from core.security import create_access_token
-from domains.access import effective_license_status, normalize_entitlements, resolve_plan_code, resolve_product_access
+from domains.access import (
+    AuthSessionConflict,
+    create_auth_session,
+    effective_license_status,
+    normalize_entitlements,
+    resolve_plan_code,
+    resolve_product_access,
+)
 from models import AuthCode, AuthSeat, Device, Plan, User
 from services.staff_service import authenticate_staff, create_staff_access_token, staff_to_dict
 
@@ -65,6 +72,12 @@ class AuthService:
         plan_duration = row[2] or 30  # 默认30天
         product_type = row[3] or "consumer"
         plan_code = resolve_plan_code(plan_name, row[4])
+        # A legacy client may lose its local device id after logout. When the
+        # retained device name identifies exactly one existing seat, we allow
+        # that explicit rebind to replace the server session for the same
+        # physical device. Ordinary second-device logins remain blocked by
+        # AuthSession.
+        session_rebind = False
         
         # 2. 检查状态
         if code_obj.status == "frozen":
@@ -137,6 +150,7 @@ class AuthService:
             )
             legacy_seats = legacy_seat_result.scalars().all()
             if len(legacy_seats) == 1:
+                session_rebind = True
                 seat_obj = legacy_seats[0]
                 legacy_device_id = seat_obj.device_id
                 seat_obj.device_id = device_id
@@ -277,6 +291,26 @@ class AuthService:
             )
             device_count = device_count_result.scalar() or 0
         
+        # Create the server-visible single-device session in the same
+        # transaction as activation/seat/device changes.  ``commit=False``
+        # lets the existing commit failure handling roll everything back.
+        try:
+            session_data = await create_auth_session(
+                self.db,
+                principal_kind="user",
+                principal_id=code_obj.user_id,
+                auth_code_id=code_obj.id,
+                device_id=device_id,
+                replace_existing=session_rebind,
+                commit=False,
+            )
+        except AuthSessionConflict:
+            await self.db.rollback()
+            return error_response(
+                "该授权已在其他设备登录，请先退出原设备",
+                ErrorCodes.DEVICE_LIMIT_EXCEEDED,
+            )
+
         # 7. 提交事务
         auth_code_id = code_obj.id
         try:
@@ -294,6 +328,8 @@ class AuthService:
             "role": "user",
             "auth_code_id": code_obj.id,
             "device_id": device_id,
+            "session_id": session_data["session_id"],
+            "session_token": session_data["session_token"],
         })
         
         # 解析平台权限
@@ -460,13 +496,23 @@ class AuthService:
             "business_workspace_enabled": business_workspace_enabled,
         })
     
-    async def refresh_token(self, user_id: int, role: str, auth_code_id: int | None, device_id: str | None = None) -> dict[str, Any]:
+    async def refresh_token(
+        self,
+        user_id: int,
+        role: str,
+        auth_code_id: int | None,
+        device_id: str | None = None,
+        session_id: str | None = None,
+        session_token: str | None = None,
+    ) -> dict[str, Any]:
         """刷新 Token"""
         new_token = create_access_token(data={
             "user_id": user_id,
             "role": role,
             "auth_code_id": auth_code_id,
             "device_id": device_id,
+            "session_id": session_id,
+            "session_token": session_token,
         })
         
         return success_response(data={"token": new_token})

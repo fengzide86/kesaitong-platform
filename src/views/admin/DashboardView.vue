@@ -28,7 +28,7 @@
     <section v-if="loadState !== 'loading' && loadState !== 'error'" class="quick-actions-panel action-panel" aria-label="常用操作">
       <header><div><span>常用操作</span><h3>需要办理什么，直接从这里开始</h3></div><small>操作仍按当前账号权限执行</small></header>
       <div class="quick-actions-grid">
-        <router-link class="quick-action" to="/admin/local-runtime"><span class="quick-action-icon"><Wrench :size="17" /></span><span><strong>打开工具现场</strong><small>先选账号，再选择已开放的工具</small></span><ChevronRight :size="16" /></router-link>
+        <router-link class="quick-action" to="/admin/local-runtime"><span class="quick-action-icon"><Wrench :size="17" /></span><span><strong>打开多账号工作台</strong><small>查看账号、网页和任务状态</small></span><ChevronRight :size="16" /></router-link>
         <router-link v-if="canCreateAuthorization" class="quick-action" to="/admin/authcodes?action=create"><span class="quick-action-icon"><KeyRound :size="17" /></span><span><strong>新建授权码</strong><small>给客户开通工具使用权限</small></span><ChevronRight :size="16" /></router-link>
         <router-link v-if="canCreateOrder" class="quick-action" to="/admin/orders?action=create"><span class="quick-action-icon"><WalletCards :size="17" /></span><span><strong>登记订单与负责人</strong><small>记录订单金额和交付负责人</small></span><ChevronRight :size="16" /></router-link>
         <router-link class="quick-action" to="/admin/feedback"><span class="quick-action-icon"><MessageSquareText :size="17" /></span><span><strong>处理客户工单</strong><small>查看问题并回复客户</small></span><ChevronRight :size="16" /></router-link>

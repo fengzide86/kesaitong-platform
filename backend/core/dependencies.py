@@ -1,6 +1,7 @@
 """Authentication and fixed-role authorization dependencies."""
 
 from collections.abc import Callable
+from datetime import datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,7 +12,8 @@ from core.capabilities import has_capability, roles_with
 from core.logging import set_user_id
 from core.security import verify_token
 from database import get_db
-from models import Agency, AuthCode, StaffRole, StaffStatus, StaffUser, User
+from domains.access.identity_leases import AuthSessionNotFound, validate_auth_session
+from models import Agency, AuthCode, AuthSession, StaffRole, StaffStatus, StaffUser, User
 from services.staff_service import staff_to_dict
 
 security = HTTPBearer(auto_error=False)
@@ -106,6 +108,75 @@ def require_staff_capability(capability: str) -> Callable:
 require_super_admin = require_staff_capability("settings.manage")
 require_commerce_operator = require_staff_capability("expenses.write")
 require_any_staff = require_staff_capability("backoffice.read")
+
+
+async def _validate_user_session(
+    db: AsyncSession,
+    payload: dict,
+    *,
+    user_id: int,
+    strict: bool,
+) -> dict | None:
+    """Validate the server session bound to a customer JWT.
+
+    New tokens carry both the opaque session id and its bearer token as JWT
+    claims. Legacy tokens have neither claim; while they remain accepted for
+    compatibility, an active server session on another device invalidates
+    them so a second device cannot keep using the same authorization.
+    """
+
+    session_id = payload.get("session_id")
+    session_token = payload.get("session_token")
+    if bool(session_id) != bool(session_token):
+        if strict:
+            raise _unauthorized("登录会话凭证不完整，请重新登录")
+        return None
+
+    if session_id and session_token:
+        try:
+            session = await validate_auth_session(
+                db,
+                session_id=str(session_id),
+                session_token=str(session_token),
+                touch=True,
+            )
+        except AuthSessionNotFound:
+            if strict:
+                raise _unauthorized("登录会话已失效，请重新登录") from None
+            return None
+        if (
+            session.get("principal_kind") != "user"
+            or session.get("principal_id") != user_id
+            or session.get("device_id") != payload.get("device_id")
+            or (
+                payload.get("auth_code_id") is not None
+                and session.get("auth_code_id") not in {None, payload.get("auth_code_id")}
+            )
+        ):
+            if strict:
+                raise _unauthorized("登录会话与当前授权不匹配，请重新登录")
+            return None
+        return session
+
+    # Legacy JWT fallback: once a server session exists, reject tokens from a
+    # different device. No active row means this is an older installation and
+    # the historical token path remains compatible.
+    active = (
+        await db.execute(
+            select(AuthSession).where(
+                AuthSession.principal_kind == "user",
+                AuthSession.principal_id == user_id,
+                AuthSession.active_guard == "held",
+                AuthSession.status == "active",
+                AuthSession.expires_at > datetime.utcnow(),
+            )
+        )
+    ).scalars().first()
+    if active is not None and active.device_id != payload.get("device_id"):
+        if strict:
+            raise _unauthorized("该授权已在其他设备登录，请先退出原设备")
+        return None
+    return active and {"session_id": active.session_id}
 
 
 async def require_agency_staff(
@@ -225,12 +296,16 @@ async def get_optional_current_user(
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         return None
+    session = await _validate_user_session(db, payload, user_id=user.id, strict=False)
+    if payload.get("session_id") and session is None:
+        return None
     set_user_id(user.id)
     return {
         "user_id": user.id,
         "role": "user",
         "auth_code_id": user.auth_code_id,
         "device_id": payload.get("device_id"),
+        "session_id": session.get("session_id") if session else None,
     }
 
 
@@ -259,12 +334,14 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise _unauthorized("用户不存在或已停用")
+    session = await _validate_user_session(db, payload, user_id=user.id, strict=True)
     set_user_id(user.id)
     return {
         "user_id": user.id,
         "role": "user",
         "auth_code_id": user.auth_code_id,
         "device_id": payload.get("device_id"),
+        "session_id": session.get("session_id") if session else None,
     }
 
 

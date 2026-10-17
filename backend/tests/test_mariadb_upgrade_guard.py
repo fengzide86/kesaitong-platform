@@ -23,7 +23,7 @@ def test_probe_revision_tracks_runtime_and_all_twenty_framework_tables():
     from database import SCHEMA_REVISION
     from models import Base
 
-    assert probe.NEW_REVISION == SCHEMA_REVISION == "20261015_framework_commerce"
+    assert probe.NEW_REVISION == SCHEMA_REVISION == "20261017_identity_leases"
     names = probe.framework_tables()
     assert len(names) == len(set(names)) == 20
     assert set(names) <= set(Base.metadata.tables)

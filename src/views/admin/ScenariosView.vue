@@ -127,7 +127,7 @@ const origins = ref(''), identityKeyword = ref(''), candidates = ref<Identity[]>
 const candidateLoading = ref(false), candidateError = ref(''), identityLoading = ref(false), identityError = ref('')
 const staffAccounts = ref<Staff[]>([]), staffPage = ref(1), staffTotal = ref(0), staffKeyword = ref('')
 const staffLoading = ref(false), staffReady = ref(false), staffError = ref(''), selectedStaff = ref<Staff | null>(null)
-const permission = reactive({ staff_id: null as number | null, expected_revision: 0, enabled: false, max_scenes: 6, expiry: '' })
+const permission = reactive({ staff_id: null as number | null, expected_revision: 0, enabled: false, max_scenes: 10, expiry: '' })
 const staffOrigins = ref(''), allowTemplate = ref(false)
 let alive = true, loadGeneration = 0, candidateGeneration = 0, identityGeneration = 0, staffGeneration = 0, assignmentGeneration = 0, permissionGeneration = 0
 const lines = (value: string) => [...new Set(value.split(/\r?\n/).map(line => line.trim()).filter(Boolean))]
@@ -218,7 +218,7 @@ function editPermission(staff: Staff) {
   if (busy.value || !canConfigure(staff) || loadState.value !== 'ready' || !staffReady.value || staffError.value) return
   permissionGeneration++; selectedStaff.value = { ...staff }
   const current = permissionFor(staff.id)
-  Object.assign(permission, { staff_id: Number(staff.id), expected_revision: current?.revision || 0, enabled: current?.enabled || false, max_scenes: current?.max_scenes || 6, expiry: localTime(current?.expires_at || null) })
+  Object.assign(permission, { staff_id: Number(staff.id), expected_revision: current?.revision || 0, enabled: current?.enabled || false, max_scenes: current?.max_scenes || 10, expiry: localTime(current?.expires_at || null) })
   staffOrigins.value = current?.allowed_origins.join('\n') || ''; allowTemplate.value = current?.allowed_capabilities.includes('template.create.v1') || false
   void nextTick(() => scrollToWorkflowTarget(permissionEditor.value, { block: 'nearest', focusSelector: '#permission-editor-heading' }))
 }
