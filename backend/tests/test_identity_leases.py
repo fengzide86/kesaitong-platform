@@ -31,6 +31,40 @@ async def test_external_identity_is_hashed_and_never_returned():
     assert "account" not in digest.lower()
 
 
+@pytest.mark.parametrize("value", [None, "   "])
+async def test_external_identity_rejects_missing_reference(value):
+    with pytest.raises(ValueError, match="外部账号标识无效"):
+        external_account_ref_hash("https://seller.example", value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"owner_kind": "unknown"}, "owner_kind 无效"),
+        ({"device_id": ""}, "现场标识不完整"),
+        ({"owner_kind": "user", "takeover": True}, ""),
+        ({"owner_kind": "user", "auth_code_id": None}, "客户现场必须绑定授权码"),
+        ({"owner_kind": "staff", "auth_code_id": 1}, "管理员现场不能借用客户授权码"),
+        ({"takeover": True, "owner_kind": "staff", "auth_code_id": None, "takeover_actor_id": None}, "接管只能由已验证的管理员发起"),
+    ],
+)
+async def test_lease_validation_rejects_unsafe_inputs(db_session, overrides, message):
+    args = {
+        "owner_kind": "user",
+        "owner_id": 1,
+        "auth_code_id": 1,
+        "device_id": "device-1",
+        "workspace_id": "customer",
+        "account_slot": "single",
+        "scene_id": "scene-1",
+        "site_origin": "https://seller.example",
+        "external_account_ref": "account-a",
+    }
+    args.update(overrides)
+    with pytest.raises((ValueError, IdentityLeaseConflict), match=message or None):
+        await acquire_identity_lease(db_session, **args)
+
+
 async def test_customer_binding_rejects_switching_account_even_after_lease_release(db_session):
     code = await _auth_code(db_session, "bind-1")
     code_id = code.id

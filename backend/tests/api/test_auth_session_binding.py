@@ -1,8 +1,11 @@
 """Regression tests for the one-device customer auth session contract."""
 
+import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.dependencies import _validate_user_session
 from core.security import verify_token
 from models import AuthCode
 
@@ -64,4 +67,11 @@ async def test_customer_same_device_relogin_replaces_session(
     second_payload = verify_token(second.json()["data"]["token"])
     assert first_payload and second_payload
     assert first_payload["session_id"] != second_payload["session_id"]
+
+
+async def test_partial_session_claims_fail_closed(db_session: AsyncSession) -> None:
+    payload = {"session_id": "session-without-token", "device_id": "device-a"}
+    with pytest.raises(HTTPException, match="登录会话凭证不完整"):
+        await _validate_user_session(db_session, payload, user_id=1, strict=True)
+    assert await _validate_user_session(db_session, payload, user_id=1, strict=False) is None
 

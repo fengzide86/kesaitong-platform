@@ -37,7 +37,7 @@ interface Options {
   staffReports?: ExecutionReportOutbox
 }
 interface Site {
-  owner: string; ownerKind?: 'customer' | 'staff'; ownerToken: string; deviceId?: string; accountSlot?: string; key: string; epoch: number; active: TargetWindow; windows: Set<TargetWindow>
+  owner: string; ownerKind?: 'customer' | 'staff'; ownerToken: string; deviceId?: string; accountSlot?: string; identityRequired: boolean; key: string; epoch: number; active: TargetWindow; windows: Set<TargetWindow>
   signed: SignedTargetProfile | null; initialOrigin: string; port?: TargetBrowserPort; portOrigin?: string
   entryUrl: string; profileId?: string
   navigation: OwnedNavigationScope; navigationBusy: boolean
@@ -292,7 +292,8 @@ export class TargetExecutionController {
       this.windowLoads.set(borrowed, Promise.resolve())
       borrowed.webContents.setWindowOpenHandler(details => handlePopup(borrowed, details))
     }
-    this.site = { owner: owner.owner, ownerKind: owner.kind || 'customer', ownerToken: owner.token, deviceId: owner.deviceId, accountSlot: owner.accountSlot, key, epoch, active, windows: new Set([active]), signed, initialOrigin: url.origin, entryUrl: signed?.profile.entryUrl || url.href, profileId: request.profileId, relogin: createReLoginState(),
+    const identityRequired = Boolean(owner.kind && owner.deviceId)
+    this.site = { owner: owner.owner, ownerKind: owner.kind, ownerToken: owner.token, deviceId: owner.deviceId, accountSlot: owner.accountSlot, identityRequired, key, epoch, active, windows: new Set([active]), signed, initialOrigin: url.origin, entryUrl: signed?.profile.entryUrl || url.href, profileId: request.profileId, relogin: identityRequired && owner.kind === 'customer' ? createReLoginState() : markLoginSuccess(createReLoginState()),
       navigation: new OwnedNavigationScope(() => { this.assertOperation(); if (this.site?.epoch !== epoch) throw targetError('TARGET_CONTEXT_CHANGED', '窗口切换期间现场已变更') }), navigationBusy: false,
       ...(!borrowed ? { clearSession: () => browserSession.clearStorageData() } : {}) }
     const site = this.site
@@ -315,6 +316,10 @@ export class TargetExecutionController {
       assertOwned: () => { if (this.site !== site || site.active !== active || active.isDestroyed()) throw targetError('TARGET_CONTEXT_CHANGED', '登录窗口已经不属于当前现场') },
       onAttempt: () => { site.loginEvidence = undefined; site.verifiedContext = undefined; site.courseContext = undefined; site.verifiedRole = undefined; site.loginFailure = undefined; site.relogin = markLoginAttempt(site.relogin); this.plans.clear(); this.runner?.cancel() },
       onSuccess: async evidence => {
+        if (!site.identityRequired) {
+          site.loginEvidence = evidence; site.loginFailure = undefined; site.relogin = markLoginSuccess(site.relogin)
+          return
+        }
         const binding = bindAccountRef(site.ownerKind, site.boundAccountRef, evidence.accountRef)
         if (!binding.accepted) {
           site.loginEvidence = undefined
@@ -486,7 +491,7 @@ export class TargetExecutionController {
     this.options.assertScenario?.(this.requireSite(owner.owner).active.webContents.getURL(), request.scenario)
     const profile = await this.profile(owner.token, request.profileId)
     const site = this.requireSite(owner.owner)
-    if (!canCreatePlan(site.relogin)) throw targetError('TARGET_LOGIN_REQUIRED', site.relogin.reason ? `平台登录状态已失效（${site.relogin.reason}），请在当前窗口手动登录后再试` : '平台登录状态已失效，请在当前窗口手动登录后再试')
+    if (site.identityRequired && !canCreatePlan(site.relogin)) throw targetError('TARGET_LOGIN_REQUIRED', site.relogin.reason ? `平台登录状态已失效（${site.relogin.reason}），请在当前窗口手动登录后再试` : '平台登录状态已失效，请在当前窗口手动登录后再试')
     if (site.signed?.profile.id !== profile.profile.id || site.signed.profile.revision !== profile.profile.revision) throw targetError('TARGET_SESSION_PROFILE_MISMATCH', '请从已审核入口重新打开受控现场，再预检')
     const initial = await this.port(owner.owner).inspect()
     if (initial.path === '/ECrossCommon/CourseIndexTrainingCourse') throw targetError('TARGET_NAVIGATION_EVIDENCE_MISSING', '请手动选择本次课程，进入课程地图后再识别')
