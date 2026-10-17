@@ -14,6 +14,15 @@ down_revision = "20261015_framework_commerce"
 branch_labels = None
 depends_on = None
 
+FRAMEWORK_GUARD_TABLES = (
+    "project_runtime_scopes", "scenario_assignments", "staff_runtime_permissions", "staff_tool_grants",
+    "team_members", "commercial_offer_versions", "team_policies", "team_ownerships", "team_settlements",
+    "commercial_grants", "commercial_order_snapshots", "commercial_service_fulfillments", "team_ledger_entries",
+    "team_order_allocations", "team_refund_reviews", "team_service_deliveries",
+    "commercial_service_fulfillment_events", "commercial_trial_quotas", "commercial_trial_reservations",
+    "commercial_refund_entitlement_reviews",
+)
+
 
 def upgrade() -> None:
     inspector = sa.inspect(op.get_bind())
@@ -123,6 +132,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     existing = set(sa.inspect(bind).get_table_names())
+    # MySQL implicitly commits DDL. Refuse before dropping this migration's
+    # tables when a downstream framework table already contains data, so a
+    # failed multi-revision downgrade cannot leave a half-downgraded schema.
+    for name in FRAMEWORK_GUARD_TABLES:
+        if name in existing and bind.execute(sa.text(f"SELECT COUNT(*) FROM {name}")).scalar_one():
+            raise RuntimeError("Framework or accounting data exists; preserve the current schema")
     # Refuse to drop security/audit history automatically.
     for name in ("auth_sessions", "external_account_leases", "external_account_bindings"):
         if name in existing and bind.execute(sa.text(f"SELECT COUNT(*) FROM {name}")).scalar_one():

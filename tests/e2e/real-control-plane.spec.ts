@@ -28,6 +28,10 @@ function database(): DatabaseSnapshot {
 }
 
 async function authorize(page: Page, identity: 'consumer' | 'business' | 'business_cancel'): Promise<void> {
+  // Each Playwright context starts with empty storage. Keep the fixture's
+  // identity on one stable virtual device so the auth-session guard tests
+  // repeated journeys on the same machine rather than a second device.
+  await page.addInitScript(deviceId => localStorage.setItem('toolbox_device_id', deviceId), `E2E-${identity}-device`)
   await page.goto('/#/user/login')
   await page.getByLabel('授权码', { exact: true }).fill(credentials[identity])
   const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/verify' && r.request().method() === 'POST')
