@@ -23,6 +23,7 @@ from models import (
     AuditLog,
     AuthCode,
     AuthSeat,
+    AuthSession,
     ChatMessage,
     ChatSession,
     Device,
@@ -924,6 +925,7 @@ async def test_twenty_concurrent_first_activations_do_not_oversell_seats_or_devi
                     await session.execute(
                         update(AuthCode).where(AuthCode.id == auth_code_id).values(user_id=None)
                     )
+                    await session.execute(delete(AuthSession).where(AuthSession.auth_code_id == auth_code_id))
                     await session.execute(delete(AuthSeat).where(AuthSeat.auth_code_id == auth_code_id))
                     await session.execute(delete(Device).where(Device.auth_code_id == auth_code_id))
                     await session.execute(delete(User).where(User.auth_code_id == auth_code_id))
