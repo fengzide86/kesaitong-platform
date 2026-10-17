@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import AuthCode
 
-
 pytestmark = pytest.mark.asyncio
 
 
