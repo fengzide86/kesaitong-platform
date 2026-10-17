@@ -73,7 +73,7 @@ class StaffRuntimePermissionWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
     enabled: bool = False
-    max_scenes: int = Field(default=6, ge=1, le=10)
+    max_scenes: int = Field(default=10, ge=1, le=10)
     allowed_origins: list[str] = Field(default_factory=list, max_length=12)
     allowed_capabilities: list[Literal["template.create.v1"]] = Field(default_factory=list, max_length=1)
     expires_at: datetime

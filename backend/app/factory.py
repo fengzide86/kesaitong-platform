@@ -39,6 +39,7 @@ from routers import (
     expenses,
     feedback,
     freight_rate_packs,
+    identity,
     knowledge,
     logs,
     orders,
@@ -91,6 +92,7 @@ def _register_routers(app: FastAPI) -> None:
         (business.router, "/api/business", ["专业批量工作台"]),
         (admin_action_center.router, "/api/admin", ["管理行动中心"]),
         (help_router.router, "/api/help", ["帮助查询"]),
+        (identity.router, "/api/identity", ["账号现场与身份占用"]),
     )
     for router, prefix, tags in routes:
         app.include_router(router, prefix=prefix, tags=tags)

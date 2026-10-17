@@ -5,7 +5,7 @@ interface Options {
   isAllowedOrigin(origin: string): boolean; siteEpoch: number
   assertOwned(): void
   onAttempt(): void
-  onSuccess(evidence: LocalLoginEvidence): void
+  onSuccess(evidence: LocalLoginEvidence): void | Promise<void>
   onFailure(code: string): void
 }
 interface Pending { id: string; origin: string; accountRef: string; loginType: string; status?: number; codeVerified: boolean; startedAt: number }
@@ -16,14 +16,14 @@ export function observeOwnedLogin(guest: WebContents, options: Options): () => v
   let pending: Pending | undefined; let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
   const fail = (code: string): void => { pending = undefined; if (timer) clearTimeout(timer); if (!disposed) options.onFailure(code) }
-  const commit = (): void => {
+  const commit = async (): Promise<void> => {
     options.assertOwned()
     if (disposed || !pending?.codeVerified) return
     const url = new URL(guest.getURL())
     if (url.origin !== pending.origin || url.pathname !== '/ECrossAmazonHome/CourseIndexTraining_1') return
     const success: LocalLoginEvidence = { origin: pending.origin, siteEpoch: options.siteEpoch, accountRef: pending.accountRef, loginType: pending.loginType, authenticatedAt: Date.now() }
     pending = undefined; if (timer) clearTimeout(timer)
-    options.onSuccess(success)
+    await options.onSuccess(success)
   }
   const consume = async (method: string, params: Record<string, unknown>): Promise<void> => {
     options.assertOwned()
@@ -63,11 +63,11 @@ export function observeOwnedLogin(guest: WebContents, options: Options): () => v
       // longer than the network timeout. Keep only the hash until the owned
       // map opens, a new login attempt occurs, or this observer is disposed.
       if (timer) clearTimeout(timer)
-      commit()
+      await commit()
     }
   }
   const onMessage = (_event: Electron.Event, method: string, params: Record<string, unknown>): void => { void consume(method, params).catch(() => fail('TARGET_LOGIN_RESPONSE_UNAVAILABLE')) }
-  const onNavigate = (): void => { try { commit() } catch { fail('TARGET_LOGIN_CONTEXT_CHANGED') } }
+  const onNavigate = (): void => { void commit().catch(() => fail('TARGET_LOGIN_CONTEXT_CHANGED')) }
   guest.debugger.on('message', onMessage)
   guest.on('did-navigate', onNavigate)
   return () => { disposed = true; pending = undefined; if (timer) clearTimeout(timer); guest.debugger.removeListener('message', onMessage); guest.removeListener('did-navigate', onNavigate) }

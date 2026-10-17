@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.dependencies import get_current_user
+from core.dependencies import _validate_user_session, get_current_user
 from core.rate_limit import limiter as auth_limiter
 from core.security import create_access_token, verify_token
 from core.token_blacklist import is_token_blacklisted
@@ -135,6 +135,16 @@ async def refresh_token(
             },
         )
 
+    # Customer JWTs are backed by one server-visible device session. Refresh
+    # must not keep a token alive after another device has taken the session.
+    if role == "user":
+        await _validate_user_session(
+            db,
+            payload,
+            user_id=int(user_id) if user_id is not None else 0,
+            strict=True,
+        )
+
     # 4. 检查授权码是否仍然有效（防止授权码被冻结/删除后仍可刷新）
     if auth_code_id:
         result = await db.execute(select(AuthCode).where(AuthCode.id == auth_code_id))
@@ -159,6 +169,8 @@ async def refresh_token(
             "role": role,
             "auth_code_id": auth_code_id,
             "device_id": device_id,
+            "session_id": payload.get("session_id"),
+            "session_token": payload.get("session_token"),
         }
     )
     return {"success": True, "data": {"token": new_token}}

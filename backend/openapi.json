@@ -5558,6 +5558,711 @@
         "title": "APIResponse[list[dict[str, Any]]]",
         "type": "object"
       },
+      "AccountBindingTakeoverEnvelope": {
+        "description": "Staff-only result for an explicit customer account rebind.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountBindingTakeoverRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "响应数据"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "AccountBindingTakeoverEnvelope",
+        "type": "object"
+      },
+      "AccountBindingTakeoverRead": {
+        "properties": {
+          "auth_code_id": {
+            "title": "Auth Code Id",
+            "type": "integer"
+          },
+          "binding_id": {
+            "title": "Binding Id",
+            "type": "integer"
+          },
+          "external_account_hint": {
+            "title": "External Account Hint",
+            "type": "string"
+          },
+          "replaced_binding_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced Binding Id"
+          },
+          "site_origin": {
+            "title": "Site Origin",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding_id",
+          "auth_code_id",
+          "site_origin",
+          "external_account_hint",
+          "status"
+        ],
+        "title": "AccountBindingTakeoverRead",
+        "type": "object"
+      },
+      "AccountBindingTakeoverRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "external_account_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Account Ref",
+            "type": "string"
+          },
+          "reason": {
+            "default": "管理员重新绑定",
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Reason",
+            "type": "string"
+          },
+          "site_origin": {
+            "maxLength": 300,
+            "minLength": 8,
+            "title": "Site Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_origin",
+          "external_account_ref"
+        ],
+        "title": "AccountBindingTakeoverRequest",
+        "type": "object"
+      },
+      "AccountLeaseAcquireEnvelope": {
+        "description": "The one-time lease token is returned only when a lease is acquired.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountLeaseAcquireRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "响应数据"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "AccountLeaseAcquireEnvelope",
+        "type": "object"
+      },
+      "AccountLeaseAcquireRead": {
+        "properties": {
+          "account_slot": {
+            "title": "Account Slot",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "external_account_hint": {
+            "title": "External Account Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_heartbeat_at": {
+            "title": "Last Heartbeat At",
+            "type": "string"
+          },
+          "lease_token": {
+            "title": "Lease Token",
+            "type": "string"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "integer"
+          },
+          "owner_kind": {
+            "enum": [
+              "user",
+              "staff"
+            ],
+            "title": "Owner Kind",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "site_origin": {
+            "title": "Site Origin",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "needs_relogin",
+              "released",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "owner_kind",
+          "owner_id",
+          "workspace_id",
+          "account_slot",
+          "scene_id",
+          "site_origin",
+          "external_account_hint",
+          "status",
+          "revision",
+          "last_heartbeat_at",
+          "expires_at",
+          "lease_token"
+        ],
+        "title": "AccountLeaseAcquireRead",
+        "type": "object"
+      },
+      "AccountLeaseAcquireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_slot": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Account Slot",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "external_account_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "External Account Ref",
+            "type": "string"
+          },
+          "scene_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "site_origin": {
+            "maxLength": 300,
+            "minLength": 8,
+            "title": "Site Origin",
+            "type": "string"
+          },
+          "takeover": {
+            "default": false,
+            "title": "Takeover",
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "site_origin",
+          "external_account_ref",
+          "device_id",
+          "workspace_id",
+          "account_slot",
+          "scene_id"
+        ],
+        "title": "AccountLeaseAcquireRequest",
+        "type": "object"
+      },
+      "AccountLeaseEnvelope": {
+        "description": "Response for a lease heartbeat or release-adjacent read.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountLeaseRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "响应数据"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "AccountLeaseEnvelope",
+        "type": "object"
+      },
+      "AccountLeaseHeartbeatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "lease_token": {
+            "maxLength": 256,
+            "minLength": 20,
+            "title": "Lease Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_token"
+        ],
+        "title": "AccountLeaseHeartbeatRequest",
+        "type": "object"
+      },
+      "AccountLeaseListEnvelope": {
+        "description": "Safe list shape; raw external account identifiers are never exposed.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AccountLeaseRead"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "响应数据",
+            "title": "Data"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "AccountLeaseListEnvelope",
+        "type": "object"
+      },
+      "AccountLeaseRead": {
+        "properties": {
+          "account_slot": {
+            "title": "Account Slot",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "external_account_hint": {
+            "title": "External Account Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_heartbeat_at": {
+            "title": "Last Heartbeat At",
+            "type": "string"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "integer"
+          },
+          "owner_kind": {
+            "enum": [
+              "user",
+              "staff"
+            ],
+            "title": "Owner Kind",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scene_id": {
+            "title": "Scene Id",
+            "type": "string"
+          },
+          "site_origin": {
+            "title": "Site Origin",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "paused",
+              "needs_relogin",
+              "released",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "owner_kind",
+          "owner_id",
+          "workspace_id",
+          "account_slot",
+          "scene_id",
+          "site_origin",
+          "external_account_hint",
+          "status",
+          "revision",
+          "last_heartbeat_at",
+          "expires_at"
+        ],
+        "title": "AccountLeaseRead",
+        "type": "object"
+      },
+      "AccountLeaseReleaseEnvelope": {
+        "description": "Response for ending an account现场 lease.",
+        "properties": {
+          "data": {
+            "description": "响应数据",
+            "title": "Data",
+            "type": "null"
+          },
+          "message": {
+            "default": "ok",
+            "description": "响应消息",
+            "title": "Message",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前页码",
+            "title": "Page"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "每页数量",
+            "title": "Page Size"
+          },
+          "success": {
+            "default": true,
+            "description": "是否成功",
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总数（分页用）",
+            "title": "Total"
+          },
+          "total_pages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "总页数",
+            "title": "Total Pages"
+          }
+        },
+        "title": "AccountLeaseReleaseEnvelope",
+        "type": "object"
+      },
       "ActionCenterData": {
         "properties": {
           "agency_delivery_tasks": {
@@ -22122,7 +22827,7 @@
             "type": "string"
           },
           "max_scenes": {
-            "default": 6,
+            "default": 10,
             "maximum": 10.0,
             "minimum": 1.0,
             "title": "Max Scenes",
@@ -33551,6 +34256,277 @@
         "summary": "Query Help",
         "tags": [
           "帮助查询"
+        ]
+      }
+    },
+    "/api/identity/admin/bindings/{auth_code_id}/takeover": {
+      "post": {
+        "description": "Explicitly rebind a customer authorization after a support decision.",
+        "operationId": "takeover_binding_api_identity_admin_bindings__auth_code_id__takeover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "auth_code_id",
+            "required": true,
+            "schema": {
+              "title": "Auth Code Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountBindingTakeoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountBindingTakeoverEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Takeover Binding",
+        "tags": [
+          "账号现场与身份占用"
+        ]
+      }
+    },
+    "/api/identity/admin/leases": {
+      "get": {
+        "description": "List all active/history slots for the administrator workbench.",
+        "operationId": "list_admin_leases_api_identity_admin_leases_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLeaseListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Admin Leases",
+        "tags": [
+          "账号现场与身份占用"
+        ]
+      }
+    },
+    "/api/identity/leases": {
+      "get": {
+        "description": "List the caller's own slots; staff sees its own slots only by default.",
+        "operationId": "get_leases_api_identity_leases_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLeaseListEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Leases",
+        "tags": [
+          "账号现场与身份占用"
+        ]
+      },
+      "post": {
+        "description": "Open one isolated external-account slot for a customer or staff user.",
+        "operationId": "acquire_lease_api_identity_leases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountLeaseAcquireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLeaseAcquireEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Acquire Lease",
+        "tags": [
+          "账号现场与身份占用"
+        ]
+      }
+    },
+    "/api/identity/leases/{lease_id}/heartbeat": {
+      "post": {
+        "operationId": "heartbeat_lease_api_identity_leases__lease_id__heartbeat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountLeaseHeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLeaseEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Heartbeat Lease",
+        "tags": [
+          "账号现场与身份占用"
+        ]
+      }
+    },
+    "/api/identity/leases/{lease_id}/release": {
+      "post": {
+        "operationId": "release_lease_api_identity_leases__lease_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountLeaseHeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountLeaseReleaseEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release Lease",
+        "tags": [
+          "账号现场与身份占用"
         ]
       }
     },
