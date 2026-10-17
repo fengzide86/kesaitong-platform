@@ -138,18 +138,18 @@ describe('action center object-level tasks', () => {
     expect(router.currentRoute.value.query).toEqual({})
     wrapper.unmount()
   })
-  it('hides the platform review card when the review list is empty', async () => {
+  it('keeps a compact platform review entry visible when the review list is empty', async () => {
     const { wrapper } = await render()
     expect(api.reviews).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('#target_review').exists()).toBe(false)
+    expect(wrapper.get('#target_review').text()).toContain('暂时没有待审核入口')
     wrapper.unmount()
   })
-  it('hides the platform review card when all returned entries are already reviewed or disabled', async () => {
+  it('keeps a compact platform review entry visible when all returned entries are already reviewed or disabled', async () => {
     api.reviews.mockResolvedValue([
       reviewFixture(1, 'approved'), reviewFixture(2, 'rejected'), reviewFixture(3, 'disabled'),
     ])
     const { wrapper } = await render()
-    expect(wrapper.find('#target_review').exists()).toBe(false)
+    expect(wrapper.get('#target_review').text()).toContain('暂时没有待审核入口')
     wrapper.unmount()
   })
   it.each([true, false])('keeps a failed review request visible and retries it (pending after retry: %s)', async hasPending => {
@@ -166,9 +166,7 @@ describe('action center object-level tasks', () => {
     if (hasPending) {
       expect(wrapper.get('#target_review .review-task').text()).toContain('学校入口 8')
       expect(wrapper.find('#target_review [role="alert"]').exists()).toBe(false)
-    } else {
-      expect(wrapper.find('#target_review').exists()).toBe(false)
-    }
+    } else expect(wrapper.get('#target_review').text()).toContain('暂时没有待审核入口')
     wrapper.unmount()
   })
   it.each(['operator', 'support'] as const)('does not show the target-review dead link to %s', async role => {

@@ -28,6 +28,7 @@
     <section v-if="loadState !== 'loading' && loadState !== 'error'" class="quick-actions-panel action-panel" aria-label="常用操作">
       <header><div><span>常用操作</span><h3>需要办理什么，直接从这里开始</h3></div><small>操作仍按当前账号权限执行</small></header>
       <div class="quick-actions-grid">
+        <router-link class="quick-action" to="/admin/local-runtime"><span class="quick-action-icon"><Wrench :size="17" /></span><span><strong>打开工具现场</strong><small>先选账号，再选择已开放的工具</small></span><ChevronRight :size="16" /></router-link>
         <router-link v-if="canCreateAuthorization" class="quick-action" to="/admin/authcodes?action=create"><span class="quick-action-icon"><KeyRound :size="17" /></span><span><strong>新建授权码</strong><small>给客户开通工具使用权限</small></span><ChevronRight :size="16" /></router-link>
         <router-link v-if="canCreateOrder" class="quick-action" to="/admin/orders?action=create"><span class="quick-action-icon"><WalletCards :size="17" /></span><span><strong>登记订单与负责人</strong><small>记录订单金额和交付负责人</small></span><ChevronRight :size="16" /></router-link>
         <router-link class="quick-action" to="/admin/feedback"><span class="quick-action-icon"><MessageSquareText :size="17" /></span><span><strong>处理客户工单</strong><small>查看问题并回复客户</small></span><ChevronRight :size="16" /></router-link>
@@ -98,7 +99,7 @@
         <EmptyState v-else :icon="CheckCircle2" title="近期没有待续费项目" description="按各项目设置的提前提醒天数展示，逾期项目也会保留。" />
       </article>
 
-      <article v-if="shouldShowTargetReview" id="target_review" class="action-panel target-review-entry" aria-label="平台入口审核">
+      <article v-if="canReviewTargets" id="target_review" class="action-panel target-review-entry" aria-label="平台入口审核">
         <header>
           <div><span>平台入口</span><h3>待审核入口</h3></div>
           <router-link class="target-review-link" to="/admin/target-reviews">审核列表 <ChevronRight :size="15" /></router-link>
@@ -135,7 +136,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { CheckCircle2, ChevronRight, KeyRound, LoaderCircle, MessageSquareText, MonitorSmartphone, RefreshCw, ShieldAlert, ShieldCheck, TicketCheck, TimerReset, UserRoundCheck, WalletCards, WifiOff } from '@lucide/vue'
+import { CheckCircle2, ChevronRight, KeyRound, LoaderCircle, MessageSquareText, MonitorSmartphone, RefreshCw, ShieldAlert, ShieldCheck, TicketCheck, TimerReset, UserRoundCheck, WalletCards, WifiOff, Wrench } from '@lucide/vue'
 import EmptyState from '@/components/EmptyState.vue'
 import AsyncStateNotice from '@/components/AsyncStateNotice.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -179,7 +180,6 @@ const targetReviews = ref<SignedTargetProfile[]>([])
 const targetReviewState = ref<'loading' | 'ready' | 'error'>('loading')
 const targetReviewError = ref('')
 const pendingReviews = computed(() => targetReviews.value.filter(item => item.profile.reviewStatus === 'pending'))
-const shouldShowTargetReview = computed(() => canReviewTargets.value && (pendingReviews.value.length > 0 || targetReviewState.value === 'error'))
 let targetReviewSequence = 0
 const hasExecutionAlerts = computed(() => data.value.waiting_interventions.length > 0 || data.value.stale_batches.length > 0)
 let loadSequence = 0
