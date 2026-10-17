@@ -55,6 +55,10 @@ class AccountLeaseEnvelope(APIResponse[AccountLeaseRead]):
     """Response for a lease heartbeat or release-adjacent read."""
 
 
+class AccountLeaseReleaseEnvelope(APIResponse[None]):
+    """Response for ending an account现场 lease."""
+
+
 class AccountLeaseAcquireEnvelope(APIResponse[AccountLeaseAcquireRead]):
     """The one-time lease token is returned only when a lease is acquired."""
 

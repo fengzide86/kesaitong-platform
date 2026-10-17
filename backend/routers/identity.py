@@ -34,6 +34,7 @@ from schemas.identity import (
     AccountLeaseEnvelope,
     AccountLeaseHeartbeatRequest,
     AccountLeaseListEnvelope,
+    AccountLeaseReleaseEnvelope,
 )
 
 router = APIRouter()
@@ -155,7 +156,7 @@ async def heartbeat_lease(
     return {"success": True, "message": "账号现场仍有效", "data": data}
 
 
-@router.post("/leases/{lease_id}/release")
+@router.post("/leases/{lease_id}/release", response_model=AccountLeaseReleaseEnvelope)
 async def release_lease(
     lease_id: int,
     req: AccountLeaseHeartbeatRequest,

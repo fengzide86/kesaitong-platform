@@ -1,5 +1,7 @@
 """Public access-domain contract."""
 
+from typing import Any
+
 from domains.access.entitlements import (
     DEFAULT_ENTITLEMENTS,
     normalize_entitlements,
@@ -38,7 +40,7 @@ _IDENTITY_EXPORTS = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name not in _IDENTITY_EXPORTS:
         raise AttributeError(name)
     from domains.access import identity_leases

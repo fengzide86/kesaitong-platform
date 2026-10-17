@@ -73,6 +73,17 @@ export interface components {
     "APIResponse_list_UpdateFileResponse__": { "data"?: Array<components['schemas']["UpdateFileResponse"]> | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_list_UpdateReleaseResponse__": { "data"?: Array<components['schemas']["UpdateReleaseResponse"]> | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "APIResponse_list_dict_str__Any___": { "data"?: Array<{  }> | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "AccountBindingTakeoverEnvelope": { "data"?: components['schemas']["AccountBindingTakeoverRead"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "AccountBindingTakeoverRead": { "auth_code_id": number; "binding_id": number; "external_account_hint": string; "replaced_binding_id"?: number | null; "site_origin": string; "status": "active" | "revoked" }
+    "AccountBindingTakeoverRequest": { "external_account_ref": string; "reason"?: string; "site_origin": string }
+    "AccountLeaseAcquireEnvelope": { "data"?: components['schemas']["AccountLeaseAcquireRead"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "AccountLeaseAcquireRead": { "account_slot": string; "expires_at": string; "external_account_hint": string; "id": number; "last_heartbeat_at": string; "lease_token": string; "owner_id": number; "owner_kind": "user" | "staff"; "revision": number; "scene_id": string; "site_origin": string; "status": "active" | "paused" | "needs_relogin" | "released" | "expired"; "workspace_id": string }
+    "AccountLeaseAcquireRequest": { "account_slot": string; "device_id": string; "external_account_ref": string; "scene_id": string; "site_origin": string; "takeover"?: boolean; "workspace_id": string }
+    "AccountLeaseEnvelope": { "data"?: components['schemas']["AccountLeaseRead"] | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "AccountLeaseHeartbeatRequest": { "lease_token": string }
+    "AccountLeaseListEnvelope": { "data"?: Array<components['schemas']["AccountLeaseRead"]> | null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
+    "AccountLeaseRead": { "account_slot": string; "expires_at": string; "external_account_hint": string; "id": number; "last_heartbeat_at": string; "owner_id": number; "owner_kind": "user" | "staff"; "revision": number; "scene_id": string; "site_origin": string; "status": "active" | "paused" | "needs_relogin" | "released" | "expired"; "workspace_id": string }
+    "AccountLeaseReleaseEnvelope": { "data"?: null; "message"?: string; "page"?: number | null; "page_size"?: number | null; "success"?: boolean; "total"?: number | null; "total_pages"?: number | null }
     "ActionCenterData": { "agency_delivery_tasks"?: Array<components['schemas']["AgencyDeliveryTask"]>; "device_anomalies": Array<components['schemas']["DeviceAnomalyItem"]>; "expense_renewals": Array<components['schemas']["ExpenseRenewalResponse"]>; "expiring_authorizations": Array<components['schemas']["ExpiringAuthorizationItem"]>; "pending_tickets": Array<components['schemas']["PendingTicketItem"]>; "stale_batches": Array<unknown>; "summary": components['schemas']["ActionCenterSummary"]; "waiting_interventions": Array<unknown> }
     "ActionCenterResponse": { "data": components['schemas']["ActionCenterData"]; "message": string; "success": boolean }
     "ActionCenterSummary": { "device_anomalies": number; "expense_renewals_due": number; "expiring_authorizations": number; "pending_tickets": number; "stale_batches": number; "waiting_interventions": number }
@@ -1186,6 +1197,36 @@ export interface operations {
     requestBody: {  }
     responses: { "200": components['schemas']["HelpQueryResponse"]; "422": components['schemas']["HTTPValidationError"] }
   }
+  "takeover_binding_api_identity_admin_bindings__auth_code_id__takeover_post": {
+    parameters: { "path": { "auth_code_id": number } }
+    requestBody: components['schemas']["AccountBindingTakeoverRequest"]
+    responses: { "200": components['schemas']["AccountBindingTakeoverEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
+  }
+  "list_admin_leases_api_identity_admin_leases_get": {
+    parameters: never
+    requestBody: never
+    responses: { "200": components['schemas']["AccountLeaseListEnvelope"] }
+  }
+  "get_leases_api_identity_leases_get": {
+    parameters: never
+    requestBody: never
+    responses: { "200": components['schemas']["AccountLeaseListEnvelope"] }
+  }
+  "acquire_lease_api_identity_leases_post": {
+    parameters: never
+    requestBody: components['schemas']["AccountLeaseAcquireRequest"]
+    responses: { "200": components['schemas']["AccountLeaseAcquireEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
+  }
+  "heartbeat_lease_api_identity_leases__lease_id__heartbeat_post": {
+    parameters: { "path": { "lease_id": number } }
+    requestBody: components['schemas']["AccountLeaseHeartbeatRequest"]
+    responses: { "200": components['schemas']["AccountLeaseEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
+  }
+  "release_lease_api_identity_leases__lease_id__release_post": {
+    parameters: { "path": { "lease_id": number } }
+    requestBody: components['schemas']["AccountLeaseHeartbeatRequest"]
+    responses: { "200": components['schemas']["AccountLeaseReleaseEnvelope"]; "422": components['schemas']["HTTPValidationError"] }
+  }
   "get_knowledge_list_api_knowledge_get": {
     parameters: { "query": { "category"?: string | null; "status"?: string | null; "keyword"?: string | null; "platform_key"?: string | null; "capability_key"?: string | null; "page"?: number; "page_size"?: number } }
     requestBody: never
@@ -2175,6 +2216,22 @@ export interface paths {
   }
   "/api/help/query": {
     post: operations["query_help_api_help_query_post"]
+  }
+  "/api/identity/admin/bindings/{auth_code_id}/takeover": {
+    post: operations["takeover_binding_api_identity_admin_bindings__auth_code_id__takeover_post"]
+  }
+  "/api/identity/admin/leases": {
+    get: operations["list_admin_leases_api_identity_admin_leases_get"]
+  }
+  "/api/identity/leases": {
+    get: operations["get_leases_api_identity_leases_get"]
+    post: operations["acquire_lease_api_identity_leases_post"]
+  }
+  "/api/identity/leases/{lease_id}/heartbeat": {
+    post: operations["heartbeat_lease_api_identity_leases__lease_id__heartbeat_post"]
+  }
+  "/api/identity/leases/{lease_id}/release": {
+    post: operations["release_lease_api_identity_leases__lease_id__release_post"]
   }
   "/api/knowledge": {
     get: operations["get_knowledge_list_api_knowledge_get"]

@@ -119,6 +119,26 @@ TEAM_POLICY_EXTENSION_OPERATIONS = {
     ("/api/team-ledger/settlements/{identity}/confirm", "post"),
 }
 
+# Reviewed 2026-10-17: isolated external-account identity leases.  These
+# routes are additive and keep a fixed bearer-authenticated contract; each
+# entry names its exact request and response schema (or None for bodyless
+# list operations).
+IDENTITY_EXTENSION_OPERATIONS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ("/api/identity/leases", "post"): ("AccountLeaseAcquireRequest", "AccountLeaseAcquireEnvelope"),
+    ("/api/identity/leases", "get"): (None, "AccountLeaseListEnvelope"),
+    ("/api/identity/leases/{lease_id}/heartbeat", "post"): ("AccountLeaseHeartbeatRequest", "AccountLeaseEnvelope"),
+    ("/api/identity/leases/{lease_id}/release", "post"): ("AccountLeaseHeartbeatRequest", "AccountLeaseReleaseEnvelope"),
+    ("/api/identity/admin/leases", "get"): (None, "AccountLeaseListEnvelope"),
+    ("/api/identity/admin/bindings/{auth_code_id}/takeover", "post"): ("AccountBindingTakeoverRequest", "AccountBindingTakeoverEnvelope"),
+}
+
+SCENARIO_EXTENSION_OPERATIONS: dict[tuple[str, str], tuple[str | None, str]] = {
+    ("/api/scenarios/staff/{staff_id}/permission", "put"): (
+        "StaffRuntimePermissionWrite",
+        "APIResponse_StaffRuntimePermissionRead_",
+    ),
+}
+
 
 def load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -284,6 +304,35 @@ def is_reviewed_extension_operation(key: tuple[str, str], operation: dict[str, A
         return True
     if is_reviewed_team_policy_extension(key, operation, schema):
         return True
+    reviewed_contract = IDENTITY_EXTENSION_OPERATIONS.get(key) or SCENARIO_EXTENSION_OPERATIONS.get(key)
+    if reviewed_contract is not None:
+        request_model, response_model = reviewed_contract
+        path_parameters = [
+            name for name in ("lease_id", "auth_code_id", "staff_id") if "{" + name + "}" in key[0]
+        ]
+        expected_parameters = [(name, "path", True) for name in path_parameters]
+        expected_body = None if request_model is None else {
+            "required": True,
+            "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{request_model}"}}},
+        }
+        expected_responses = {
+            "200": {"content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{response_model}"}}}},
+        }
+        if request_model:
+            expected_responses["422"] = {
+                "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}},
+            }
+        models = schema.get("components", {}).get("schemas", {})
+        return (
+            parameter_signature(operation) == expected_parameters
+            and same_contract(schema_without_documentation(operation.get("requestBody")), expected_body)
+            and same_contract(
+                {code: schema_without_documentation(value) for code, value in operation.get("responses", {}).items()},
+                expected_responses,
+            )
+            and operation.get("security") == [{"HTTPBearer": []}]
+            and (request_model is None or models.get(request_model, {}).get("additionalProperties") is False)
+        )
     if key in TARGET_EXTENSION_OPERATIONS:
         request_model, response_model = TARGET_EXTENSION_OPERATIONS[key]
         expected_body = None if request_model is None else {"required": True, "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{request_model}"}}}}
